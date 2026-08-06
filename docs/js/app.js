@@ -628,6 +628,17 @@ Alpine.data('trainPage', () => ({
   tick: 0,          // bumped by an interval so the timers re-render
 
   init() {
+    // Demonstration images matter more to Aana than to me, so they load on their
+    // own rather than waiting for someone to find a button. Once a week at most,
+    // and only when there's something missing and a connection to fetch it with.
+    this.$nextTick(async () => {
+      if (!navigator.onLine || !this.imagesMissing) return;
+      const last = await local.getMeta('images:lastAttempt', 0);
+      if (Date.now() - Number(last) < 7 * 86_400_000) return;
+      await local.setMeta('images:lastAttempt', Date.now());
+      this.loadImages();
+    });
+
     // One ticker for both clocks. Only runs while the tab is visible, because a
     // phone in a pocket mid-set doesn't need to repaint a stopwatch.
     setInterval(() => {
@@ -828,6 +839,43 @@ Alpine.data('trainPage', () => ({
     await workout.deleteRoutine(routine, this.data.routineExercises);
     await this.data.refresh();
     Alpine.store('ui').flash('Routine deleted');
+  },
+
+  // ---- exercise history ----------------------------------------------------
+
+  detail: null,   // { exerciseId, name, exercise }
+
+  openExercise(exerciseId, name) {
+    this.detail = {
+      exerciseId,
+      name,
+      exercise: this.exerciseById(exerciseId) ?? { name, image_urls: [] },
+    };
+  },
+
+  closeExercise() { this.detail = null; },
+
+  get detailHistory() {
+    if (!this.detail) return [];
+    return workout.exerciseHistory(
+      this.data.sessionSets, this.data.sessions, this.email,
+      this.detail.exerciseId, this.detail.name,
+    );
+  },
+
+  get detailBests() { return workout.personalBests(this.detailHistory); },
+
+  detailDate(entry) {
+    return new Date(entry.date).toLocaleDateString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+  },
+
+  /** "125 × 10, 125 × 8, 125 × 7" — the whole session at a glance. */
+  setLine(entry) {
+    return entry.sets
+      .map((s) => `${s.weight_lb ?? '—'}×${s.reps ?? '—'}${s.is_warmup ? 'w' : ''}`)
+      .join(', ');
   },
 
   // ---- routine builder -----------------------------------------------------

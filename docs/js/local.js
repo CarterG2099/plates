@@ -149,6 +149,19 @@ export function setMeta(key, value) {
 // ---- the write path the UI uses --------------------------------------------
 
 /**
+ * Strip anything IndexedDB can't structured-clone.
+ *
+ * Rows read through Alpine come back wrapped in reactive Proxies, and a Proxy
+ * cannot be cloned — so `save({...row, changed})` throws "could not be cloned"
+ * even though the object looks ordinary. Everything stored here is JSON by
+ * construction, so a round-trip is both the cheapest unwrap and the honest
+ * description of what a row is.
+ */
+function plain(row) {
+  return JSON.parse(JSON.stringify(row));
+}
+
+/**
  * Create or update a row: write locally, queue for sync, return immediately.
  *
  * The id is generated here rather than by the server so a row created offline
@@ -156,12 +169,12 @@ export function setMeta(key, value) {
  * temporary id to reconcile later.
  */
 export async function save(table, fields, ownerEmail) {
-  const row = {
+  const row = plain({
     id: fields.id ?? crypto.randomUUID(),
     owner_email: fields.owner_email ?? ownerEmail,
     ...fields,
     updated_at: new Date().toISOString(),
-  };
+  });
 
   await putLocal(table, row);
   await enqueue(table, row);
@@ -176,7 +189,11 @@ export async function remove(table, id) {
   const existing = await get(table, id);
   if (!existing) return null;
 
-  const row = { ...existing, deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  const row = plain({
+    ...existing,
+    deleted_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
   await putLocal(table, row);
   await enqueue(table, row);
   return row;

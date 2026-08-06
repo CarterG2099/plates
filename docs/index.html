@@ -613,12 +613,13 @@
                     <img class="thumb" x-show="imageFor(exerciseById(group.exerciseId))"
                          :src="imageFor(exerciseById(group.exerciseId))" alt=""
                          loading="lazy" decoding="async">
-                    <div style="min-width:0;">
+                    <button style="min-width:0; text-align:left"
+                            @click="openExercise(group.exerciseId, group.name)">
                       <b x-text="group.name"></b>
                       <div class="prev" x-show="previous(group)">
-                        Last: <span x-text="previous(group)"></span>
+                        Last: <span x-text="previous(group)"></span> · tap for history
                       </div>
-                    </div>
+                    </button>
                   </div>
                 </div>
 
@@ -680,6 +681,48 @@
           </div>
         </template>
 
+        <!-- Exercise history -------------------------------------------------- -->
+        <template x-if="detail">
+          <div class="sheet-backdrop" @click.self="closeExercise()">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div style="font-size:var(--text-lg); font-weight:600" x-text="detail.name"></div>
+
+              <div class="shots" x-show="(detail.exercise.image_urls || []).length">
+                <template x-for="src in (detail.exercise.image_urls || [])" :key="src">
+                  <img :src="src" alt="" loading="lazy" decoding="async">
+                </template>
+              </div>
+
+              <div class="chips">
+                <span class="chip" x-show="detailBests.heaviest">
+                  Best <span x-text="detailBests.heaviest && detailBests.heaviest.weight_lb"></span> lb ×
+                  <span x-text="detailBests.heaviest && detailBests.heaviest.reps"></span>
+                </span>
+                <span class="chip" x-show="detailBests.bestRm">
+                  Est. 1RM <span x-text="detailBests.bestRm"></span> lb
+                </span>
+                <span class="chip"><span x-text="detailHistory.length"></span> sessions</span>
+              </div>
+
+              <div class="rows">
+                <template x-for="entry in detailHistory" :key="entry.session.id">
+                  <div class="row">
+                    <div class="row-text">
+                      <b x-text="detailDate(entry)"></b>
+                      <small x-text="setLine(entry)"></small>
+                    </div>
+                    <span class="row-num" x-text="`${Math.round(entry.volume).toLocaleString()} lb`"></span>
+                  </div>
+                </template>
+              </div>
+
+              <p class="empty" x-show="!detailHistory.length">No history for this exercise yet.</p>
+              <button class="btn btn-ghost btn-block" @click="closeExercise()">Close</button>
+            </div>
+          </div>
+        </template>
+
         <!-- Routine builder --------------------------------------------------- -->
         <template x-if="builder">
           <div class="sheet-backdrop" @click.self="closeBuilder()">
@@ -692,14 +735,15 @@
 
                   <div class="rows">
                     <template x-for="row in builderExercises" :key="row.item.id">
-                      <div class="row">
+                      <button class="row" @click="openExercise(row.item.exercise_id, row.name)">
                         <img class="thumb" x-show="imageFor(row.exercise)" :src="imageFor(row.exercise)"
                              alt="" loading="lazy" decoding="async">
                         <div class="row-text">
                           <b x-text="row.name"></b>
                           <small x-text="lastLine(row)"></small>
                         </div>
-                      </div>
+                        <span class="tap">›</span>
+                      </button>
                     </template>
                   </div>
 

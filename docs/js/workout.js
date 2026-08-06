@@ -159,6 +159,62 @@ export function lastPerformance(sets, sessions, ownerEmail, exerciseId, exercise
   };
 }
 
+/**
+ * Every session that included this exercise, newest first, with its sets.
+ *
+ * Two years of imported history makes this the most informative screen in the
+ * app — it answers "am I actually getting stronger" without a chart.
+ */
+export function exerciseHistory(sets, sessions, ownerEmail, exerciseId, exerciseName, limit = 40) {
+  const owned = new Map(
+    sessions
+      .filter((s) => s.owner_email === ownerEmail && !s.deleted_at)
+      .map((s) => [s.id, s]),
+  );
+
+  const matching = sets
+    .filter((s) => !s.deleted_at && owned.has(s.session_id))
+    .filter((s) => (exerciseId ? s.exercise_id === exerciseId : s.exercise_name === exerciseName));
+
+  const grouped = new Map();
+  for (const set of matching) {
+    if (!grouped.has(set.session_id)) grouped.set(set.session_id, []);
+    grouped.get(set.session_id).push(set);
+  }
+
+  return [...grouped.entries()]
+    .map(([sessionId, entrySets]) => {
+      const ordered = entrySets.sort((a, b) => a.set_index - b.set_index);
+      const working = ordered.filter((s) => !s.is_warmup);
+      const best = working.reduce((b, s) => (!b || (s.weight_lb ?? 0) > (b.weight_lb ?? 0) ? s : b), null);
+
+      return {
+        session: owned.get(sessionId),
+        date: owned.get(sessionId).started_at,
+        sets: ordered,
+        best,
+        volume: volume(ordered),
+        oneRm: best ? estimate1RM(best.weight_lb, best.reps) : null,
+      };
+    })
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, limit);
+}
+
+/** Heaviest set ever, and the best estimated 1RM, across all history. */
+export function personalBests(history) {
+  let heaviest = null;
+  let bestRm = null;
+
+  for (const entry of history) {
+    if (entry.best && (!heaviest || (entry.best.weight_lb ?? 0) > (heaviest.weight_lb ?? 0))) {
+      heaviest = entry.best;
+    }
+    if (entry.oneRm && (!bestRm || entry.oneRm > bestRm)) bestRm = entry.oneRm;
+  }
+  return { heaviest, bestRm };
+}
+
 // ---- numbers ---------------------------------------------------------------
 
 /** Total load moved. Warm-ups excluded — they aren't working volume. */
