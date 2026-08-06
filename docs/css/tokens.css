@@ -1,39 +1,43 @@
 /* tokens.css — Plates. Dark instrument panel; read one-handed in a gym.
  *
- * Deliberately not shared with recipes/budget. Macro colours are competition
- * plate colours, so the encoding is consistent everywhere and the name earns
- * itself: 20 kg blue, 15 kg yellow, 25 kg red, 10 kg green.
+ * Deliberately not shared with recipes/budget.
+ *
+ * Colours are the official IWF competition plate colours, so the palette is the
+ * app's namesake rather than a decoration: 25 kg red, 20 kg blue, 15 kg yellow,
+ * 10 kg green, 5 kg white. Every colour means something; none is ornamental.
  *
  * No web fonts. A CDN font is a render-blocking round trip on every cold start,
- * which is the one thing that would make this feel slower than it is. */
+ * and this app is opened dozens of times a day. */
 
 :root {
-  /* Ground — warm-biased near-blacks, not blue-grey */
-  --color-bg:             #171512;
-  --color-surface:        #201D19;
-  --color-surface-raised: #26221E;
-  --color-ink:            #0D0C0B;
-  --color-border:         #302B25;
-  --color-hover:          #2C2823;
+  /* Ground — layered, not one flat plane. v1 kept everything within a few
+     percent of the same value, which is why it read as flat. */
+  --color-ink:            #100F0E;
+  --color-bg:             #1A1816;
+  --color-surface:        #232120;
+  --color-surface-raised: #2C2926;
+  --color-border:         #3B3733;
+  --color-hover:          #333029;
 
-  /* Text */
-  --color-text:           #F4EFE8;
-  --color-text-muted:     #9C948A;
-  --color-text-dim:       #6E665D;
+  /* Text — lifted hard from v1, whose #9C948A secondary was simply too dim. */
+  --color-text:           #FFFCF6;
+  --color-text-muted:     #C6BCAE;
+  --color-text-dim:       #8E8478;
 
-  /* Plate colours — identity and macro encoding in one system */
-  --color-protein:        #3B7DD8;
-  --color-carbs:          #E5B02E;
-  --color-fat:            #D6453A;
+  /* Plate colours: identity and macro encoding in one system */
+  --color-protein:        #2D68C4;   /* 20 kg blue */
+  --color-carbs:          #F2C230;   /* 15 kg yellow */
+  --color-fat:            #E0362A;   /* 25 kg red */
+  --color-plate-white:    #F2EDE4;   /*  5 kg white */
 
-  --color-primary:        #3B7DD8;
-  --color-primary-hover:  #5C93E8;
-  --color-primary-soft:   rgba(59, 125, 216, .14);
+  --color-primary:        #2D68C4;
+  --color-primary-hover:  #4B85DD;
+  --color-primary-soft:   rgba(45, 104, 196, .2);
 
   /* Semantic — separate from the accent */
-  --color-success:        #4FA96B;
-  --color-warning:        #E5B02E;
-  --color-danger:         #D6453A;
+  --color-success:        #2FA84F;   /* 10 kg green */
+  --color-warning:        #F2C230;
+  --color-danger:         #E0362A;
 
   /* Spacing (4px base) */
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
@@ -43,22 +47,26 @@
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 
-  --text-xs:   0.72rem;
-  --text-sm:   0.8125rem;
-  --text-base: 0.9375rem;
-  --text-lg:   1.0625rem;
-  --text-xl:   1.3rem;
-  --text-2xl:  1.7rem;
-  --text-3xl:  2.4rem;
+  --text-xs:   0.75rem;
+  --text-sm:   0.85rem;
+  --text-base: 0.95rem;
+  --text-lg:   1.1rem;
+  --text-xl:   1.4rem;
+  --text-2xl:  1.8rem;
+  --text-3xl:  2.9rem;
 
   /* Soft geometry — pills for status, rounded cards for surfaces */
   --radius-sm:   10px;
-  --radius-md:   16px;
+  --radius-md:   18px;
   --radius-lg:   22px;
   --radius-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
-  --shadow-md: 0 8px 24px rgba(0,0,0,.35);
+  /* Depth. The inset highlight along the top edge is what makes a surface read
+     as lifted rather than merely outlined. */
+  --shadow-sm:    0 2px 6px rgba(0,0,0,.3);
+  --shadow-md:    0 8px 20px rgba(0,0,0,.35);
+  --shadow-lg:    0 14px 30px rgba(0,0,0,.45);
+  --shadow-inset: inset 0 1px 0 rgba(255,255,255,.045);
 
   --transition-fast: 140ms ease;
   --transition-base: 240ms ease;

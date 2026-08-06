@@ -249,6 +249,30 @@ Alpine.data('todayPage', () => ({
 
   mealLabel(slot) { return slot.charAt(0).toUpperCase() + slot.slice(1); },
 
+  /** Plates on the bar: width is each macro's share of the calorie target. */
+  get plates() {
+    if (!this.calorieTarget) return [];
+    return [
+      { key: 'protein_g', colour: 'var(--color-protein)', per: 4 },
+      { key: 'carbs_g',   colour: 'var(--color-carbs)',   per: 4 },
+      { key: 'fat_g',     colour: 'var(--color-fat)',     per: 9 },
+    ]
+      .map((m) => ({
+        ...m,
+        width: Math.min(100, (this.totals[m.key] * m.per / this.calorieTarget) * 100),
+      }))
+      .filter((m) => m.width > 0.5);
+  },
+
+  get remainingInFood() {
+    const ranked = food.rankFoods(
+      Alpine.store('data').foods, Alpine.store('data').log, this.email,
+    );
+    return food.remainingAsFoods(this.remaining, ranked)
+      .map((x) => x.label)
+      .join(', or ');
+  },
+
   async removeEntry(id) {
     await food.deleteEntry(id);
     await Alpine.store('data').refresh();
@@ -781,6 +805,14 @@ Alpine.data('trainPage', () => ({
     if (!done) {
       this.startRest(workout.DEFAULT_REST_SECONDS);
       if (navigator.vibrate) navigator.vibrate(30);
+
+      // Told at the moment it happens, not discovered in a stats screen weeks on.
+      const group = this.groups.find((g) => g.sets.some((s) => s.id === set.id));
+      if (group && workout.isRecord({ ...set, completed_at: new Date().toISOString() },
+                                    this.bestBefore(group))) {
+        Alpine.store('ui').flash(`PR · ${group.name}`);
+        if (navigator.vibrate) navigator.vibrate([60, 50, 60]);
+      }
     }
   },
 
@@ -799,6 +831,24 @@ Alpine.data('trainPage', () => ({
   },
 
   oneRm(set) { return workout.estimate1RM(set.weight_lb, set.reps); },
+
+  /** Best estimated 1RM before this session — the bar a set has to clear. */
+  bestBefore(group) {
+    return workout.bestBefore(
+      this.data.sessionSets, this.data.sessions, this.email,
+      group.exerciseId, group.name, this.session?.id,
+    );
+  },
+
+  isRecord(set, group) { return workout.isRecord(set, this.bestBefore(group)); },
+
+  /** What to load per side. Null for anything that isn't a barbell. */
+  loadout(group, set) {
+    if (!workout.usesBarbell(this.exerciseById(group.exerciseId), group.name)) return null;
+    return workout.plateMath(set.weight_lb);
+  },
+
+  plateColour(size) { return workout.PLATE_COLOURS[size] ?? 'var(--color-text-muted)'; },
 
   // ---- rest timer ----------------------------------------------------------
 

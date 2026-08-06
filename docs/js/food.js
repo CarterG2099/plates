@@ -350,3 +350,32 @@ export async function deleteEntry(id) {
   sync.nudge();
   return row;
 }
+
+// ---- what's left, in food you actually eat ---------------------------------
+
+/**
+ * Express remaining calories as servings of foods you already eat.
+ *
+ * "253 kcal left" is abstract; "about one chicken breast" is a decision. Built
+ * from your own frequents, so it is never generic advice — and it reuses the
+ * same ranking that already drives the logger.
+ */
+export function remainingAsFoods(remainingKcal, rankedFoods, limit = 2) {
+  const remaining = Number(remainingKcal);
+  if (!Number.isFinite(remaining) || remaining < 50) return [];
+
+  return rankedFoods
+    .filter((f) => f.count > 0 && Number(f.calories) > 0)
+    .map((f) => {
+      const quantity = f.lastQuantity ?? f.serving_qty ?? 1;
+      const perServing = Number(f.calories) * (quantity / (Number(f.serving_qty) || 1));
+      return { food: f, perServing, servings: Math.round(remaining / perServing) };
+    })
+    // One to three servings: "6 scoops of whey" is arithmetic, not a suggestion.
+    .filter((x) => x.servings >= 1 && x.servings <= 3 && x.perServing >= 40)
+    .slice(0, limit)
+    .map((x) => ({
+      ...x,
+      label: x.servings === 1 ? `1 ${x.food.name}` : `${x.servings} × ${x.food.name}`,
+    }));
+}

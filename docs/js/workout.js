@@ -453,3 +453,73 @@ export async function importExerciseImages(exercises, ownerEmail, onProgress = (
 export function imageFor(exercise) {
   return (exercise?.image_urls ?? [])[0] ?? null;
 }
+
+// ---- plate maths -----------------------------------------------------------
+
+/** Standard US gym plates, heaviest first. */
+const PLATE_SIZES = [45, 35, 25, 10, 5, 2.5];
+export const DEFAULT_BAR_LB = 45;
+
+/**
+ * What to load on each side of the bar.
+ *
+ * Everyone does this between sets and occasionally gets it wrong. Returns null
+ * when it wouldn't mean anything — a dumbbell press or a weight under the bar.
+ */
+export function plateMath(totalLb, barLb = DEFAULT_BAR_LB) {
+  const total = Number(totalLb);
+  if (!Number.isFinite(total) || total <= barLb) return null;
+
+  let remaining = (total - barLb) / 2;
+  const plates = [];
+
+  for (const size of PLATE_SIZES) {
+    while (remaining >= size - 1e-9) {
+      plates.push(size);
+      remaining -= size;
+    }
+  }
+  if (!plates.length) return null;
+
+  return { perSide: (total - barLb) / 2, plates, leftover: Math.round(remaining * 100) / 100 };
+}
+
+/** Only barbell movements — plate maths on a machine row is noise. */
+export function usesBarbell(exercise, name = '') {
+  const haystack = `${exercise?.equipment ?? ''} ${exercise?.name ?? ''} ${name}`.toLowerCase();
+  if (/dumbbell|machine|cable|smith|bodyweight|band/.test(haystack)) return false;
+  return /barbell|bench press|squat|deadlift|overhead press|row|curl|hip thrust/.test(haystack);
+}
+
+/** Plate face colours, so the loadout reads as plates rather than as a sum. */
+export const PLATE_COLOURS = {
+  45: '#2D68C4',   // blue
+  35: '#F2C230',   // yellow
+  25: '#2FA84F',   // green
+  10: '#F2EDE4',   // white
+  5:  '#E0362A',   // red
+  2.5: '#C6BCAE',
+};
+
+// ---- personal records ------------------------------------------------------
+
+/**
+ * The best estimated 1RM for an exercise before this session.
+ *
+ * Excluding the current session is the whole point: otherwise the first set you
+ * complete becomes its own record and nothing ever beats it.
+ */
+export function bestBefore(sets, sessions, ownerEmail, exerciseId, exerciseName, currentSessionId) {
+  const history = exerciseHistory(
+    sets, sessions, ownerEmail, exerciseId, exerciseName, 1000,
+  ).filter((entry) => entry.session.id !== currentSessionId);
+
+  return personalBests(history).bestRm;
+}
+
+/** A completed set beats everything that came before it. */
+export function isRecord(set, bestRmBefore) {
+  if (!set.completed_at || set.is_warmup) return false;
+  const rm = estimate1RM(set.weight_lb, set.reps);
+  return Boolean(rm && (bestRmBefore == null || rm > bestRmBefore));
+}

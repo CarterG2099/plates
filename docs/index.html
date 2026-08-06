@@ -104,10 +104,18 @@
             </div>
           </div>
 
-          <div class="track" x-show="calorieTarget">
-            <i :style="`background: var(--color-protein); width: ${segment('protein_g')}%`"></i>
-            <i :style="`background: var(--color-carbs);   width: ${segment('carbs_g')}%`"></i>
-            <i :style="`background: var(--color-fat);     width: ${segment('fat_g')}%`"></i>
+          <p class="infood" x-show="remainingInFood">
+            ≈ <span x-text="remainingInFood"></span>
+          </p>
+
+          <!-- The calorie readout as a loaded barbell. Width is each macro's
+               share of the target; heights are equal, because a taller plate
+               would read as a heavier one. -->
+          <div class="rack" x-show="calorieTarget">
+            <template x-for="p in plates" :key="p.key">
+              <i :style="`background: ${p.colour}; width: ${p.width}%`"></i>
+            </template>
+            <i class="collar" x-show="plates.length"></i>
           </div>
 
           <div class="macros">
@@ -628,7 +636,7 @@
                     <span>#</span><span>lb</span><span>Reps</span><span></span><span></span>
                   </div>
                   <template x-for="(set, i) in group.sets" :key="set.id">
-                    <div class="setrow" :class="set.completed_at && 'done'">
+                    <div class="setrow" :class="[set.completed_at && 'done', isRecord(set, group) && 'record']">
                       <span class="idx" :class="set.is_warmup && 'warm'" x-text="set.is_warmup ? 'W' : i + 1"></span>
                       <input class="cell num" type="number" inputmode="decimal" step="any"
                              :value="set.weight_lb" @change="edit(set, 'weight_lb', $event.target.value)"
@@ -643,6 +651,16 @@
                     </div>
                   </template>
                 </div>
+
+                <template x-for="set in group.sets.filter(s => !s.completed_at && loadout(group, s))"
+                          :key="`load-${set.id}`">
+                  <div class="loadout">
+                    <span class="lbl">Per side</span>
+                    <template x-for="(size, i) in loadout(group, set).plates" :key="i">
+                      <b :style="`background: ${plateColour(size)}`" x-text="size"></b>
+                    </template>
+                  </div>
+                </template>
 
                 <button class="btn btn-ghost btn-block" @click="addSetTo(group)">Add set</button>
               </div>
