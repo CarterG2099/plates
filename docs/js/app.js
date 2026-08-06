@@ -283,7 +283,10 @@ Alpine.data('logPage', () => ({
   },
 
   get sheetMacros() {
-    if (!this.sheet) return null;
+    // Empty object rather than null: Alpine flushes effects for the sheet's
+    // markup after `sheet` is cleared but before the template unmounts, so a
+    // null here throws on every macro binding as the sheet closes.
+    if (!this.sheet) return {};
     return food.scaleMacros(this.sheet.food, this.sheet.quantity);
   },
 
