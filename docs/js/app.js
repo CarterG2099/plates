@@ -598,6 +598,16 @@ Alpine.data('logPage', () => ({
 
 // ---- boot ------------------------------------------------------------------
 
+// The offline shell. Registered after the app is up so it never delays first
+// paint, and skipped in dev-by-file-protocol where it can't work anyway.
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((e) => {
+      console.warn('Service worker registration failed:', e.message);
+    });
+  });
+}
+
 window.Alpine = Alpine;
 
 // Console handle for poking at things during development. The client only ever
