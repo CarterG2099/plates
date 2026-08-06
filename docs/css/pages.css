@@ -604,6 +604,7 @@
   height: 38px;
   position: relative;
   flex: none;
+  overflow: hidden;
 }
 
 /* The shaft runs the full width; plates load from the left. */
@@ -758,6 +759,10 @@
     padding-right: var(--space-6);
   }
 
+  /* The panel is fixed, so the content must be told to keep out of its way —
+     otherwise a centred column is centred in the viewport and runs underneath. */
+  .app.has-panel { padding-right: 440px; }
+
   /* Docked rather than covering: you can see Today while you add to it. */
   .log-panel {
     inset: 0 0 0 auto;
@@ -791,7 +796,6 @@
   .chip:hover { border-color: var(--color-primary); }
 }
 
-/* Wide enough for the docked panel and a centred column not to collide. */
 @media (min-width: 1400px) {
   .app-main { max-width: 820px; }
 }

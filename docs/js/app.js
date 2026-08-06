@@ -257,11 +257,14 @@ Alpine.data('todayPage', () => ({
       { key: 'carbs_g',   colour: 'var(--color-carbs)',   per: 4 },
       { key: 'fat_g',     colour: 'var(--color-fat)',     per: 9 },
     ]
-      .map((m) => ({
-        ...m,
-        width: Math.min(100, (this.totals[m.key] * m.per / this.calorieTarget) * 100),
-      }))
-      .filter((m) => m.width > 0.5);
+      .map((m) => ({ ...m, raw: (this.totals[m.key] * m.per / this.calorieTarget) * 100 }))
+      .filter((m) => m.raw > 0.5)
+      // Over target, the shares sum past 100% — scale them down together so the
+      // bar stays full-width and the proportions between macros stay honest.
+      .map((m, _, all) => {
+        const total = all.reduce((sum, x) => sum + x.raw, 0);
+        return { ...m, width: total > 100 ? (m.raw / total) * 100 : m.raw };
+      });
   },
 
   get remainingInFood() {

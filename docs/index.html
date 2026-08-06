@@ -28,7 +28,7 @@
 
 <!-- Bare x-data roots the Alpine component tree. Without it Alpine never walks
      these templates and the page renders empty. -->
-<div class="app" x-data>
+<div class="app" x-data :class="$store.ui.logOpen && 'has-panel'">
 
   <!-- Booting ------------------------------------------------------------- -->
   <template x-if="!$store.auth.ready">
