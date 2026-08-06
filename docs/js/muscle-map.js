@@ -22,25 +22,7 @@ const both = (inner) =>
 const path = (d, fill, cls = '') =>
   `<path d="${d}" fill="${fill}"${cls ? ` class="${cls}"` : ''}/>`;
 
-/**
- * Motion, as SMIL inside the SVG rather than CSS.
- *
- * The CSS attempts failed twice for different reasons — a transform needed
- * `transform-box: fill-box`, which is unreliable on a <g>, and the opacity
- * version still depended on the stylesheet reaching markup injected via
- * innerHTML. SMIL travels with the SVG, so nothing external can stop it.
- *
- * The reduced-motion preference is honoured here in JS, because SMIL — unlike a
- * CSS animation — is not covered by the media query.
- */
-const wantsMotion = () =>
-  typeof window === 'undefined'
-  || !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
-const pulse = () => (wantsMotion()
-  ? '<animate attributeName="opacity" values="1;0.45;1" dur="1.5s" repeatCount="indefinite"/>'
-  : '');
-
+/** Striations over a muscle belly, suggesting fibre direction. */
 const fibres = (d) =>
   `<path d="${d}" fill="none" stroke="rgba(0,0,0,.30)" stroke-width="1" stroke-linecap="round"/>`;
 
@@ -202,8 +184,7 @@ function figure(view, litKey) {
       const lit = key === litKey;
       const fill = lit ? COLOUR[key] : MUSCLE_REST;
       // Only the working muscle animates; everything else is context.
-      const group = `<g${lit ? ' class="mm-lit"' : ''}>${
-        path(m.d, fill)}${fibres(m.f)}${lit ? pulse() : ''}</g>`;
+      const group = `<g${lit ? ' class="mm-lit"' : ''}>${path(m.d, fill)}${fibres(m.f)}</g>`;
       return m.sided ? both(group) : group;
     })
     .join('');

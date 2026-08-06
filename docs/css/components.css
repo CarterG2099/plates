@@ -216,9 +216,26 @@
 
 .figure svg { height: 100%; width: auto; display: block; }
 
-/* Motion for the working muscle lives inside the SVG (see muscle-map.js), not
-   here — CSS animation on innerHTML-injected SVG proved unreliable. This class
-   remains as a styling hook only. */
+/* The working muscle pulses. One universal motion rather than choreography per
+   exercise — it says "this is what's doing the work", which is the diagram's job.
+ *
+ * History, so this doesn't get "fixed" back into something worse:
+ *  - transform: scale() needs `transform-box: fill-box` to pivot on the shape;
+ *    that is unreliable on a <g>, so browsers dropped it entirely.
+ *  - SMIL <animate> injected through innerHTML lands in the DOM but never joins
+ *    the SVG timeline, so it sits there doing nothing.
+ *  - This opacity rule was written once and appeared broken — but the service
+ *    worker was serving stale CSS at the time. The selector matches; it works. */
+@keyframes muscle-flex {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .45; }
+}
+
+.mm-lit { animation: muscle-flex 1.5s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-lit { animation: none; }
+}
 
 /* Front and back together, for the exercise detail sheet. */
 .figure-pair {
