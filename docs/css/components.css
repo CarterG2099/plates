@@ -188,13 +188,30 @@
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Demonstration image. Fixed box so a row's height never depends on whether the
-   picture has arrived yet — the list must not reflow as images stream in. */
+/* The drawn figure. Fixed box so rows never reflow, and the SVG scales into it. */
 .thumb {
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   flex: none;
   border-radius: var(--radius-sm);
-  object-fit: cover;
   background: var(--color-ink);
+  display: grid;
+  place-items: center;
+  padding: 3px;
 }
+
+.thumb svg { width: 100%; height: 100%; display: block; }
+
+/* Same figure, given room on the exercise history sheet. */
+.figure {
+  height: 150px;
+  display: grid;
+  place-items: center;
+  background: var(--color-ink);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-inset);
+}
+
+.figure svg { height: 100%; width: auto; display: block; }

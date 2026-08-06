@@ -578,9 +578,7 @@
               <div class="card">
                 <div class="readout-head">
                   <div style="display:flex; align-items:center; gap:var(--space-3); min-width:0;">
-                    <img class="thumb" x-show="imageFor(exerciseById(group.exerciseId))"
-                         :src="imageFor(exerciseById(group.exerciseId))" alt=""
-                         loading="lazy" decoding="async">
+                    <span class="thumb" x-html="muscleMap(group.exerciseId, group.name)"></span>
                     <button style="min-width:0; text-align:left"
                             @click="openExercise(group.exerciseId, group.name)">
                       <b x-text="group.name"></b>
@@ -644,8 +642,7 @@
                 <template x-for="e in library.slice(0, 40)" :key="e.id">
                   <button class="row" @click="builder ? addToRoutine(e) : addExercise(e)">
                     <!-- loading="lazy": nothing downloads until it scrolls in -->
-                    <img class="thumb" x-show="imageFor(e)" :src="imageFor(e)" alt=""
-                         loading="lazy" decoding="async">
+                    <span class="thumb" x-html="muscleMap(e.id, e.name)"></span>
                     <div class="row-text">
                       <b x-text="e.name"></b>
                       <small x-text="[e.primary_muscle, e.equipment].filter(Boolean).join(' · ')"></small>
@@ -691,11 +688,10 @@
               <div class="grabber"></div>
               <div style="font-size:var(--text-lg); font-weight:600" x-text="detail.name"></div>
 
-              <div class="shots" x-show="(detail.exercise.image_urls || []).length">
-                <template x-for="src in (detail.exercise.image_urls || [])" :key="src">
-                  <img :src="src" alt="" loading="lazy" decoding="async">
-                </template>
-              </div>
+              <div class="figure" x-html="muscleMap(detail.exerciseId, detail.name)"></div>
+              <p class="card-label" style="text-align:center"
+                 x-show="detail.exercise.primary_muscle"
+                 x-text="detail.exercise.primary_muscle"></p>
 
               <div class="chips">
                 <span class="chip" x-show="detailBests.heaviest">
@@ -739,8 +735,7 @@
                   <div class="rows">
                     <template x-for="row in builderExercises" :key="row.item.id">
                       <button class="row" @click="openExercise(row.item.exercise_id, row.name)">
-                        <img class="thumb" x-show="imageFor(row.exercise)" :src="imageFor(row.exercise)"
-                             alt="" loading="lazy" decoding="async">
+                        <span class="thumb" x-html="muscleMap(row.item.exercise_id, row.name)"></span>
                         <div class="row-text">
                           <b x-text="row.name"></b>
                           <small x-text="lastLine(row)"></small>
@@ -775,8 +770,7 @@
                   <div class="rows">
                     <template x-for="row in builderExercises" :key="row.item.id">
                       <div class="row">
-                        <img class="thumb" x-show="imageFor(row.exercise)" :src="imageFor(row.exercise)"
-                             alt="" loading="lazy" decoding="async">
+                        <span class="thumb" x-html="muscleMap(row.item.exercise_id, row.name)"></span>
                         <div class="row-text"><b x-text="row.name"></b></div>
                         <button class="tap" @click="dropRoutineItem(row.item)"
                                 :aria-label="`Remove ${row.name}`">×</button>

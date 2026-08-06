@@ -16,6 +16,7 @@ import { lookupBarcode } from './lookup.js';
 import * as scanner from './scanner.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
+import { muscleMap } from './muscle-map.js';
 
 // ---- auth ------------------------------------------------------------------
 
@@ -656,15 +657,21 @@ Alpine.data('trainPage', () => ({
   tick: 0,          // bumped by an interval so the timers re-render
 
   init() {
-    // Demonstration images matter more to Aana than to me, so they load on their
-    // own rather than waiting for someone to find a button. Once a week at most,
-    // and only when there's something missing and a connection to fetch it with.
+    // The drawn figure keys off primary_muscle, and exercises imported from Hevy
+    // arrive without it. Filled in quietly in the background, at most weekly.
     this.$nextTick(async () => {
-      if (!navigator.onLine || !this.imagesMissing) return;
-      const last = await local.getMeta('images:lastAttempt', 0);
+      if (!navigator.onLine) return;
+      const missing = this.data.exercises.filter((e) => !e.deleted_at && !e.primary_muscle);
+      if (!missing.length) return;
+
+      const last = await local.getMeta('muscles:lastAttempt', 0);
       if (Date.now() - Number(last) < 7 * 86_400_000) return;
-      await local.setMeta('images:lastAttempt', Date.now());
-      this.loadImages();
+      await local.setMeta('muscles:lastAttempt', Date.now());
+
+      try {
+        await workout.importExerciseMetadata(this.data.exercises, this.email);
+        await this.data.refresh();
+      } catch { /* cosmetic; the figure falls back to reading the name */ }
     });
 
     // One ticker for both clocks. Only runs while the tab is visible, because a
@@ -903,7 +910,7 @@ Alpine.data('trainPage', () => ({
     this.detail = {
       exerciseId,
       name,
-      exercise: this.exerciseById(exerciseId) ?? { name, image_urls: [] },
+      exercise: this.exerciseById(exerciseId) ?? { name },
     };
   },
 
@@ -1060,40 +1067,65 @@ Alpine.data('trainPage', () => ({
     }
   },
 
-  // ---- demonstration images ------------------------------------------------
+  // ---- muscle map ----------------------------------------------------------
+  // A drawn figure with the worked muscle lit, instead of a photographed
+  // demonstration. Consistent, offline, and no licence attached.
 
-  imageImport: null,
-
-  get imageLabel() {
-    const p = this.imageImport;
-    if (!p) return '';
-    if (p.status === 'fetching') return 'Fetching exercise database…';
-    if (p.status === 'error') return p.message ?? 'Import failed.';
-    return `Matching ${p.done ?? 0}/${p.total ?? 0} · ${p.matched ?? 0} found`;
+  muscleMap(exerciseId, name) {
+    return muscleMap(this.exerciseById(exerciseId), name);
   },
-
-  imageFor(exercise) { return workout.imageFor(exercise); },
 
   exerciseById(id) { return this.data.exercises.find((e) => e.id === id) ?? null; },
 
-  get imagesMissing() {
-    return workout.libraryFor(this.data.exercises, this.email)
-      .filter((e) => !(e.image_urls ?? []).length).length;
-  },
+  // ---- Hevy import ---------------------------------------------------------
 
-  /** Fires and forgets: the screen stays usable while it works through the list. */
-  async loadImages() {
-    this.imageImport = { status: 'fetching', matched: 0, total: 0, done: 0 };
+  hevy: null,
+
+  async importFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    this.hevy = { phase: 'reading' };
     try {
-      await workout.importExerciseImages(
-        this.data.exercises, this.email, (p) => { this.imageImport = p; },
-      );
+      const text = await file.text();
+      await importHevy(text, {
+        ownerEmail: this.email,
+        existingExercises: this.data.exercises,
+      }, (p) => { this.hevy = p; });
+
       await this.data.refresh();
-      Alpine.store('ui').flash(`Images added to ${this.imageImport.matched} exercises`);
+      Alpine.store('ui').flash(
+        `Imported ${this.hevy.sessions} workouts · ${this.hevy.routines} routines`);
     } catch (e) {
-      this.imageImport = { status: 'error', message: e.message };
+      this.hevy = { phase: 'error', message: e.message };
+    } finally {
+      event.target.value = '';   // let the same file be picked again after a fix
     }
   },
+
+  get hevyLabel() {
+    if (!this.hevy) return '';
+    switch (this.hevy.phase) {
+      case 'reading':   return 'Reading file…';
+      case 'parsing':   return 'Parsing…';
+      case 'exercises': return `Exercises: ${this.hevy.created} new of ${this.hevy.total}`;
+      case 'sessions':  return `Workouts ${this.hevy.done}/${this.hevy.total} · ${this.hevy.sets} sets`;
+      case 'done':      return `Done · ${this.hevy.sessions} workouts, ${this.hevy.sets} sets, ${this.hevy.routines} routines`;
+      default:          return '';
+    }
+  },
+
+  // ---- muscle map ----------------------------------------------------------
+  // A drawn figure with the worked muscle lit, instead of a photographed
+  // demonstration. Consistent across every exercise, offline, no licence
+  // attached — and it matches the app rather than looking like stock imagery.
+
+  exerciseById(id) { return this.data.exercises.find((e) => e.id === id) ?? null; },
+
+  muscleMap(exerciseId, name) {
+    return muscleMap(this.exerciseById(exerciseId), name);
+  },
+
 }));
 
 // The offline shell. Registered after the app is up so it never delays first

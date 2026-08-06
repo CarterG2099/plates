@@ -366,15 +366,14 @@ export async function createExercise(fields, ownerEmail) {
   return exercise;
 }
 
-// ---- demonstration images --------------------------------------------------
+// ---- exercise metadata -----------------------------------------------------
 //
-// From the Free Exercise DB (yuhonas/free-exercise-db, public domain), served
-// via jsdelivr. Only the URLs are stored; the images themselves are fetched
-// lazily by the browser when a card scrolls into view, so this costs nothing
-// until something is actually looked at.
+// Photographed demonstrations were tried and dropped — see muscle-map.js. This
+// still pulls *metadata* from the Free Exercise DB, because primary_muscle is
+// what the drawn figure keys off, and exercises imported from Hevy arrive
+// without it.
 
 const EXERCISE_DB = 'https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/dist/exercises.json';
-const IMAGE_BASE = 'https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/exercises/';
 
 /**
  * Strips the bracketed equipment Hevy appends, so "Iso-Lateral Row (Machine)"
@@ -387,19 +386,9 @@ const normalise = (s) => (s ?? '')
 
 /** Words that describe kit rather than the movement, and shouldn't block a match. */
 const NOISE = /(machine|cable|barbell|dumbbell|smith|bodyweight|weighted|assisted|isolateral|seated|standing|lying)/g;
-
 const loose = (s) => normalise(s).replace(NOISE, '');
 
-/**
- * Match the library against the Free Exercise DB by name and store image URLs.
- *
- * Runs once, in the background, and the result syncs to both of us — so nobody
- * has to run it twice. Matching is deliberately conservative: an exact
- * normalised name, or theirs starting with ours ("Barbell Bench Press" matching
- * "Barbell Bench Press - Medium Grip"). A wrong demonstration image is worse
- * than none.
- */
-export async function importExerciseImages(exercises, ownerEmail, onProgress = () => {}) {
+export async function importExerciseMetadata(exercises, ownerEmail, onProgress = () => {}) {
   onProgress({ status: 'fetching', matched: 0, total: 0 });
 
   const response = await fetch(EXERCISE_DB);
@@ -415,43 +404,34 @@ export async function importExerciseImages(exercises, ownerEmail, onProgress = (
     if (l.length > 4 && !byLoose.has(l)) byLoose.set(l, entry);
   }
 
-  const targets = exercises.filter((e) => !e.deleted_at && !(e.image_urls ?? []).length);
+  const targets = exercises.filter((e) => !e.deleted_at && !e.primary_muscle);
   let matched = 0;
 
   for (const [index, exercise] of targets.entries()) {
-    // Widest net that still can't produce an absurd match: exact, then either
-    // name being a prefix of the other, then equipment words ignored entirely.
     const key = normalise(exercise.name);
     const l = loose(exercise.name);
 
     const hit = byName.get(key)
       ?? (key.length > 5 && catalogue.find((e) => normalise(e.name).startsWith(key)))
-      ?? (key.length > 5 && catalogue.find((e) => key.startsWith(normalise(e.name)) && normalise(e.name).length > 5))
       ?? (l.length > 4 && byLoose.get(l))
       ?? null;
 
-    if (hit?.images?.length) {
+    if (hit) {
       await local.save('exercises', {
         ...exercise,
-        image_urls: hit.images.map((path) => IMAGE_BASE + path),
-        external_id: hit.id ?? null,
-        primary_muscle: exercise.primary_muscle ?? hit.primaryMuscles?.[0] ?? null,
+        primary_muscle: hit.primaryMuscles?.[0] ?? null,
+        secondary_muscles: hit.secondaryMuscles ?? [],
         equipment: exercise.equipment ?? hit.equipment ?? null,
         instructions: exercise.instructions?.length ? exercise.instructions : (hit.instructions ?? []),
       }, exercise.owner_email ?? ownerEmail);
       matched++;
     }
-
     onProgress({ status: 'matching', matched, total: targets.length, done: index + 1 });
   }
 
   sync.nudge();
   onProgress({ status: 'done', matched, total: targets.length });
   return { matched, total: targets.length };
-}
-
-export function imageFor(exercise) {
-  return (exercise?.image_urls ?? [])[0] ?? null;
 }
 
 // ---- plate maths -----------------------------------------------------------
