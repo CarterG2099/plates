@@ -12,6 +12,7 @@ import { supabase, signIn, signOut, loadMembership, describeError } from './supa
 import * as local from './local.js';
 import * as sync from './sync.js';
 import * as food from './food.js';
+import { lookupBarcode } from './lookup.js';
 
 // ---- auth ------------------------------------------------------------------
 
@@ -206,6 +207,24 @@ Alpine.data('todayPage', () => ({
 
 // ---- log -------------------------------------------------------------------
 
+/** One shape for the food form, whether typed by hand or filled from a lookup. */
+function blankDraft(name = '') {
+  return {
+    name,
+    brand: '',
+    barcode: null,
+    serving_qty: 100,
+    serving_unit: 'g',
+    calories: '',
+    protein_g: '',
+    carbs_g: '',
+    fat_g: '',
+    fiber_g: '',
+    sodium_mg: '',
+    source: 'manual',
+  };
+}
+
 Alpine.data('logPage', () => ({
   term: '',
   filter: 'frequent',
@@ -289,18 +308,73 @@ Alpine.data('logPage', () => ({
 
   startCreate() {
     this.creating = true;
-    this.draft = {
-      name: this.term,
-      brand: '',
-      serving_qty: 100,
-      serving_unit: 'g',
-      calories: '',
-      protein_g: '',
-      carbs_g: '',
-      fat_g: '',
-      fiber_g: '',
-      sodium_mg: '',
-    };
+    this.draft = blankDraft(this.term);
+  },
+
+  // ---- online lookup -------------------------------------------------------
+  // The cold path, for foods you've never eaten. Barcodes go to Open Food Facts
+  // straight from the browser; names go to USDA through the Edge Function, which
+  // holds the key. Either way the result is a draft you review, never a silent
+  // write — OFF is crowd-sourced and USDA's name matching is loose.
+
+  lookup: null,   // { status, results, error }
+
+  get looksLikeBarcode() {
+    return /^\d{8,14}$/.test(this.term.trim());
+  },
+
+  async searchOnline() {
+    const term = this.term.trim();
+    if (!term) return;
+
+    this.lookup = { status: 'searching', results: [], error: '' };
+
+    try {
+      if (this.looksLikeBarcode) {
+        const r = await lookupBarcode(term);
+
+        if (r.status === 'found') {
+          this.lookup = {
+            status: 'done',
+            results: [{ draft: r.draft, missing: r.missing, source: 'Open Food Facts' }],
+            error: '',
+          };
+        } else {
+          this.lookup = {
+            status: 'done',
+            results: [],
+            error: {
+              not_found: 'No product with that barcode. Try the name, or add it by hand.',
+              offline: 'Offline — lookup needs a connection. You can still add it by hand.',
+            }[r.status] ?? r.message ?? 'Lookup failed.',
+          };
+        }
+      } else {
+        const { data, error } = await supabase.functions.invoke('lookup-usda', { body: { query: term } });
+        if (error) throw error;
+
+        this.lookup = {
+          status: 'done',
+          results: (data.results ?? []).map((r) => ({
+            draft: r.draft,
+            missing: r.missing ?? [],
+            source: r.dataType ?? 'USDA',
+          })),
+          error: data.error ?? '',
+        };
+      }
+    } catch (e) {
+      this.lookup = { status: 'done', results: [], error: e.message ?? String(e) };
+    }
+  },
+
+  closeLookup() { this.lookup = null; },
+
+  /** Pull a looked-up result into the same review form manual entry uses. */
+  acceptLookup(result) {
+    this.draft = { ...blankDraft(''), ...result.draft };
+    this.creating = true;
+    this.lookup = null;
   },
 
   cancelCreate() { this.creating = false; this.draft = null; },
@@ -315,7 +389,11 @@ Alpine.data('logPage', () => ({
 
     const saved = await food.saveFood({
       name: d.name.trim(),
-      brand: d.brand.trim() || null,
+      brand: (d.brand ?? '').trim() || null,
+      // No external_id here: plates.foods has no such column. The barcode is the
+      // provenance that matters, and a USDA fdcId with nowhere to live would
+      // write to IndexedDB happily and then fail on sync.
+      barcode: d.barcode || null,
       serving_qty: Number(d.serving_qty),
       serving_unit: d.serving_unit.trim() || 'g',
       calories: numeric(d.calories),
@@ -324,7 +402,7 @@ Alpine.data('logPage', () => ({
       fat_g: numeric(d.fat_g),
       fiber_g: numeric(d.fiber_g),
       sodium_mg: numeric(d.sodium_mg),
-      source: 'manual',
+      source: d.source ?? 'manual',
     }, this.email);
 
     this.cancelCreate();
