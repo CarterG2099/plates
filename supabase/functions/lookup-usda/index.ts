@@ -14,7 +14,11 @@ const SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
 // Branded first — that is the US store-brand coverage Open Food Facts is weakest
 // on, which is the whole reason this fallback exists.
 const DATA_TYPES = "Branded,SR Legacy,Foundation";
-const PAGE_SIZE = 15;
+// Fetched wider than we return, because the ranking below is what actually
+// decides the order — USDA's own relevance puts Reese's cups above the product
+// you asked for.
+const PAGE_SIZE = 40;
+const RETURN_LIMIT = 15;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -108,6 +112,27 @@ function kjToKcal(kj: number | null): number | null {
   return kj == null ? null : Math.round(kj / 4.184);
 }
 
+/**
+ * Rank by how many of the query's words the entry actually accounts for.
+ *
+ * USDA matches words against the description only, so "great value peanut
+ * butter" either OR-matches into noise (Reese's cups, lemonade) or, with
+ * requireAllWords, returns nothing at all — because "great" and "value" live in
+ * the brand fields, not the description. Scoring across description *and* brand
+ * degrades gracefully instead of failing at either extreme.
+ */
+function scoreAgainst(terms: string[], food: UsdaFood): number {
+  const haystack = [food.description, food.brandName, food.brandOwner]
+    .filter(Boolean).join(" ").toLowerCase();
+
+  let score = 0;
+  for (const term of terms) if (haystack.includes(term)) score += 1;
+
+  // A specific package beats a category average when both match equally well.
+  if (food.dataType === "Branded") score += 0.5;
+  return score;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -140,11 +165,6 @@ Deno.serve(async (req) => {
   url.searchParams.set("query", query);
   url.searchParams.set("dataType", DATA_TYPES);
   url.searchParams.set("pageSize", String(PAGE_SIZE));
-  // Without this USDA OR-matches the terms, so "great value peanut butter"
-  // returns Great Value lemonade and Reese's cups while missing the actual
-  // product. Requiring every word is the difference between the fallback being
-  // useful and being noise.
-  url.searchParams.set("requireAllWords", "true");
 
   let payload: { foods?: UsdaFood[] };
   try {
@@ -161,9 +181,17 @@ Deno.serve(async (req) => {
   }
 
   const foods = Array.isArray(payload.foods) ? payload.foods : [];
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+  const ranked = foods
+    .map((food) => ({ food, score: scoreAgainst(terms, food) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, RETURN_LIMIT);
+
   return json({
     query,
-    count: foods.length,
-    results: foods.map(toDraft),
+    count: ranked.length,
+    fetched: foods.length,
+    results: ranked.map(({ food, score }) => ({ ...toDraft(food), score })),
   });
 });
