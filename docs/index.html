@@ -166,6 +166,9 @@
                 </small>
               </button>
               <span class="freq" x-show="item.count" x-text="`${item.count}×`"></span>
+              <!-- Only appears once there's something to take back. -->
+              <button class="tap" x-show="loggedToday(item)" @click="undoLast(item)"
+                      :aria-label="`Remove last ${item.name}`">−</button>
               <button class="tap tap-primary" @click="quickLog(item)" :aria-label="`Log ${item.name}`">+</button>
             </div>
           </template>

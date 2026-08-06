@@ -266,6 +266,25 @@ Alpine.data('logPage', () => ({
     Alpine.store('ui').flash(`${item.name} · ${Math.round(quantity)}${item.serving_unit}`);
   },
 
+  /** Times logged today. The undo button only exists when there's something to undo. */
+  loggedToday(item) {
+    return food.countLoggedToday(Alpine.store('data').log, this.email, item.id);
+  },
+
+  /**
+   * Exact inverse of the + button: takes back the most recent log of this food.
+   * A mis-tap should be fixable where it happened, not by navigating to Today
+   * and hunting for the row.
+   */
+  async undoLast(item) {
+    const entry = food.lastEntryForFood(Alpine.store('data').log, this.email, item.id);
+    if (!entry) return;
+
+    await food.deleteEntry(entry.id);
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`Removed ${item.name}`);
+  },
+
   openSheet(item) {
     this.sheet = {
       food: item,

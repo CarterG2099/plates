@@ -90,6 +90,19 @@ export function groupByMeal(entries) {
     .map((g) => ({ ...g, totals: sumTotals(g.entries) }));
 }
 
+/** How many times this food has been logged today — drives the undo affordance. */
+export function countLoggedToday(log, ownerEmail, foodId, date = new Date()) {
+  if (!foodId) return 0;
+  return entriesForDay(log, ownerEmail, date).filter((e) => e.food_id === foodId).length;
+}
+
+/** The most recent entry for a food today, so a mis-tap can be taken straight back. */
+export function lastEntryForFood(log, ownerEmail, foodId, date = new Date()) {
+  if (!foodId) return null;
+  const matches = entriesForDay(log, ownerEmail, date).filter((e) => e.food_id === foodId);
+  return matches[matches.length - 1] ?? null;   // entriesForDay sorts oldest first
+}
+
 // ---- ranking ---------------------------------------------------------------
 
 const RANK_WINDOW_DAYS = 90;
