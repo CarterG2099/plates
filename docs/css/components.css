@@ -184,3 +184,14 @@
   animation: spin 700ms linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Demonstration image. Fixed box so a row's height never depends on whether the
+   picture has arrived yet — the list must not reflow as images stream in. */
+.thumb {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--color-ink);
+}

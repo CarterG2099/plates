@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://world.openfoodfacts.org; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://world.openfoodfacts.org https://cdn.jsdelivr.net; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Plates</title>
 
@@ -513,22 +513,39 @@
           <div style="display: contents;">
             <button class="btn btn-primary btn-block" @click="startEmpty()">Start workout</button>
 
-            <template x-if="routines.length">
-              <div>
-                <div class="section-head"><span>Routines</span></div>
-                <div class="rows">
-                  <template x-for="r in routines" :key="r.id">
-                    <div class="row">
-                      <button class="row-text" @click="startFromRoutine(r)">
-                        <b x-text="r.name"></b>
-                        <small>Start this routine</small>
-                      </button>
-                      <button class="tap" @click="deleteRoutine(r)" :aria-label="`Delete ${r.name}`">×</button>
-                    </div>
-                  </template>
-                </div>
+            <div>
+              <div class="section-head">
+                <span>Routines</span>
+                <button class="chip" @click="newRoutine()">New</button>
               </div>
-            </template>
+              <div class="rows" x-show="routines.length">
+                <template x-for="r in routines" :key="r.id">
+                  <div class="row">
+                    <button class="row-text" @click="startFromRoutine(r)">
+                      <b x-text="r.name"></b>
+                      <small>Start this routine</small>
+                    </button>
+                    <button class="tap" @click="editRoutine(r)" :aria-label="`Edit ${r.name}`">✎</button>
+                    <button class="tap" @click="deleteRoutine(r)" :aria-label="`Delete ${r.name}`">×</button>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <div class="section-head" x-show="imagesMissing">
+              <span>Exercise images</span>
+              <button class="chip" @click="loadImages()" x-show="!imageImport">
+                Load <span x-text="imagesMissing"></span>
+              </button>
+            </div>
+            <div class="sync-line" x-show="imageImport && imageImport.status !== 'done'">
+              <span class="spinner" style="width:14px;height:14px"></span>
+              <span x-text="imageImport.status === 'fetching'
+                ? 'Fetching exercise database…'
+                : `Matching ${imageImport.done}/${imageImport.total} · ${imageImport.matched} found`"></span>
+            </div>
+            <div class="notice notice-error" x-show="imageImport && imageImport.status === 'error'"
+                 x-text="imageImport && imageImport.message"></div>
 
             <template x-if="history.length">
               <div>
@@ -580,10 +597,15 @@
             <template x-for="group in groups" :key="group.key">
               <div class="card">
                 <div class="readout-head">
-                  <div>
-                    <b x-text="group.name"></b>
-                    <div class="prev" x-show="previous(group)">
-                      Last: <span x-text="previous(group)"></span>
+                  <div style="display:flex; align-items:center; gap:var(--space-3); min-width:0;">
+                    <img class="thumb" x-show="imageFor(exerciseById(group.exerciseId))"
+                         :src="imageFor(exerciseById(group.exerciseId))" alt=""
+                         loading="lazy" decoding="async">
+                    <div style="min-width:0;">
+                      <b x-text="group.name"></b>
+                      <div class="prev" x-show="previous(group)">
+                        Last: <span x-text="previous(group)"></span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -629,7 +651,10 @@
               </div>
               <div class="rows">
                 <template x-for="e in library.slice(0, 40)" :key="e.id">
-                  <button class="row" @click="addExercise(e)">
+                  <button class="row" @click="builder ? addToRoutine(e) : addExercise(e)">
+                    <!-- loading="lazy": nothing downloads until it scrolls in -->
+                    <img class="thumb" x-show="imageFor(e)" :src="imageFor(e)" alt=""
+                         loading="lazy" decoding="async">
                     <div class="row-text">
                       <b x-text="e.name"></b>
                       <small x-text="[e.primary_muscle, e.equipment].filter(Boolean).join(' · ')"></small>
@@ -639,6 +664,57 @@
                 </template>
               </div>
               <button class="btn btn-ghost btn-block" @click="picker = false">Cancel</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Routine builder --------------------------------------------------- -->
+        <template x-if="builder">
+          <div class="sheet-backdrop" @click.self="closeBuilder()">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="card-label" x-text="builder.routine ? 'Edit routine' : 'New routine'"></div>
+
+              <div class="field">
+                <label for="rt-name">Name</label>
+                <input id="rt-name" type="text" x-model="builder.name" placeholder="Push A"
+                       autocomplete="off" @change="saveRoutineName()">
+              </div>
+
+              <template x-if="builder.routine">
+                <div>
+                  <div class="setgrid">
+                    <div class="sethead">
+                      <span></span><span>Sets</span><span>Reps</span><span>lb</span><span></span>
+                    </div>
+                    <template x-for="row in builderExercises" :key="row.item.id">
+                      <div>
+                        <div class="prev" style="padding-top:var(--space-2)" x-text="row.name"></div>
+                        <div class="setrow">
+                          <span class="idx">·</span>
+                          <input class="cell num" type="number" inputmode="numeric" :value="row.item.target_sets"
+                                 @change="editRoutineItem(row.item, 'target_sets', $event.target.value)"
+                                 aria-label="Target sets">
+                          <input class="cell num" type="text" inputmode="numeric" :value="row.item.target_reps"
+                                 @change="editRoutineItem(row.item, 'target_reps', $event.target.value)"
+                                 aria-label="Target reps">
+                          <input class="cell num" type="number" inputmode="decimal" step="any"
+                                 :value="row.item.target_weight_lb"
+                                 @change="editRoutineItem(row.item, 'target_weight_lb', $event.target.value)"
+                                 aria-label="Target weight">
+                          <button class="tap" @click="dropRoutineItem(row.item)" aria-label="Remove exercise">×</button>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+
+                  <p class="empty" x-show="!builderExercises.length">No exercises yet.</p>
+                  <button class="btn btn-block" @click="picker = true">Add exercise</button>
+                </div>
+              </template>
+
+              <p class="empty" x-show="!builder.routine">Name it first, then add exercises.</p>
+              <button class="btn btn-primary btn-block" @click="saveRoutineName(); closeBuilder()">Done</button>
             </div>
           </div>
         </template>

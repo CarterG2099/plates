@@ -823,6 +823,92 @@ Alpine.data('trainPage', () => ({
     await this.data.refresh();
     Alpine.store('ui').flash('Routine deleted');
   },
+
+  // ---- routine builder -----------------------------------------------------
+
+  builder: null,   // { routine, name } — null when closed
+
+  newRoutine() { this.builder = { routine: null, name: '' }; },
+
+  editRoutine(routine) { this.builder = { routine, name: routine.name }; },
+
+  closeBuilder() { this.builder = null; },
+
+  get builderExercises() {
+    if (!this.builder?.routine) return [];
+    return workout.routineExercises(this.data.routineExercises, this.builder.routine.id)
+      .map((item) => ({
+        item,
+        exercise: this.data.exercises.find((e) => e.id === item.exercise_id) ?? null,
+        name: this.data.exercises.find((e) => e.id === item.exercise_id)?.name
+          ?? item.notes ?? 'Exercise',
+      }));
+  },
+
+  async saveRoutineName() {
+    const name = this.builder.name.trim();
+    if (!name) return;
+
+    const routine = await workout.upsertRoutine(
+      { id: this.builder.routine?.id, name }, this.email,
+    );
+    this.builder.routine = routine;
+    await this.data.refresh();
+  },
+
+  /** Picker doubles as "add to routine" while the builder is open. */
+  async addToRoutine(exercise) {
+    if (!this.builder.routine) await this.saveRoutineName();
+
+    await workout.addRoutineExercise({
+      routineId: this.builder.routine.id,
+      exercise,
+      position: this.builderExercises.length,
+      ownerEmail: this.email,
+    });
+    this.picker = false;
+    this.pickerTerm = '';
+    await this.data.refresh();
+  },
+
+  async editRoutineItem(item, field, value) {
+    await workout.updateRoutineExercise(item, {
+      [field]: value === '' ? null : (field === 'target_reps' ? value : Number(value)),
+    });
+    await this.data.refresh();
+  },
+
+  async dropRoutineItem(item) {
+    await workout.removeRoutineExercise(item.id);
+    await this.data.refresh();
+  },
+
+  // ---- demonstration images ------------------------------------------------
+
+  imageImport: null,
+
+  imageFor(exercise) { return workout.imageFor(exercise); },
+
+  exerciseById(id) { return this.data.exercises.find((e) => e.id === id) ?? null; },
+
+  get imagesMissing() {
+    return workout.libraryFor(this.data.exercises, this.email)
+      .filter((e) => !(e.image_urls ?? []).length).length;
+  },
+
+  /** Fires and forgets: the screen stays usable while it works through the list. */
+  async loadImages() {
+    this.imageImport = { status: 'fetching', matched: 0, total: 0, done: 0 };
+    try {
+      await workout.importExerciseImages(
+        this.data.exercises, this.email, (p) => { this.imageImport = p; },
+      );
+      await this.data.refresh();
+      Alpine.store('ui').flash(`Images added to ${this.imageImport.matched} exercises`);
+    } catch (e) {
+      this.imageImport = { status: 'error', message: e.message };
+    }
+  },
 }));
 
 // The offline shell. Registered after the app is up so it never delays first

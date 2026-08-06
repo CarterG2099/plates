@@ -231,6 +231,46 @@ export async function saveSessionAsRoutine({ name, session, sets, ownerEmail }) 
   return routine;
 }
 
+/** Create or rename a routine. Used by the builder; saving from a session uses
+ *  saveSessionAsRoutine above. */
+export async function upsertRoutine({ id, name, notes }, ownerEmail) {
+  const routine = await local.save('routines', {
+    ...(id ? { id } : {}),
+    name,
+    notes: notes ?? null,
+  }, ownerEmail);
+  sync.nudge();
+  return routine;
+}
+
+export async function addRoutineExercise({ routineId, exercise, position, ownerEmail }) {
+  const item = await local.save('routine_exercises', {
+    routine_id: routineId,
+    exercise_id: exercise.id ?? null,
+    position,
+    target_sets: 3,
+    target_reps: '8',
+    target_weight_lb: null,
+    rest_seconds: DEFAULT_REST_SECONDS,
+    // Keeps the name readable even if the exercise row is later deleted.
+    notes: exercise.name,
+  }, ownerEmail);
+  sync.nudge();
+  return item;
+}
+
+export async function updateRoutineExercise(item, fields) {
+  const saved = await local.save('routine_exercises', { ...item, ...fields }, item.owner_email);
+  sync.nudge();
+  return saved;
+}
+
+export async function removeRoutineExercise(id) {
+  const row = await local.remove('routine_exercises', id);
+  sync.nudge();
+  return row;
+}
+
 export function routineExercises(routineExercises, routineId) {
   return routineExercises
     .filter((r) => r.routine_id === routineId && !r.deleted_at)
@@ -266,4 +306,70 @@ export async function createExercise(fields, ownerEmail) {
   const exercise = await local.save('exercises', fields, ownerEmail);
   sync.nudge();
   return exercise;
+}
+
+// ---- demonstration images --------------------------------------------------
+//
+// From the Free Exercise DB (yuhonas/free-exercise-db, public domain), served
+// via jsdelivr. Only the URLs are stored; the images themselves are fetched
+// lazily by the browser when a card scrolls into view, so this costs nothing
+// until something is actually looked at.
+
+const EXERCISE_DB = 'https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/dist/exercises.json';
+const IMAGE_BASE = 'https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/exercises/';
+
+const normalise = (s) => (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Match the library against the Free Exercise DB by name and store image URLs.
+ *
+ * Runs once, in the background, and the result syncs to both of us — so nobody
+ * has to run it twice. Matching is deliberately conservative: an exact
+ * normalised name, or theirs starting with ours ("Barbell Bench Press" matching
+ * "Barbell Bench Press - Medium Grip"). A wrong demonstration image is worse
+ * than none.
+ */
+export async function importExerciseImages(exercises, ownerEmail, onProgress = () => {}) {
+  onProgress({ status: 'fetching', matched: 0, total: 0 });
+
+  const response = await fetch(EXERCISE_DB);
+  if (!response.ok) throw new Error(`Exercise database returned ${response.status}.`);
+  const catalogue = await response.json();
+
+  const byName = new Map();
+  for (const entry of catalogue) {
+    const key = normalise(entry.name);
+    if (!byName.has(key)) byName.set(key, entry);
+  }
+
+  const targets = exercises.filter((e) => !e.deleted_at && !(e.image_urls ?? []).length);
+  let matched = 0;
+
+  for (const [index, exercise] of targets.entries()) {
+    const key = normalise(exercise.name);
+    const hit = byName.get(key)
+      ?? catalogue.find((e) => normalise(e.name).startsWith(key) && key.length > 6);
+
+    if (hit?.images?.length) {
+      await local.save('exercises', {
+        ...exercise,
+        image_urls: hit.images.map((path) => IMAGE_BASE + path),
+        external_id: hit.id ?? null,
+        primary_muscle: exercise.primary_muscle ?? hit.primaryMuscles?.[0] ?? null,
+        equipment: exercise.equipment ?? hit.equipment ?? null,
+        instructions: exercise.instructions?.length ? exercise.instructions : (hit.instructions ?? []),
+      }, exercise.owner_email ?? ownerEmail);
+      matched++;
+    }
+
+    onProgress({ status: 'matching', matched, total: targets.length, done: index + 1 });
+  }
+
+  sync.nudge();
+  onProgress({ status: 'done', matched, total: targets.length });
+  return { matched, total: targets.length };
+}
+
+export function imageFor(exercise) {
+  return (exercise?.image_urls ?? [])[0] ?? null;
 }
