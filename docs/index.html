@@ -171,7 +171,7 @@
 
         <template x-if="prep === 'copy'">
           <div class="sheet-backdrop" @click.self="closePrep()">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closePrep() })">
               <div class="grabber"></div>
               <div class="card-label">Copy this day forward</div>
               <p style="font-size: var(--text-sm); color: var(--color-text-muted)">
@@ -194,7 +194,7 @@
 
         <template x-if="prep === 'save'">
           <div class="sheet-backdrop" @click.self="closePrep()">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closePrep() })">
               <div class="grabber"></div>
               <div class="card-label">Save this day as a template</div>
               <div class="field">
@@ -211,7 +211,7 @@
 
         <template x-if="prep === 'apply'">
           <div class="sheet-backdrop" @click.self="closePrep()">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closePrep() })">
               <div class="grabber"></div>
               <div class="card-label">Add a template to <span x-text="$store.ui.dayLabel.toLowerCase()"></span></div>
               <div class="rows">
@@ -325,7 +325,7 @@
         <!-- Scanner --------------------------------------------------------- -->
         <template x-if="scan">
           <div class="sheet-backdrop" @click.self="closeScanner()">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeScanner() })">
               <div class="grabber"></div>
               <div class="card-label">Scan a barcode</div>
 
@@ -358,7 +358,7 @@
         <!-- Online lookup results ------------------------------------------ -->
         <template x-if="lookup">
           <div class="sheet-backdrop" @click.self="closeLookup()">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeLookup() })">
               <div class="grabber"></div>
               <div class="card-label">
                 <span x-show="looksLikeBarcode">Open Food Facts</span>
@@ -407,7 +407,7 @@
         <!-- Quantity sheet ------------------------------------------------- -->
         <template x-if="sheet">
           <div class="sheet-backdrop" @click.self="closeSheet()">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeSheet() })">
               <div class="grabber"></div>
 
               <div>
@@ -452,7 +452,7 @@
         <!-- New food ------------------------------------------------------- -->
         <template x-if="creating">
           <div class="sheet-backdrop" @click.self="cancelCreate()">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { cancelCreate() })">
               <div class="grabber"></div>
               <div class="card-label">New food · per serving</div>
 
@@ -654,7 +654,7 @@
              sits later in the document and would otherwise paint over it. -->
         <template x-if="picker">
           <div class="sheet-backdrop is-nested" @click.self="picker = false">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { picker = false })">
               <div class="grabber"></div>
               <div class="search">
                 <span aria-hidden="true">⌕</span>
@@ -681,7 +681,7 @@
         <!-- Overflow menu ----------------------------------------------------- -->
         <template x-if="menu">
           <div class="sheet-backdrop" @click.self="menu = false">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { menu = false })">
               <div class="grabber"></div>
               <div class="card-label">Options</div>
 
@@ -706,7 +706,7 @@
         <!-- Exercise history -------------------------------------------------- -->
         <template x-if="detail">
           <div class="sheet-backdrop is-nested" @click.self="closeExercise()">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeExercise() })">
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2 x-text="detail.name"></h2>
@@ -762,7 +762,7 @@
         <!-- Routine builder --------------------------------------------------- -->
         <template x-if="builder">
           <div class="sheet-backdrop" @click.self="closeBuilder()">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeBuilder() })">
               <div class="grabber"></div>
               <!-- View ------------------------------------------------------ -->
               <template x-if="builder.mode === 'view'">
@@ -835,7 +835,7 @@
         <!-- Finish ----------------------------------------------------------- -->
         <template x-if="finishing">
           <div class="sheet-backdrop" @click.self="finishing = false">
-            <div class="sheet">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { finishing = false })">
               <div class="grabber"></div>
               <div class="card-label">Finish workout</div>
               <p style="font-size: var(--text-sm); color: var(--color-text-muted)">

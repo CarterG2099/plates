@@ -920,3 +920,10 @@
 }
 
 .routine-stats b { color: var(--color-text); font-weight: 700; }
+
+/* The sheet follows the finger, so it must not fight the drag with its own
+   transition mid-gesture — that is set and cleared in JS. */
+.sheet { will-change: transform; touch-action: pan-y; }
+
+.grabber { cursor: grab; }
+.grabber:active { cursor: grabbing; }

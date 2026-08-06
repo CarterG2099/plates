@@ -18,6 +18,55 @@ import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
 import { muscleMap } from './muscle-map.js';
 
+/**
+ * Drag a sheet down to dismiss it.
+ *
+ * The grabber has been implying this since the sheets were built. Only engages
+ * when the sheet is scrolled to the top, so a long list still scrolls normally —
+ * pulling down mid-list should not throw the sheet away.
+ */
+Alpine.magic('swipe', () => (sheet, close) => {
+  if (!sheet || sheet.dataset.swipe) return;
+  sheet.dataset.swipe = '1';
+
+  const THRESHOLD = 90;
+  let startY = 0;
+  let delta = 0;
+  let dragging = false;
+
+  sheet.addEventListener('touchstart', (e) => {
+    if (sheet.scrollTop > 0) return;
+    startY = e.touches[0].clientY;
+    delta = 0;
+    dragging = true;
+    sheet.style.transition = 'none';
+  }, { passive: true });
+
+  sheet.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    delta = e.touches[0].clientY - startY;
+    // Downward only; an upward drag is a scroll.
+    if (delta <= 0) { delta = 0; sheet.style.transform = ''; return; }
+    sheet.style.transform = `translateY(${delta}px)`;
+  }, { passive: true });
+
+  const release = () => {
+    if (!dragging) return;
+    dragging = false;
+    sheet.style.transition = 'transform 180ms ease';
+
+    if (delta > THRESHOLD) {
+      sheet.style.transform = 'translateY(100%)';
+      setTimeout(close, 160);
+    } else {
+      sheet.style.transform = '';
+    }
+  };
+
+  sheet.addEventListener('touchend', release);
+  sheet.addEventListener('touchcancel', release);
+});
+
 // ---- auth ------------------------------------------------------------------
 
 Alpine.store('auth', {
