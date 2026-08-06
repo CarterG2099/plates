@@ -23,7 +23,9 @@
 </head>
 <body>
 
-<div class="app">
+<!-- Bare x-data roots the Alpine component tree. Without it Alpine never walks
+     these templates and the page renders empty. -->
+<div class="app" x-data>
 
   <!-- Booting ------------------------------------------------------------- -->
   <template x-if="!$store.auth.ready">
