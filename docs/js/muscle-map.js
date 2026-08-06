@@ -1,82 +1,118 @@
 /**
- * muscle-map.js — a drawn figure with the worked muscle lit up.
+ * muscle-map.js — an anatomical figure with the worked muscle lit up.
  *
- * Replaces photographed demonstrations. It shows *what an exercise works*, not
- * *how to perform it* — the written instructions do that job. In exchange it is
- * consistent across every exercise, needs no network, has no licence attached,
- * and looks like the app rather than stock imagery.
+ * Not a rendered 3D model. Those are commissioned artwork, and hand-authored SVG
+ * cannot reach that quality — so this aims at a clear anatomical diagram instead
+ * of a bad imitation of one. It says *which muscle works*; the written
+ * instructions beside it say *how to perform the movement*.
  *
- * Front and back are separate figures. That is the whole reason this exists in
- * two views: on a single front-facing body, biceps and triceps occupy the same
- * rectangle, which makes the diagram actively misleading.
+ * Front and back are separate figures, because on a single front-facing body the
+ * biceps and triceps occupy the same space, which makes the diagram misleading
+ * rather than merely vague.
+ *
+ * Everything is drawn on a 120 × 200 canvas. Only the left side of the body is
+ * authored; the right is the same paths mirrored, which halves the geometry and
+ * guarantees symmetry.
  */
 
-// ---- geometry helpers ------------------------------------------------------
+/** Draw `inner` on both sides of the body's midline (x = 60). */
+const both = (inner) =>
+  `${inner}<g transform="translate(120,0) scale(-1,1)">${inner}</g>`;
 
-const box = (x, y, w, h, r = 5) => ({ x, y, w, h, r });
+const path = (d, fill, cls = '') =>
+  `<path d="${d}" fill="${fill}"${cls ? ` class="${cls}"` : ''}/>`;
 
-const rectSvg = ({ x, y, w, h, r }, fill, cls = '') =>
-  `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}"${cls ? ` class="${cls}"` : ''}/>`;
-
-/**
- * Striations across a muscle, suggesting fibre direction.
- * `across` draws them perpendicular to the long axis, which is how muscle
- * bellies actually read at a glance.
- */
-function fibreSvg({ x, y, w, h }, count = 4, across = true) {
-  const lines = [];
-  for (let i = 1; i <= count; i++) {
-    const t = i / (count + 1);
-    if (across) {
-      const yy = y + h * t;
-      lines.push(`<line x1="${x + w * 0.16}" y1="${yy}" x2="${x + w * 0.84}" y2="${yy}"/>`);
-    } else {
-      const xx = x + w * t;
-      lines.push(`<line x1="${xx}" y1="${y + h * 0.16}" x2="${xx}" y2="${y + h * 0.84}"/>`);
-    }
-  }
-  return `<g stroke="rgba(0,0,0,.32)" stroke-width=".9" stroke-linecap="round">${lines.join('')}</g>`;
-}
+const fibres = (d) =>
+  `<path d="${d}" fill="none" stroke="rgba(0,0,0,.30)" stroke-width="1" stroke-linecap="round"/>`;
 
 // ---- the body --------------------------------------------------------------
 
-/** Silhouette, identical in both views. Muscles are drawn on top of it. */
-const BASE = [
-  box(47, 7, 26, 26, 12),        // head
-  box(54, 30, 12, 9, 4),         // neck
-  box(40, 40, 40, 58, 12),       // torso
-  box(24, 46, 15, 40, 7),        // upper arm L
-  box(81, 46, 15, 40, 7),        // upper arm R
-  box(22, 86, 14, 34, 7),        // forearm L
-  box(84, 86, 14, 34, 7),        // forearm R
-  box(43, 96, 34, 18, 8),        // hips
-  box(44, 112, 15, 44, 7),       // thigh L
-  box(61, 112, 15, 44, 7),       // thigh R
-  box(45, 156, 13, 36, 6),       // shin L
-  box(62, 156, 13, 36, 6),       // shin R
-];
+/** Silhouette. Identical in both views; muscles are drawn over it. */
+const BASE = `
+  <ellipse cx="60" cy="17" rx="11.5" ry="13" fill="BODY"/>
+  <path d="M55,29 h10 v7 h-10 z" fill="BODY"/>
+  ${both(`
+    <path d="M60,36 C50,36 44,39 42,44 C38,54 37,66 39,78 L42,97 h18 V36 Z" fill="BODY"/>
+    <path d="M41,44 C33,45 28,52 28,61 L30,86 C31,90 35,91 37,88 L40,62 Z" fill="BODY"/>
+    <path d="M31,88 C29,96 28,108 29,118 C30,122 34,122 36,119 L39,90 Z" fill="BODY"/>
+    <path d="M42,97 C40,104 40,110 42,116 L46,152 C47,157 53,157 55,152 L58,116 V97 Z" fill="BODY"/>
+    <path d="M47,154 C45,162 45,176 47,188 C48,192 54,192 55,188 C57,176 57,162 56,154 Z" fill="BODY"/>
+  `)}
+`;
 
 /**
- * Muscles, per view. Each is a set of boxes plus the fibre direction.
- * `across: false` means the fibres run vertically — quads, lats, hamstrings.
+ * Muscles, per view. `d` is the shape, `f` the fibre striations over it.
+ * `sided` shapes are mirrored; centred ones (abs, traps, lower back) are not.
  */
 const MUSCLES = {
   // ---- front ----
-  chest:     { view: 'front', boxes: [box(42, 44, 17, 20, 7), box(61, 44, 17, 20, 7)], across: true },
-  shoulders: { view: 'front', boxes: [box(26, 43, 15, 16, 7), box(79, 43, 15, 16, 7)], across: true },
-  biceps:    { view: 'front', boxes: [box(26, 55, 12, 26, 6), box(82, 55, 12, 26, 6)], across: true },
-  forearms:  { view: 'front', boxes: [box(23, 88, 12, 28, 6), box(85, 88, 12, 28, 6)], across: true },
-  core:      { view: 'front', boxes: [box(48, 66, 24, 30, 6)], across: true },
-  quads:     { view: 'front', boxes: [box(45, 114, 13, 38, 6), box(62, 114, 13, 38, 6)], across: false },
+  shoulders: {
+    view: 'front', sided: true,
+    d: 'M42,42 C33,43 28,50 28,59 C28,63 31,66 35,65 C38,62 40,55 41,47 Z',
+    f: 'M31,50 C34,49 37,51 39,54 M30,56 C33,55 36,57 38,60',
+  },
+  chest: {
+    view: 'front', sided: true,
+    d: 'M44,44 C50,43 55,44 58,46 L58,62 C52,65 46,63 43,58 C42,53 42,47 44,44 Z',
+    f: 'M45,49 C49,48 54,49 57,51 M44,54 C48,53 53,54 57,56 M45,59 C49,58 53,59 57,60',
+  },
+  biceps: {
+    view: 'front', sided: true,
+    d: 'M33,50 C29,55 28,66 30,76 C31,80 36,80 37,76 C39,66 38,55 36,50 Z',
+    f: 'M31,58 h5 M30,64 h6 M31,70 h5',
+  },
+  forearms: {
+    view: 'front', sided: true,
+    d: 'M31,88 C28,96 28,108 30,117 C31,120 35,120 36,117 C38,108 38,96 36,88 Z',
+    f: 'M30,96 h5 M30,103 h6 M31,110 h5',
+  },
+  core: {
+    view: 'front', sided: false,
+    d: 'M51,64 C56,63 64,63 69,64 L68,94 C64,96 56,96 52,94 Z',
+    f: 'M60,64 V95 M52,72 h16 M52,80 h16 M52,88 h16',
+  },
+  quads: {
+    view: 'front', sided: true,
+    d: 'M43,99 C40,108 41,124 45,142 C47,148 54,148 56,142 C58,124 57,108 55,99 Z',
+    f: 'M49,101 C47,115 47,130 49,143 M53,102 C53,116 53,130 52,142',
+  },
 
   // ---- back ----
-  traps:      { view: 'back', boxes: [box(45, 38, 30, 18, 8)], across: true },
-  lats:       { view: 'back', boxes: [box(41, 54, 17, 32, 7), box(62, 54, 17, 32, 7)], across: false },
-  triceps:    { view: 'back', boxes: [box(26, 55, 12, 26, 6), box(82, 55, 12, 26, 6)], across: true },
-  lowerBack:  { view: 'back', boxes: [box(48, 84, 24, 14, 6)], across: true },
-  glutes:     { view: 'back', boxes: [box(44, 97, 16, 17, 7), box(60, 97, 16, 17, 7)], across: true },
-  hamstrings: { view: 'back', boxes: [box(45, 114, 13, 38, 6), box(62, 114, 13, 38, 6)], across: false },
-  calves:     { view: 'back', boxes: [box(46, 156, 12, 32, 6), box(63, 156, 12, 32, 6)], across: true },
+  traps: {
+    view: 'back', sided: false,
+    d: 'M60,36 C52,37 45,41 42,46 C48,52 54,56 60,57 C66,56 72,52 78,46 C75,41 68,37 60,36 Z',
+    f: 'M60,37 V56 M50,42 C54,47 57,51 59,55 M70,42 C66,47 63,51 61,55',
+  },
+  lats: {
+    view: 'back', sided: true,
+    d: 'M41,50 C38,60 38,74 41,86 L57,92 L57,56 C52,52 46,50 41,50 Z',
+    f: 'M43,55 C48,62 53,70 56,80 M41,64 C46,70 51,77 55,85 M41,74 C45,79 49,83 53,88',
+  },
+  triceps: {
+    view: 'back', sided: true,
+    d: 'M32,49 C28,55 27,67 30,78 C32,82 36,81 37,77 C39,66 37,55 35,49 Z',
+    f: 'M30,57 h6 M29,64 h7 M30,72 h6',
+  },
+  lowerBack: {
+    view: 'back', sided: false,
+    d: 'M52,80 C56,79 64,79 68,80 L67,96 C64,98 56,98 53,96 Z',
+    f: 'M57,81 V96 M63,81 V96',
+  },
+  glutes: {
+    view: 'back', sided: true,
+    d: 'M43,96 C40,101 40,109 43,114 C48,117 55,117 58,113 L58,96 Z',
+    f: 'M45,100 C50,101 55,103 57,106 M44,107 C49,108 54,110 57,112',
+  },
+  hamstrings: {
+    view: 'back', sided: true,
+    d: 'M43,116 C41,124 42,136 45,148 C47,153 54,153 56,148 C58,136 57,124 55,116 Z',
+    f: 'M49,118 C48,130 48,140 49,149 M53,118 C53,130 53,140 52,148',
+  },
+  calves: {
+    view: 'back', sided: true,
+    d: 'M46,155 C43,162 43,172 46,180 C48,184 54,184 55,180 C57,172 57,162 55,155 Z',
+    f: 'M48,161 C47,168 47,174 48,180 M53,161 C53,168 53,174 52,179',
+  },
 };
 
 /** Colour by movement family, using the plate palette. */
@@ -137,26 +173,22 @@ export function muscleFor(exercise, name = '') {
 
 // ---- rendering -------------------------------------------------------------
 
-const BODY_FILL = '#5C554D';
-const MUSCLE_REST = '#6E675E';
+const BODY_FILL = '#57504A';
+const MUSCLE_REST = '#6B645B';
 
 function figure(view, litKey) {
-  const base = BASE.map((b) => rectSvg(b, BODY_FILL)).join('');
-
   const muscles = Object.entries(MUSCLES)
     .filter(([, m]) => m.view === view)
     .map(([key, m]) => {
       const lit = key === litKey;
       const fill = lit ? COLOUR[key] : MUSCLE_REST;
-      // Only the working muscle animates; the rest are context.
-      const cls = lit ? 'mm-lit' : '';
-      return m.boxes
-        .map((b) => `<g${cls ? ` class="${cls}"` : ''}>${rectSvg(b, fill)}${fibreSvg(b, 4, m.across)}</g>`)
-        .join('');
+      // Only the working muscle animates; everything else is context.
+      const group = `<g${lit ? ' class="mm-lit"' : ''}>${path(m.d, fill)}${fibres(m.f)}</g>`;
+      return m.sided ? both(group) : group;
     })
     .join('');
 
-  return base + muscles;
+  return BASE.replaceAll('BODY', BODY_FILL) + muscles;
 }
 
 /**
@@ -164,23 +196,22 @@ function figure(view, litKey) {
  * @param {string} name   fallback name when the exercise row is missing
  * @param {object} [opts] { both: render front and back side by side }
  */
-export function muscleMap(exercise, name = '', { both = false } = {}) {
+export function muscleMap(exercise, name = '', { both: pair = false } = {}) {
   const key = muscleFor(exercise, name);
   const view = key ? MUSCLES[key].view : 'front';
   const label = key ? `Works ${key.replace(/([A-Z])/g, ' $1').toLowerCase()}` : 'Muscle map';
 
-  if (!both) {
+  if (!pair) {
     return `<svg viewBox="0 0 120 200" role="img" aria-label="${label}" focusable="false">${
       figure(view, key)
     }</svg>`;
   }
 
-  // Both views together. The labels are the point: the two silhouettes are
-  // otherwise near-identical, which is exactly the confusion this is meant to
-  // remove — a lit upper arm means biceps on one and triceps on the other.
+  // The labels are load-bearing: the silhouettes are near-identical, so a lit
+  // upper arm means biceps on one figure and triceps on the other.
   const tag = (x, text) =>
-    `<text x="${x}" y="212" text-anchor="middle" fill="#8E8478" font-size="13"` +
-    ` font-family="ui-monospace, Menlo, monospace" letter-spacing="1.6">${text}</text>`;
+    `<text x="${x}" y="212" text-anchor="middle" fill="#8E8478" font-size="12"` +
+    ` font-family="ui-monospace, Menlo, monospace" letter-spacing="1.8">${text}</text>`;
 
   return `<svg viewBox="0 0 250 220" role="img" aria-label="${label}" focusable="false">
     <g>${figure('front', key)}</g>
