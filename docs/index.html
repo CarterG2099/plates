@@ -715,14 +715,22 @@
               <div class="detail-top">
                 <div class="figure-pair" x-html="muscleMapPair(detail.exerciseId, detail.name)"></div>
 
-                <div class="how">
+                <div class="how" x-data="{ open: false }">
                   <div class="card-label" x-show="detail.exercise.primary_muscle"
                        x-text="detail.exercise.primary_muscle"></div>
-                  <ol x-show="detailInstructions.length">
+
+                  <button class="btn btn-block" @click="open = !open"
+                          x-show="detailInstructions.length" :aria-expanded="open">
+                    <span x-text="open ? 'Hide how-to' : 'How to do it'"></span>
+                    <span x-text="open ? '▴' : '▾'"></span>
+                  </button>
+
+                  <ol x-show="open && detailInstructions.length" x-cloak>
                     <template x-for="(step, i) in detailInstructions" :key="i">
                       <li x-text="step"></li>
                     </template>
                   </ol>
+
                   <p class="empty" style="padding:var(--space-3) 0" x-show="!detailInstructions.length">
                     No instructions for this one yet.
                   </p>

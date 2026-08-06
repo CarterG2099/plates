@@ -284,3 +284,55 @@
   color: var(--color-danger);
 }
 .btn-danger:hover:not(:disabled) { background: rgba(224, 54, 42, .12); }
+
+/* ---- movement ------------------------------------------------------------- */
+/* The figure performs the shape of the movement. Joint origins are in the SVG's
+   own user units, which works because the right side is the left side mirrored —
+   one origin serves both limbs.
+ *
+ * Archetypes, not choreography: a curl is a curl whether it's a barbell, a
+ * dumbbell or a cable, and inventing 150 individual animations would be wrong
+ * more often than right. */
+
+.mm-arm   { transform-origin: 34px 47px; }   /* shoulder */
+.mm-fore  { transform-origin: 33px 89px; }   /* elbow */
+.mm-thigh { transform-origin: 50px 99px; }   /* hip */
+.mm-shin  { transform-origin: 51px 153px; }  /* knee */
+.mm-torso { transform-origin: 60px 97px; }   /* pelvis */
+
+@keyframes mv-curl      { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-78deg); } }
+@keyframes mv-extend    { 0%, 100% { transform: rotate(-70deg);  } 55% { transform: rotate(0deg);   } }
+@keyframes mv-press     { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-38deg); } }
+@keyframes mv-press-fore{ 0%, 100% { transform: rotate(-95deg);  } 55% { transform: rotate(0deg);   } }
+@keyframes mv-raise     { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-72deg); } }
+@keyframes mv-pull      { 0%, 100% { transform: rotate(-46deg);  } 55% { transform: rotate(4deg);   } }
+@keyframes mv-pull-fore { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-52deg); } }
+@keyframes mv-dip       { 0%, 100% { transform: translateY(0);   } 55% { transform: translateY(13px); } }
+@keyframes mv-knee      { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(9deg);  } }
+@keyframes mv-fold      { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-13deg); } }
+@keyframes mv-rise      { 0%, 100% { transform: translateY(0);   } 55% { transform: translateY(-6px); } }
+@keyframes mv-bench     { 0%, 100% { transform: rotate(26deg);   } 55% { transform: rotate(-4deg);  } }
+
+.mm [class^="mm-"] { animation-duration: 2.2s; animation-timing-function: ease-in-out;
+                     animation-iteration-count: infinite; }
+
+.mv-curl      .mm-fore  { animation-name: mv-curl; }
+.mv-extension .mm-fore  { animation-name: mv-extend; }
+.mv-press     .mm-arm   { animation-name: mv-press; }
+.mv-press     .mm-fore  { animation-name: mv-press-fore; }
+.mv-raise     .mm-arm   { animation-name: mv-raise; }
+.mv-pull      .mm-arm   { animation-name: mv-pull; }
+.mv-pull      .mm-fore  { animation-name: mv-pull-fore; }
+.mv-squat     .mm-torso { animation-name: mv-dip; }
+.mv-squat     .mm-thigh { animation-name: mv-knee; }
+.mv-hinge     .mm-torso { animation-name: mv-fold; }
+.mv-calf      .mm-torso { animation-name: mv-rise; }
+.mv-crunch    .mm-torso { animation-name: mv-fold; }
+.mv-benchpress .mm-arm  { animation-name: mv-bench; }
+
+/* A moving figure doesn't also need a flashing muscle. */
+.mm[class*="mv-"] .mm-lit { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mm [class^="mm-"], .mm-lit { animation: none; }
+}
