@@ -14,10 +14,10 @@ const SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
 // Branded first — that is the US store-brand coverage Open Food Facts is weakest
 // on, which is the whole reason this fallback exists.
 const DATA_TYPES = "Branded,SR Legacy,Foundation";
-// Fetched wider than we return, because the ranking below is what actually
-// decides the order — USDA's own relevance puts Reese's cups above the product
-// you asked for.
-const PAGE_SIZE = 40;
+// USDA's own relevance buries specific products under category noise, so we
+// fetch its maximum page and re-rank locally. At 40 the actual Great Value
+// peanut butter was not even in the fetched set.
+const PAGE_SIZE = 200;
 const RETURN_LIMIT = 15;
 
 const cors = {
@@ -127,11 +127,13 @@ function scoreAgainst(terms: string[], food: UsdaFood): number {
 
   let score = 0;
   for (const term of terms) if (haystack.includes(term)) score += 1;
-
-  // A specific package beats a category average when both match equally well.
-  if (food.dataType === "Branded") score += 0.5;
   return score;
 }
+
+// Deliberately no bonus for Branded entries. It was tried and it put Great Value
+// Lemonade at the top of a peanut butter search: brand words and food words score
+// identically, so any thumb on the scale for brand matches promotes the wrong
+// product. Ties fall back to USDA's own order.
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -152,17 +154,19 @@ Deno.serve(async (req) => {
   }
 
   let query = "";
+  let barcode = "";
   try {
     const body = await req.json();
     query = String(body?.query ?? "").trim();
+    barcode = String(body?.barcode ?? "").trim();
   } catch {
-    return json({ error: "Expected a JSON body with a query." }, 400);
+    return json({ error: "Expected a JSON body with a query or barcode." }, 400);
   }
-  if (!query) return json({ error: "Nothing to search for." }, 400);
+  if (!query && !barcode) return json({ error: "Nothing to search for." }, 400);
 
   const url = new URL(SEARCH_URL);
   url.searchParams.set("api_key", apiKey);
-  url.searchParams.set("query", query);
+  url.searchParams.set("query", barcode || query);
   url.searchParams.set("dataType", DATA_TYPES);
   url.searchParams.set("pageSize", String(PAGE_SIZE));
 
@@ -181,8 +185,22 @@ Deno.serve(async (req) => {
   }
 
   const foods = Array.isArray(payload.foods) ? payload.foods : [];
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
 
+  // A barcode is an exact identity, not a relevance problem. Filter to the
+  // product that actually carries it rather than ranking near-misses — this is
+  // the path that works for store brands, where name search does not.
+  if (barcode) {
+    const wanted = normaliseUpc(barcode);
+    const exact = foods.filter((f) => f.gtinUpc && normaliseUpc(f.gtinUpc) === wanted);
+    return json({
+      barcode,
+      count: exact.length,
+      fetched: foods.length,
+      results: exact.map((food) => ({ ...toDraft(food), score: null })),
+    });
+  }
+
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   const ranked = foods
     .map((food) => ({ food, score: scoreAgainst(terms, food) }))
     .sort((a, b) => b.score - a.score)
@@ -195,3 +213,8 @@ Deno.serve(async (req) => {
     results: ranked.map(({ food, score }) => ({ ...toDraft(food), score })),
   });
 });
+
+/** UPC-A and EAN-13 differ only by a leading zero; compare them as the same code. */
+function normaliseUpc(code: string): string {
+  return code.replace(/\D/g, "").replace(/^0+/, "");
+}
