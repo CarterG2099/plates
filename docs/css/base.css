@@ -1,0 +1,121 @@
+/* base.css — element defaults and the app shell. Components live in
+ * components.css; per-screen rules in pages.css. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overscroll-behavior-y: none;   /* no rubber-band on a logging screen */
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Every digit that can change should hold its column. */
+.num, input[type="number"] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+
+h1, h2, h3, h4 { margin: 0; font-weight: 600; text-wrap: balance; }
+p { margin: 0; }
+
+a { color: var(--color-primary-hover); text-decoration: none; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-warning);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+[x-cloak] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ---- shell ---------------------------------------------------------------- */
+
+.app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--inset-top);
+}
+
+.app-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  flex: none;
+}
+
+.app-bar h1 {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  letter-spacing: -.02em;
+}
+
+.app-bar .app-bar-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.app-main {
+  flex: 1;
+  padding: 0 var(--space-4) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Centred single-purpose screens: sign-in, access denied, loading. */
+.screen-centered {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  min-height: 70vh;
+}
+
+.screen-centered .mark {
+  font-family: var(--font-mono);
+  font-size: var(--text-3xl);
+  letter-spacing: -.04em;
+}
+
+.screen-centered p {
+  color: var(--color-text-muted);
+  max-width: 34ch;
+}
