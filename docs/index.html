@@ -597,7 +597,8 @@
               <div class="card">
                 <div class="readout-head">
                   <div style="display:flex; align-items:center; gap:var(--space-3); min-width:0;">
-                    <span class="thumb" x-html="muscleMap(group.exerciseId, group.name)"></span>
+                    <span class="thumb" x-html="muscleMap(group.exerciseId, group.name)"
+                          x-init="kickAnimations($el)"></span>
                     <button style="min-width:0; text-align:left"
                             @click="openExercise(group.exerciseId, group.name)">
                       <b x-text="group.name"></b>
@@ -713,7 +714,8 @@
               </div>
 
               <div class="detail-top">
-                <div class="figure-pair" x-html="muscleMapPair(detail.exerciseId, detail.name)"></div>
+                <div class="figure-pair" x-html="muscleMapPair(detail.exerciseId, detail.name)"
+                     x-init="kickAnimations($el)"></div>
 
                 <div class="how">
                   <div class="card-label" x-show="detail.exercise.primary_muscle"

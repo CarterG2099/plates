@@ -1091,6 +1091,19 @@ Alpine.data('trainPage', () => ({
     return muscleMap(this.exerciseById(exerciseId), name);
   },
 
+  /**
+   * SMIL animations inserted through innerHTML don't always join the SVG's
+   * timeline, so they sit in the DOM doing nothing. Nudging each one with
+   * beginElement() starts it; harmless where they were already running.
+   */
+  kickAnimations(el) {
+    this.$nextTick(() => {
+      el?.querySelectorAll?.('animate').forEach((a) => {
+        try { a.beginElement(); } catch { /* not supported; CSS or nothing */ }
+      });
+    });
+  },
+
   /** Front and back together, for the detail sheet. */
   muscleMapPair(exerciseId, name) {
     return muscleMap(this.exerciseById(exerciseId), name, { both: true });
@@ -1153,6 +1166,19 @@ Alpine.data('trainPage', () => ({
 
   muscleMap(exerciseId, name) {
     return muscleMap(this.exerciseById(exerciseId), name);
+  },
+
+  /**
+   * SMIL animations inserted through innerHTML don't always join the SVG's
+   * timeline, so they sit in the DOM doing nothing. Nudging each one with
+   * beginElement() starts it; harmless where they were already running.
+   */
+  kickAnimations(el) {
+    this.$nextTick(() => {
+      el?.querySelectorAll?.('animate').forEach((a) => {
+        try { a.beginElement(); } catch { /* not supported; CSS or nothing */ }
+      });
+    });
   },
 
   /** Front and back together, for the detail sheet. */
