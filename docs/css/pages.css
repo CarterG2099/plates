@@ -927,3 +927,47 @@
 
 .grabber { cursor: grab; }
 .grabber:active { cursor: grabbing; }
+
+/* ---- stats ----------------------------------------------------------------- */
+/* Single-series charts throughout: the card title names the series, so no legend
+   is needed and no two hues ever sit adjacent — which matters here, because the
+   plate red and green are 5.1 ΔE apart under deuteranopia. */
+
+.stat-hero {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -.035em;
+  line-height: 1.1;
+}
+
+.stat-hero small {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--color-text-muted);
+  margin-left: 4px;
+}
+
+.stat-sub {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: .04em;
+}
+
+.chart {
+  width: 100%;
+  height: 72px;
+  display: block;
+  overflow: visible;
+}
+
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  letter-spacing: .06em;
+}

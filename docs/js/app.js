@@ -17,6 +17,7 @@ import * as scanner from './scanner.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
 import { muscleMap } from './muscle-map.js';
+import * as stats from './stats.js';
 
 /**
  * Drag a sheet down to dismiss it.
@@ -174,6 +175,7 @@ Alpine.store('data', {
   log: [],
   combos: [],
   templates: [],
+  weightLog: [],
   exercises: [],
   routines: [],
   routineExercises: [],
@@ -181,13 +183,14 @@ Alpine.store('data', {
   sessionSets: [],
 
   async refresh() {
-    const [goals, foods, log, combos, templates,
+    const [goals, foods, log, combos, templates, weightLog,
            exercises, routines, routineExercises, sessions, sessionSets] = await Promise.all([
       local.all('goals'),
       local.all('foods'),
       local.all('food_log'),
       local.all('meal_combos'),
       local.all('day_templates'),
+      local.all('weight_log'),
       local.all('exercises'),
       local.all('routines'),
       local.all('routine_exercises'),
@@ -199,6 +202,7 @@ Alpine.store('data', {
     this.log = log;
     this.combos = combos;
     this.templates = templates;
+    this.weightLog = weightLog;
     this.exercises = exercises;
     this.routines = routines;
     this.routineExercises = routineExercises;
@@ -1217,6 +1221,83 @@ Alpine.data('trainPage', () => ({
     return [];
   },
 
+}));
+
+// ---- stats -----------------------------------------------------------------
+
+Alpine.data('statsPage', () => ({
+  weighing: false,
+  newWeight: '',
+
+  get email() { return Alpine.store('auth').email; },
+  get data() { return Alpine.store('data'); },
+
+  // ---- body weight ---------------------------------------------------------
+
+  get goal() { return food.currentGoal(this.data.goals, this.email); },
+
+  get weight() { return stats.weightSeries(this.data.weightLog ?? [], this.email); },
+  get weightSummary() { return stats.weightSummary(this.weight, this.goal); },
+
+  get weightLine() {
+    return stats.linePoints(this.weight.map((w) => w.lb), { width: 100, height: 46 });
+  },
+
+  async saveWeight() {
+    const lb = Number(this.newWeight);
+    if (!Number.isFinite(lb) || lb <= 0) return;
+
+    await stats.logWeight(lb, this.email);
+    this.newWeight = '';
+    this.weighing = false;
+    await this.data.refresh();
+    Alpine.store('ui').flash(`Logged ${lb} lb`);
+  },
+
+  // ---- training ------------------------------------------------------------
+
+  get weeks() {
+    return stats.weeklyTraining(this.data.sessions, this.data.sessionSets, this.email);
+  },
+
+  get weekBars() {
+    return stats.barGeometry(this.weeks.map((w) => w.volume)).map((bar, i) => ({
+      ...bar,
+      label: this.weeks[i].start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      sessions: this.weeks[i].sessions,
+    }));
+  },
+
+  get thisWeek() { return this.weeks[this.weeks.length - 1] ?? { volume: 0, sessions: 0 }; },
+
+  get lifts() {
+    return stats.topLifts(this.data.sessionSets, this.data.sessions, this.email);
+  },
+
+  // ---- nutrition -----------------------------------------------------------
+
+  get days() { return stats.calorieDays(this.data.log, this.data.goals, this.email); },
+  get calorieSummary() { return stats.calorieSummary(this.days); },
+
+  get dayBars() {
+    return stats.barGeometry(this.days.map((d) => d.kcal)).map((bar, i) => ({
+      ...bar,
+      label: this.days[i].label,
+      over: this.days[i].target ? this.days[i].kcal > this.days[i].target : false,
+      logged: this.days[i].logged,
+    }));
+  },
+
+  /** Where the target sits on the same scale as the bars. */
+  get targetLine() {
+    const target = this.calorieSummary?.target;
+    if (!target) return null;
+    const max = Math.max(...this.days.map((d) => d.kcal), target, 1);
+    return 60 - (target / max) * 60;
+  },
+
+  round(n) { return Math.round(Number(n) || 0); },
+  thousands(n) { return `${(Number(n) / 1000).toFixed(1)}k`; },
 }));
 
 // The offline shell. Registered after the app is up so it never delays first

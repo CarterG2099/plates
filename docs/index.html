@@ -863,8 +863,141 @@
         </template>
       </main>
 
-      <main class="app-main" x-show="$store.ui.view === 'stats'">
-        <p class="empty">Trends arrive once there's data to trend.</p>
+      <main class="app-main" x-data="statsPage" x-show="$store.ui.view === 'stats'">
+
+        <!-- Body weight ------------------------------------------------------ -->
+        <div class="card">
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Body weight</div>
+              <div class="stat-hero" x-show="weightSummary">
+                <span x-text="weightSummary && weightSummary.latest"></span><small>lb</small>
+              </div>
+              <div class="stat-sub" x-show="weightSummary && weightSummary.target">
+                <span x-text="weightSummary && Math.abs(weightSummary.toGo)"></span> lb
+                <span x-text="weightSummary && weightSummary.toGo > 0 ? 'to go' : 'past target'"></span>
+              </div>
+            </div>
+            <button class="btn" @click="weighing = true">Log</button>
+          </div>
+
+          <!-- One series, so the card title names it and no legend is needed. -->
+          <svg class="chart" viewBox="0 0 100 46" preserveAspectRatio="none"
+               x-show="weight.length > 1" role="img" aria-label="Body weight trend">
+            <polyline :points="weightLine.points" fill="none" stroke="var(--color-protein)"
+                      stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+                      vector-effect="non-scaling-stroke"/>
+          </svg>
+
+          <p class="empty" style="padding:var(--space-3) 0" x-show="weight.length < 2">
+            Log your weight a couple of times and a trend appears here.
+          </p>
+        </div>
+
+        <!-- Training --------------------------------------------------------- -->
+        <div class="card">
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Weekly volume</div>
+              <div class="stat-hero">
+                <span x-text="thousands(thisWeek.volume)"></span><small>lb</small>
+              </div>
+              <div class="stat-sub">
+                <span x-text="thisWeek.sessions"></span> sessions this week
+              </div>
+            </div>
+          </div>
+
+          <svg class="chart" viewBox="0 0 100 60" preserveAspectRatio="none"
+               role="img" aria-label="Training volume by week, last 12 weeks">
+            <template x-for="(bar, i) in weekBars" :key="i">
+              <rect :x="bar.x" :y="bar.y" :width="bar.width" :height="bar.height"
+                    rx="1.2" fill="var(--color-protein)"
+                    :opacity="i === weekBars.length - 1 ? 1 : 0.55">
+                <title x-text="`${bar.label}: ${Math.round(bar.value).toLocaleString()} lb · ${bar.sessions} sessions`"></title>
+              </rect>
+            </template>
+          </svg>
+          <div class="chart-axis">
+            <span x-text="weekBars[0] && weekBars[0].label"></span>
+            <span>this week</span>
+          </div>
+        </div>
+
+        <!-- Top lifts -------------------------------------------------------- -->
+        <div class="card" x-show="lifts.length">
+          <div class="card-label">Best lifts · estimated 1RM</div>
+          <div class="rows">
+            <template x-for="lift in lifts" :key="lift.name">
+              <div class="row">
+                <div class="row-text">
+                  <b x-text="lift.name"></b>
+                  <small><span x-text="lift.sessions"></span> sessions</small>
+                </div>
+                <span class="pill" x-show="lift.isBest">PR</span>
+                <span class="row-num"><span x-text="lift.best"></span> lb</span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Nutrition -------------------------------------------------------- -->
+        <div class="card" x-show="calorieSummary">
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Calories · 14 day average</div>
+              <div class="stat-hero">
+                <span x-text="calorieSummary && calorieSummary.average.toLocaleString()"></span><small>kcal</small>
+              </div>
+              <div class="stat-sub" x-show="calorieSummary && calorieSummary.delta !== null">
+                <span x-text="calorieSummary && Math.abs(calorieSummary.delta)"></span>
+                <span x-text="calorieSummary && calorieSummary.delta > 0 ? 'over target' : 'under target'"></span>
+                · <span x-text="calorieSummary && calorieSummary.loggedDays"></span> days logged
+              </div>
+            </div>
+          </div>
+
+          <svg class="chart" viewBox="0 0 100 60" preserveAspectRatio="none"
+               role="img" aria-label="Daily calories over the last 14 days">
+            <template x-for="(bar, i) in dayBars" :key="i">
+              <rect :x="bar.x" :y="bar.y" :width="bar.width" :height="bar.height"
+                    rx="1.2" fill="var(--color-carbs)" :opacity="bar.logged ? 0.9 : 0.25">
+                <title x-text="`${bar.value.toLocaleString()} kcal`"></title>
+              </rect>
+            </template>
+            <!-- Target as a rule, not a second series: one axis, one measure. -->
+            <line x-show="targetLine !== null" :y1="targetLine" :y2="targetLine" x1="0" x2="100"
+                  stroke="var(--color-text-dim)" stroke-width="1" stroke-dasharray="3 3"
+                  vector-effect="non-scaling-stroke"/>
+          </svg>
+          <div class="chart-axis">
+            <span>14 days ago</span>
+            <span>target <span x-text="calorieSummary && calorieSummary.target"></span></span>
+          </div>
+        </div>
+
+        <p class="empty" x-show="!lifts.length && !calorieSummary && weight.length < 2">
+          Log a workout, a meal or your weight and this fills in.
+        </p>
+
+        <!-- Log weight ------------------------------------------------------- -->
+        <template x-if="weighing">
+          <div class="sheet-backdrop" @click.self="weighing = false">
+            <div class="sheet" x-init="$swipe($el, () => { weighing = false })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2>Log weight</h2>
+                <button class="tap" @click="weighing = false" aria-label="Close">×</button>
+              </div>
+              <div class="field">
+                <label for="w-lb">Pounds</label>
+                <input id="w-lb" type="number" inputmode="decimal" step="0.1"
+                       x-model="newWeight" placeholder="184.2" autocomplete="off">
+              </div>
+              <button class="btn btn-primary btn-block" :disabled="!newWeight" @click="saveWeight()">Save</button>
+            </div>
+          </div>
+        </template>
       </main>
 
       <!-- Status + nav ----------------------------------------------------- -->
