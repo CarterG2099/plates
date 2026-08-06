@@ -342,4 +342,9 @@ Alpine.store('auth').init();
 Alpine.store('sync').init();
 
 window.Alpine = Alpine;
+
+// Console handle for poking at things during development. The client only ever
+// holds the publishable key, so this exposes nothing the page didn't already ship.
+window.plates = { supabase, local, sync, food };
+
 Alpine.start();
