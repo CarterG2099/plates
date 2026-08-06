@@ -91,14 +91,11 @@
   box-shadow: var(--shadow-md);
 }
 
-/* Smaller and quieter: scanning is the shortcut, adding is the main action. */
+/* Same blue as the add button — both are primary actions. Size alone carries the
+   hierarchy: adding food is the main path, scanning is the shortcut. */
 .fab-secondary {
   width: 46px;
   height: 46px;
-  font-size: var(--text-lg);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
 }
 
 /* Log is a panel over Today rather than a separate destination, so adding food
