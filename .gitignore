@@ -1,0 +1,11 @@
+# Secrets — never commit (this repo is public)
+.env
+client_secret*.json
+*.pem
+
+# Cruft
+.DS_Store
+
+# Supabase CLI local artifacts
+supabase/.branches/
+supabase/.temp/
