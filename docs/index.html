@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/pages.css">
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.107.0/dist/umd/supabase.js" integrity="sha384-CQbEv3UOeYwlaBLdPF5KqEagCP39Q1KpvJC6Gwa3UGjZAwMvpA+0TFxSSnrgb4MX" crossorigin="anonymous"></script>
 </head>
@@ -57,7 +58,7 @@
     </div>
   </template>
 
-  <!-- Signed in and a member ---------------------------------------------- -->
+  <!-- The app ------------------------------------------------------------- -->
   <template x-if="$store.auth.ready && $store.auth.isMember">
     <div style="display: contents;">
 
@@ -66,46 +67,275 @@
         <span class="app-bar-meta" x-text="$store.auth.displayName"></span>
       </header>
 
-      <main class="app-main" x-data="localSummary">
+      <!-- Today ------------------------------------------------------------ -->
+      <main class="app-main" x-data="todayPage" x-show="$store.ui.view === 'today'">
 
+        <div class="card readout">
+          <div class="readout-head">
+            <div>
+              <div class="readout-total" x-text="round(totals.calories).toLocaleString()"></div>
+              <div class="readout-of">
+                <span x-show="calorieTarget">of <span x-text="calorieTarget?.toLocaleString()"></span> kcal</span>
+                <span x-show="!calorieTarget">kcal · no target set</span>
+              </div>
+            </div>
+            <div class="readout-remaining" :class="remaining !== null && remaining < 0 && 'is-over'" x-show="calorieTarget">
+              <b x-text="Math.abs(remaining ?? 0).toLocaleString()"></b>
+              <small x-text="(remaining ?? 0) < 0 ? 'over' : 'left'"></small>
+            </div>
+          </div>
+
+          <div class="track" x-show="calorieTarget">
+            <i :style="`background: var(--color-protein); width: ${segment('protein_g')}%`"></i>
+            <i :style="`background: var(--color-carbs);   width: ${segment('carbs_g')}%`"></i>
+            <i :style="`background: var(--color-fat);     width: ${segment('fat_g')}%`"></i>
+          </div>
+
+          <div class="macros">
+            <template x-for="m in [
+              { key: 'protein_g', name: 'Protein', color: 'var(--color-protein)' },
+              { key: 'carbs_g',   name: 'Carbs',   color: 'var(--color-carbs)' },
+              { key: 'fat_g',     name: 'Fat',     color: 'var(--color-fat)' }
+            ]" :key="m.key">
+              <div class="macro">
+                <span class="dot" :style="`background: ${m.color}`"></span>
+                <span class="macro-name" x-text="m.name"></span>
+                <span class="macro-bar"><i :style="`background: ${m.color}; width: ${percent(m.key)}%`"></i></span>
+                <span class="macro-val">
+                  <span x-text="round(totals[m.key])"></span><s x-show="target(m.key)">/<span x-text="target(m.key)"></span></s>
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <template x-if="!entries.length">
+          <p class="empty">Nothing logged yet today.</p>
+        </template>
+
+        <template x-for="meal in meals" :key="meal.slot">
+          <div>
+            <div class="section-head">
+              <span x-text="mealLabel(meal.slot)"></span>
+              <span x-text="round(meal.totals.calories)"></span>
+            </div>
+            <div class="rows">
+              <template x-for="entry in meal.entries" :key="entry.id">
+                <div class="row">
+                  <div class="row-text">
+                    <b x-text="entry.description"></b>
+                    <small><span x-text="entry.quantity"></span><span x-text="entry.unit"></span></small>
+                  </div>
+                  <span class="row-num" x-text="round(entry.calories)"></span>
+                  <button class="tap" @click="removeEntry(entry.id)" :aria-label="`Remove ${entry.description}`">×</button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </main>
+
+      <!-- Log -------------------------------------------------------------- -->
+      <main class="app-main" x-data="logPage" x-show="$store.ui.view === 'log'">
+
+        <div class="search">
+          <span aria-hidden="true">⌕</span>
+          <input type="search" placeholder="Search your foods…" x-model="term"
+                 enterkeyhint="search" autocomplete="off">
+        </div>
+
+        <div class="chips">
+          <button class="chip" :class="filter === 'frequent' && 'is-active'" @click="filter = 'frequent'">Frequent</button>
+          <button class="chip" :class="filter === 'recent'   && 'is-active'" @click="filter = 'recent'">Recent</button>
+          <button class="chip" :class="filter === 'mine'     && 'is-active'" @click="filter = 'mine'">My foods</button>
+        </div>
+
+        <div class="section-head">
+          <span x-text="mealSlot"></span>
+          <span x-text="`${results.length} shown`"></span>
+        </div>
+
+        <div class="rows">
+          <template x-for="item in results" :key="item.id">
+            <div class="row">
+              <button class="row-text" @click="openSheet(item)">
+                <b x-text="item.name"></b>
+                <small>
+                  <span x-text="item.lastQuantity ?? item.serving_qty"></span><span x-text="item.serving_unit"></span>
+                  <span x-show="item.calories !== null"> · <span x-text="Math.round(item.calories)"></span> kcal</span>
+                </small>
+              </button>
+              <span class="freq" x-show="item.count" x-text="`${item.count}×`"></span>
+              <button class="tap tap-primary" @click="quickLog(item)" :aria-label="`Log ${item.name}`">+</button>
+            </div>
+          </template>
+        </div>
+
+        <template x-if="!results.length">
+          <p class="empty">
+            <span x-show="term">No match for “<span x-text="term"></span>”.</span>
+            <span x-show="!term">No foods yet — add the first one.</span>
+          </p>
+        </template>
+
+        <button class="btn btn-block" @click="startCreate()">
+          <span x-show="term">Add “<span x-text="term"></span>”</span>
+          <span x-show="!term">Add a food</span>
+        </button>
+
+        <template x-if="combos.length">
+          <div>
+            <div class="section-head"><span>Saved combos</span></div>
+            <div class="rows">
+              <template x-for="combo in combos" :key="combo.id">
+                <div class="row">
+                  <div class="row-text">
+                    <b x-text="combo.name"></b>
+                    <small x-text="`${(combo.items || []).length} items`"></small>
+                  </div>
+                  <button class="tap tap-primary" @click="logCombo(combo)" :aria-label="`Log ${combo.name}`">+</button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Quantity sheet ------------------------------------------------- -->
+        <template x-if="sheet">
+          <div class="sheet-backdrop" @click.self="closeSheet()">
+            <div class="sheet">
+              <div class="grabber"></div>
+
+              <div>
+                <div style="font-weight: 600;" x-text="sheet.food.name"></div>
+                <div class="card-label" x-text="sheet.food.brand || sheet.food.source || 'my foods'"></div>
+              </div>
+
+              <div class="qty">
+                <button class="qty-step" @click="step(-10)" aria-label="Decrease">−</button>
+                <label class="qty-amount">
+                  <input type="number" inputmode="decimal" step="any" min="0" x-model.number="sheet.quantity">
+                  <small x-text="sheet.unit"></small>
+                </label>
+                <button class="qty-step" @click="step(10)" aria-label="Increase">+</button>
+              </div>
+
+              <p class="prefill" x-show="sheet.prefilled">↺ Your usual amount</p>
+
+              <div class="macros">
+                <template x-for="m in [
+                  { key: 'protein_g', name: 'Protein', color: 'var(--color-protein)' },
+                  { key: 'carbs_g',   name: 'Carbs',   color: 'var(--color-carbs)' },
+                  { key: 'fat_g',     name: 'Fat',     color: 'var(--color-fat)' }
+                ]" :key="m.key">
+                  <div class="macro">
+                    <span class="dot" :style="`background: ${m.color}`"></span>
+                    <span class="macro-name" x-text="m.name"></span>
+                    <span class="macro-val" style="margin-left: auto;"
+                          x-text="sheetMacros[m.key] ?? '—'"></span>
+                  </div>
+                </template>
+              </div>
+
+              <button class="btn btn-primary btn-block" @click="confirmSheet()">
+                Log <span x-text="Math.round(sheetMacros.calories ?? 0)"></span> kcal
+              </button>
+              <button class="btn btn-ghost btn-block" @click="closeSheet()">Cancel</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- New food ------------------------------------------------------- -->
+        <template x-if="creating">
+          <div class="sheet-backdrop" @click.self="cancelCreate()">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="card-label">New food · per serving</div>
+
+              <div class="field">
+                <label for="f-name">Name</label>
+                <input id="f-name" type="text" x-model="draft.name" autocomplete="off">
+              </div>
+
+              <div class="field">
+                <label for="f-brand">Brand</label>
+                <input id="f-brand" type="text" x-model="draft.brand" autocomplete="off">
+              </div>
+
+              <div class="field-grid">
+                <div class="field">
+                  <label for="f-qty">Serving</label>
+                  <input id="f-qty" type="number" inputmode="decimal" step="any" x-model.number="draft.serving_qty">
+                </div>
+                <div class="field">
+                  <label for="f-unit">Unit</label>
+                  <input id="f-unit" type="text" x-model="draft.serving_unit">
+                </div>
+              </div>
+
+              <div class="field-grid">
+                <div class="field">
+                  <label for="f-kcal">Calories</label>
+                  <input id="f-kcal" type="number" inputmode="decimal" step="any" x-model="draft.calories">
+                </div>
+                <div class="field">
+                  <label for="f-protein">Protein g</label>
+                  <input id="f-protein" type="number" inputmode="decimal" step="any" x-model="draft.protein_g">
+                </div>
+                <div class="field">
+                  <label for="f-carbs">Carbs g</label>
+                  <input id="f-carbs" type="number" inputmode="decimal" step="any" x-model="draft.carbs_g">
+                </div>
+                <div class="field">
+                  <label for="f-fat">Fat g</label>
+                  <input id="f-fat" type="number" inputmode="decimal" step="any" x-model="draft.fat_g">
+                </div>
+                <div class="field">
+                  <label for="f-fiber">Fiber g</label>
+                  <input id="f-fiber" type="number" inputmode="decimal" step="any" x-model="draft.fiber_g">
+                </div>
+                <div class="field">
+                  <label for="f-sodium">Sodium mg</label>
+                  <input id="f-sodium" type="number" inputmode="decimal" step="any" x-model="draft.sodium_mg">
+                </div>
+              </div>
+
+              <button class="btn btn-primary btn-block" :disabled="!canSaveDraft" @click="saveDraft()">
+                Save food
+              </button>
+              <button class="btn btn-ghost btn-block" @click="cancelCreate()">Cancel</button>
+            </div>
+          </div>
+        </template>
+      </main>
+
+      <!-- Train / Stats ---------------------------------------------------- -->
+      <main class="app-main" x-show="$store.ui.view === 'train'">
+        <p class="empty">Workouts come next.</p>
+      </main>
+
+      <main class="app-main" x-show="$store.ui.view === 'stats'">
+        <p class="empty">Trends arrive once there's data to trend.</p>
+      </main>
+
+      <!-- Status + nav ----------------------------------------------------- -->
+      <div class="app-main" style="flex: none; padding-bottom: var(--space-3);">
         <div class="sync-line">
           <span :class="$store.sync.dotClass"></span>
           <span x-text="$store.sync.label"></span>
         </div>
-
         <div class="notice notice-error" x-show="$store.sync.error" x-text="$store.sync.error"></div>
+      </div>
 
-        <div class="card">
-          <span class="card-label">Local store</span>
-          <div class="rows">
-            <template x-for="row in rows" :key="row.table">
-              <div class="row">
-                <div class="row-text"><b x-text="row.table"></b></div>
-                <span class="row-num num" x-text="row.count"></span>
-              </div>
-            </template>
-          </div>
-        </div>
+      <nav class="tabbar">
+        <button :class="$store.ui.view === 'today' && 'is-active'" @click="$store.ui.go('today')">Today</button>
+        <button :class="$store.ui.view === 'log'   && 'is-active'" @click="$store.ui.go('log')">Log</button>
+        <button :class="$store.ui.view === 'train' && 'is-active'" @click="$store.ui.go('train')">Train</button>
+        <button :class="$store.ui.view === 'stats' && 'is-active'" @click="$store.ui.go('stats')">Stats</button>
+      </nav>
 
-        <div class="card">
-          <span class="card-label">Members</span>
-          <div class="rows">
-            <template x-for="m in $store.auth.members" :key="m.email">
-              <div class="row">
-                <div class="row-text">
-                  <b x-text="m.display_name || m.email"></b>
-                  <small x-text="m.email"></small>
-                </div>
-                <span class="pill" x-show="m.is_admin">Admin</span>
-              </div>
-            </template>
-          </div>
-        </div>
+      <div class="toast" x-show="$store.ui.toast" x-transition x-cloak x-text="$store.ui.toast"></div>
 
-        <button class="btn btn-block" @click="syncNow()">Sync now</button>
-        <button class="btn btn-ghost btn-block" @click="$store.auth.signOut()">Sign out</button>
-
-      </main>
     </div>
   </template>
 

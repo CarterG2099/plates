@@ -1,14 +1,19 @@
 /**
- * app.js — Alpine stores and the shell.
+ * app.js — Alpine stores and screen components.
  *
- * Phase 1 only: sign in, prove membership, prove the sync loop runs. The food
- * and workout screens come next and will read from local.js, never the network.
+ * Screens read from `$store.data`, which is a snapshot of IndexedDB. Writes go
+ * through food.js, refresh the snapshot immediately, and let sync.js catch up
+ * with the server whenever it can. Nothing on screen ever waits for a network
+ * round trip.
  */
 
 import Alpine from './vendor/alpine.esm.js';
 import { supabase, signIn, signOut, loadMembership, describeError } from './supabase.js';
 import * as local from './local.js';
 import * as sync from './sync.js';
+import * as food from './food.js';
+
+// ---- auth ------------------------------------------------------------------
 
 Alpine.store('auth', {
   ready: false,
@@ -18,9 +23,7 @@ Alpine.store('auth', {
   members: [],
   error: '',
 
-  get email() {
-    return this.session?.user?.email ?? '';
-  },
+  get email() { return this.session?.user?.email ?? ''; },
 
   get displayName() {
     const me = this.members.find((m) => m.email?.toLowerCase() === this.email.toLowerCase());
@@ -30,9 +33,7 @@ Alpine.store('auth', {
   async init() {
     const { data } = await supabase.auth.getSession();
     await this.apply(data.session ?? null);
-
     supabase.auth.onAuthStateChange((_event, session) => this.apply(session ?? null));
-
     this.ready = true;
   },
 
@@ -62,19 +63,21 @@ Alpine.store('auth', {
       (m) => m.email?.toLowerCase() === this.email.toLowerCase() && m.is_admin,
     );
 
-    if (isMember) sync.start();
+    if (isMember) {
+      await Alpine.store('data').refresh();
+      sync.start();
+    }
   },
 
-  signIn() {
-    return signIn().catch((e) => { this.error = e.message; });
-  },
+  signIn() { return signIn().catch((e) => { this.error = e.message; }); },
 
   async signOut() {
-    // Wipe local data: this is a phone that might be handed to someone else.
     await local.wipe();
     await signOut();
   },
 });
+
+// ---- sync status -----------------------------------------------------------
 
 Alpine.store('sync', {
   online: navigator.onLine,
@@ -84,7 +87,12 @@ Alpine.store('sync', {
   error: null,
 
   init() {
-    sync.subscribe((s) => Object.assign(this, s));
+    sync.subscribe((s) => {
+      const wasSyncing = this.status === 'syncing';
+      Object.assign(this, s);
+      // A completed pull may have brought in the other person's rows.
+      if (wasSyncing && s.status === 'idle') Alpine.store('data').refresh();
+    });
   },
 
   get label() {
@@ -103,36 +111,232 @@ Alpine.store('sync', {
   },
 });
 
-/** Counts straight out of IndexedDB — proof the local store is real. */
-Alpine.data('localSummary', () => ({
-  counts: {},
-  loading: true,
+// ---- local snapshot --------------------------------------------------------
 
-  async init() {
-    await this.refresh();
-    // Cheap enough to just re-read whenever the tab regains focus.
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') this.refresh();
-    });
-  },
+Alpine.store('data', {
+  ready: false,
+  goals: [],
+  foods: [],
+  log: [],
+  combos: [],
 
   async refresh() {
-    const counts = {};
-    for (const table of local.TABLES) {
-      counts[table] = (await local.all(table)).length;
-    }
-    this.counts = counts;
-    this.loading = false;
+    const [goals, foods, log, combos] = await Promise.all([
+      local.all('goals'),
+      local.all('foods'),
+      local.all('food_log'),
+      local.all('meal_combos'),
+    ]);
+    this.goals = goals;
+    this.foods = foods;
+    this.log = log;
+    this.combos = combos;
+    this.ready = true;
+  },
+});
+
+// ---- ui --------------------------------------------------------------------
+
+Alpine.store('ui', {
+  view: 'today',
+  toast: '',
+  _toastTimer: null,
+
+  go(view) { this.view = view; },
+
+  flash(message) {
+    this.toast = message;
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => { this.toast = ''; }, 1800);
+  },
+});
+
+// ---- today -----------------------------------------------------------------
+
+Alpine.data('todayPage', () => ({
+  get email() { return Alpine.store('auth').email; },
+
+  get goal() {
+    return food.currentGoal(Alpine.store('data').goals, this.email);
   },
 
-  get rows() {
-    return Object.entries(this.counts).map(([table, count]) => ({ table, count }));
+  get entries() {
+    return food.entriesForDay(Alpine.store('data').log, this.email);
   },
 
-  syncNow() {
-    return sync.sync().then(() => this.refresh());
+  get totals() { return food.sumTotals(this.entries); },
+
+  get meals() { return food.groupByMeal(this.entries); },
+
+  get calorieTarget() { return Number(this.goal?.calorie_target) || null; },
+
+  get remaining() {
+    if (!this.calorieTarget) return null;
+    return Math.round(this.calorieTarget - this.totals.calories);
+  },
+
+  /** Each macro's share of the calorie target, for the stacked bar. */
+  segment(macro) {
+    const perGram = macro === 'fat_g' ? 9 : 4;
+    if (!this.calorieTarget) return 0;
+    return Math.min(100, (this.totals[macro] * perGram / this.calorieTarget) * 100);
+  },
+
+  target(macro) {
+    const key = { protein_g: 'protein_target_g', carbs_g: 'carbs_target_g', fat_g: 'fat_target_g' }[macro];
+    return Number(this.goal?.[key]) || null;
+  },
+
+  percent(macro) {
+    const t = this.target(macro);
+    if (!t) return 0;
+    return Math.min(100, (this.totals[macro] / t) * 100);
+  },
+
+  round(n) { return Math.round(Number(n) || 0); },
+
+  mealLabel(slot) { return slot.charAt(0).toUpperCase() + slot.slice(1); },
+
+  async removeEntry(id) {
+    await food.deleteEntry(id);
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash('Removed');
   },
 }));
+
+// ---- log -------------------------------------------------------------------
+
+Alpine.data('logPage', () => ({
+  term: '',
+  filter: 'frequent',
+  sheet: null,      // { food, quantity, unit }
+  creating: false,
+  draft: null,
+
+  get email() { return Alpine.store('auth').email; },
+
+  get ranked() {
+    return food.rankFoods(Alpine.store('data').foods, Alpine.store('data').log, this.email);
+  },
+
+  get results() {
+    let list = food.searchFoods(this.ranked, this.term);
+    if (this.filter === 'recent') {
+      list = list.filter((f) => f.lastLoggedAt)
+        .sort((a, b) => (a.lastLoggedAt < b.lastLoggedAt ? 1 : -1));
+    } else if (this.filter === 'mine') {
+      list = list.filter((f) => f.owner_email === this.email);
+    }
+    return list.slice(0, 60);
+  },
+
+  get combos() { return Alpine.store('data').combos; },
+
+  get mealSlot() { return food.inferMealSlot(); },
+
+  /** The one-tap path: log at the amount you last used for this food. */
+  async quickLog(item) {
+    const quantity = item.lastQuantity ?? item.serving_qty ?? 1;
+    await food.logFood({
+      food: item,
+      quantity,
+      unit: item.lastUnit ?? item.serving_unit,
+      ownerEmail: this.email,
+    });
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`${item.name} · ${Math.round(quantity)}${item.serving_unit}`);
+  },
+
+  openSheet(item) {
+    this.sheet = {
+      food: item,
+      quantity: item.lastQuantity ?? item.serving_qty ?? 1,
+      unit: item.lastUnit ?? item.serving_unit ?? 'g',
+      prefilled: item.lastQuantity != null,
+    };
+  },
+
+  closeSheet() { this.sheet = null; },
+
+  step(delta) {
+    const next = Number(this.sheet.quantity) + delta;
+    this.sheet.quantity = Math.max(0, Math.round(next * 10) / 10);
+  },
+
+  get sheetMacros() {
+    if (!this.sheet) return null;
+    return food.scaleMacros(this.sheet.food, this.sheet.quantity);
+  },
+
+  async confirmSheet() {
+    const { food: item, quantity, unit } = this.sheet;
+    await food.logFood({ food: item, quantity, unit, ownerEmail: this.email });
+    this.closeSheet();
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash('Logged');
+  },
+
+  async logCombo(combo) {
+    const byId = new Map(Alpine.store('data').foods.map((f) => [f.id, f]));
+    const rows = await food.logCombo({ combo, foodsById: byId, ownerEmail: this.email });
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`${combo.name} · ${rows.length} items`);
+  },
+
+  // ---- manual entry --------------------------------------------------------
+  // Core, not a fallback: Open Food Facts is patchy on US store brands, so
+  // typing a label in has to be a first-class path.
+
+  startCreate() {
+    this.creating = true;
+    this.draft = {
+      name: this.term,
+      brand: '',
+      serving_qty: 100,
+      serving_unit: 'g',
+      calories: '',
+      protein_g: '',
+      carbs_g: '',
+      fat_g: '',
+      fiber_g: '',
+      sodium_mg: '',
+    };
+  },
+
+  cancelCreate() { this.creating = false; this.draft = null; },
+
+  get canSaveDraft() {
+    return this.draft?.name?.trim() && Number(this.draft.serving_qty) > 0;
+  },
+
+  async saveDraft() {
+    const d = this.draft;
+    const numeric = (v) => (v === '' || v == null ? null : Number(v));
+
+    const saved = await food.saveFood({
+      name: d.name.trim(),
+      brand: d.brand.trim() || null,
+      serving_qty: Number(d.serving_qty),
+      serving_unit: d.serving_unit.trim() || 'g',
+      calories: numeric(d.calories),
+      protein_g: numeric(d.protein_g),
+      carbs_g: numeric(d.carbs_g),
+      fat_g: numeric(d.fat_g),
+      fiber_g: numeric(d.fiber_g),
+      sodium_mg: numeric(d.sodium_mg),
+      source: 'manual',
+    }, this.email);
+
+    this.cancelCreate();
+    this.term = '';
+    await Alpine.store('data').refresh();
+
+    // Straight into the quantity sheet — you added it because you're eating it.
+    this.openSheet({ ...saved, lastQuantity: null, lastUnit: null });
+  },
+}));
+
+// ---- boot ------------------------------------------------------------------
 
 Alpine.store('auth').init();
 Alpine.store('sync').init();

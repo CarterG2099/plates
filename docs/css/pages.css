@@ -1,0 +1,352 @@
+/* pages.css — per-screen layout. */
+
+/* ---- tab bar -------------------------------------------------------------- */
+
+.tabbar {
+  position: sticky;
+  bottom: 0;
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-ink);
+  padding-bottom: var(--inset-bottom);
+}
+
+.tabbar button {
+  padding: var(--space-3) 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.tabbar button.is-active { color: var(--color-text); }
+
+.tabbar button.is-active::before {
+  content: "";
+  display: block;
+  width: 22px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  margin: 0 auto var(--space-2);
+}
+
+/* ---- daily readout -------------------------------------------------------- */
+
+.readout { gap: var(--space-3); }
+
+.readout-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.readout-total {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-3xl);
+  line-height: .95;
+  letter-spacing: -.035em;
+}
+
+.readout-of {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  margin-top: var(--space-1);
+}
+
+.readout-remaining { text-align: right; }
+
+.readout-remaining b {
+  display: block;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xl);
+  color: var(--color-success);
+}
+
+.readout-remaining.is-over b { color: var(--color-danger); }
+
+.readout-remaining small {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+/* Stacked calorie bar, segmented by macro. */
+.track {
+  display: flex;
+  gap: 3px;
+  height: 7px;
+  background: var(--color-ink);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.track i { display: block; height: 100%; border-radius: var(--radius-pill); }
+
+.macros { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.macro { display: flex; align-items: center; gap: var(--space-2); }
+
+.macro-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  width: 62px;
+  flex: none;
+}
+
+.macro-bar {
+  flex: 1;
+  height: 5px;
+  background: var(--color-ink);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.macro-bar i { display: block; height: 100%; border-radius: var(--radius-pill); }
+
+.macro-val {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  width: 74px;
+  text-align: right;
+  flex: none;
+}
+.macro-val s { color: var(--color-text-dim); text-decoration: none; }
+
+/* ---- meal sections -------------------------------------------------------- */
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  padding-top: var(--space-2);
+}
+
+.empty {
+  color: var(--color-text-dim);
+  font-size: var(--text-sm);
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+}
+
+/* ---- log screen ----------------------------------------------------------- */
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-4);
+  flex: none;
+}
+
+.search input {
+  flex: 1;
+  background: none;
+  border: 0;
+  outline: none;
+  padding: var(--space-3) 0;
+  font-size: var(--text-sm);
+}
+.search input::placeholder { color: var(--color-text-dim); }
+
+.chips { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+.chip {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.chip.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-text);
+}
+
+.freq {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+  color: var(--color-text-dim);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  flex: none;
+}
+
+/* The two-tap target. Large enough to hit without looking. */
+.tap {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  display: grid;
+  place-items: center;
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.tap-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+/* ---- quantity sheet ------------------------------------------------------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+  display: flex;
+  align-items: flex-end;
+  z-index: 20;
+}
+
+.sheet {
+  width: 100%;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--space-3) var(--space-4) calc(var(--space-4) + var(--inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.grabber {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  margin: 0 auto;
+  flex: none;
+}
+
+.qty { display: flex; align-items: center; gap: var(--space-3); }
+
+.qty-step {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--text-xl);
+  display: grid;
+  place-items: center;
+}
+
+.qty-amount { flex: 1; text-align: center; }
+
+.qty-amount input {
+  width: 100%;
+  background: none;
+  border: 0;
+  outline: none;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-2xl);
+  letter-spacing: -.02em;
+}
+
+.qty-amount small {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.prefill {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--color-carbs);
+  text-align: center;
+}
+
+/* ---- forms ---------------------------------------------------------------- */
+
+.field { display: flex; flex-direction: column; gap: var(--space-1); }
+
+.field label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.field input {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  outline: none;
+}
+.field input:focus { border-color: var(--color-primary); }
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+/* ---- toast ---------------------------------------------------------------- */
+/* Confirms a log landed without blocking the next one. */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(76px + var(--inset-bottom));
+  z-index: 30;
+  max-width: calc(100% - var(--space-8));
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
