@@ -516,8 +516,11 @@
 
       <!-- The way food gets added. Log is a panel over this screen, not a
            destination you navigate to and come back from. -->
-      <button class="fab" x-show="$store.ui.view === 'today' && !$store.ui.logOpen"
-              @click="$store.ui.openLog()" aria-label="Add food">+</button>
+      <div class="fab-stack" x-show="$store.ui.view === 'today' && !$store.ui.logOpen">
+        <button class="fab fab-secondary" x-show="$store.ui.canScan"
+                @click="$store.ui.startScan()" aria-label="Scan a barcode">▢</button>
+        <button class="fab" @click="$store.ui.openLog()" aria-label="Add food">+</button>
+      </div>
 
       <nav class="tabbar">
         <button :class="$store.ui.view === 'today' && 'is-active'" @click="$store.ui.go('today')">Today</button>

@@ -164,6 +164,19 @@ Alpine.store('ui', {
   openLog() { this.logOpen = true; },
   closeLog() { this.logOpen = false; },
 
+  get canScan() { return scanner.isSupported(); },
+
+  /**
+   * Straight to the camera from Today. The scanner lives inside the log panel's
+   * component, so this opens the panel and raises a flag it watches for — one
+   * tap from anywhere to a viewfinder.
+   */
+  scanRequested: false,
+  startScan() {
+    this.logOpen = true;
+    this.scanRequested = true;
+  },
+
   flash(message) {
     this.toast = message;
     clearTimeout(this._toastTimer);
@@ -314,6 +327,16 @@ Alpine.data('logPage', () => ({
   sheet: null,      // { food, quantity, unit }
   creating: false,
   draft: null,
+
+  init() {
+    // Today's camera button raises this flag; the panel it opens is where the
+    // scanner actually lives.
+    this.$watch(() => Alpine.store('ui').scanRequested, (wanted) => {
+      if (!wanted) return;
+      Alpine.store('ui').scanRequested = false;
+      this.openScanner();
+    });
+  },
 
   get email() { return Alpine.store('auth').email; },
 
