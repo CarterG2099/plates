@@ -138,10 +138,14 @@
       <!-- Log -------------------------------------------------------------- -->
       <main class="app-main" x-data="logPage" x-show="$store.ui.view === 'log'">
 
-        <div class="search">
-          <span aria-hidden="true">⌕</span>
-          <input type="search" placeholder="Search your foods…" x-model="term"
-                 enterkeyhint="search" autocomplete="off">
+        <div class="search-row">
+          <div class="search">
+            <span aria-hidden="true">⌕</span>
+            <input type="search" placeholder="Search your foods…" x-model="term"
+                   enterkeyhint="search" autocomplete="off">
+          </div>
+          <button class="tap tap-primary" x-show="canScan" @click="openScanner()"
+                  aria-label="Scan a barcode">▢</button>
         </div>
 
         <div class="chips">
@@ -204,6 +208,39 @@
                   <button class="tap tap-primary" @click="logCombo(combo)" :aria-label="`Log ${combo.name}`">+</button>
                 </div>
               </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Scanner --------------------------------------------------------- -->
+        <template x-if="scan">
+          <div class="sheet-backdrop" @click.self="closeScanner()">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="card-label">Scan a barcode</div>
+
+              <div class="viewfinder">
+                <video x-ref="video" playsinline muted autoplay></video>
+                <div class="reticle" aria-hidden="true"></div>
+              </div>
+
+              <p class="prefill" x-show="scan.message" x-text="scan.message"></p>
+
+              <div class="sync-line" x-show="scan.status === 'starting'">
+                <span class="spinner" style="width:14px;height:14px"></span> Starting camera…
+              </div>
+
+              <button class="btn btn-primary btn-block"
+                      :disabled="scan.status !== 'ready'"
+                      @click="captureBarcode()">
+                <span x-show="scan.status === 'reading'">Reading…</span>
+                <span x-show="scan.status !== 'reading'">Capture</span>
+              </button>
+
+              <button class="btn btn-ghost btn-block" @click="closeScanner(); startCreate()">
+                Add by hand instead
+              </button>
+              <button class="btn btn-ghost btn-block" @click="closeScanner()">Cancel</button>
             </div>
           </div>
         </template>

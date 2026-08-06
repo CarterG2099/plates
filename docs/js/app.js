@@ -13,6 +13,7 @@ import * as local from './local.js';
 import * as sync from './sync.js';
 import * as food from './food.js';
 import { lookupBarcode } from './lookup.js';
+import * as scanner from './scanner.js';
 
 // ---- auth ------------------------------------------------------------------
 
@@ -391,6 +392,58 @@ Alpine.data('logPage', () => ({
   },
 
   closeLookup() { this.lookup = null; },
+
+  // ---- scanner -------------------------------------------------------------
+
+  scan: null,   // { status, message, decoder }
+
+  get canScan() { return scanner.isSupported(); },
+
+  async openScanner() {
+    this.scan = { status: 'starting', message: '', decoder: '' };
+
+    // The template renders on the next tick; the video element must exist first.
+    await new Promise((r) => requestAnimationFrame(r));
+    const video = this.$refs.video;
+
+    const result = await scanner.start(video);
+    this.scan = result.ok
+      ? { status: 'ready', message: '', decoder: result.decoder }
+      : { status: 'error', message: result.reason, decoder: '' };
+  },
+
+  closeScanner() {
+    scanner.stop(this.$refs.video);
+    this.scan = null;
+  },
+
+  /** One tap, one frame. A miss says so and lets you try again. */
+  async captureBarcode() {
+    if (this.scan?.status !== 'ready') return;
+    this.scan.status = 'reading';
+
+    let code = null;
+    try {
+      code = await scanner.capture(this.$refs.video);
+    } catch (e) {
+      this.scan = { status: 'error', message: e.message, decoder: '' };
+      return;
+    }
+
+    if (!code) {
+      this.scan.status = 'ready';
+      this.scan.message = 'No barcode in that shot — fill the frame and try again.';
+      return;
+    }
+
+    if (navigator.vibrate) navigator.vibrate(40);
+    this.closeScanner();
+
+    // Hand straight to the existing lookup path: same results sheet, same
+    // review form, same manual fallback.
+    this.term = code;
+    await this.searchOnline();
+  },
 
   /** Pull a looked-up result into the same review form manual entry uses. */
   acceptLookup(result) {

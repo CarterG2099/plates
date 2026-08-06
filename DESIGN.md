@@ -456,11 +456,25 @@ itself. Phone testing still needs HTTPS via Pages.
 
 ## Open items
 
-- Open Food Facts and USDA endpoints unverified. The spike's "Type a code"
-  button tests OFF without a camera, so this can be closed on localhost.
-- **Unmeasured, and the biggest remaining product risk:** how complete OFF's
-  nutriments are for the US store brands actually bought. Manual entry already
-  exists as the mitigation.
-- Continuous barcode decode loop untested in an installed iOS PWA.
+- Continuous barcode decode loop still untested in an installed iOS PWA — and
+  deliberately not on the critical path. The scanner captures a single frame on
+  a tap instead, which sidesteps it entirely. Revisit only if tapping feels slow.
+- USDA barcode lookup is implemented but unexercised: OFF answered every barcode
+  tried so far, so the fallback has not actually been needed yet.
+
+## Measured
+
+- **2026-08-06 — Open Food Facts covers US snack brands.** PopCorners Sweet &
+  Salty Kettle Corn (`893594002075`) resolved by barcode with complete macros:
+  459 kcal, 7.05 P, 74.07 C, 15.87 F, 110 mg sodium per 100 g. This was the
+  open coverage risk from the very first design conversation; OFF by barcode is
+  the primary path.
+- **USDA cannot find store brands by name.** "great value peanut butter" across
+  200 results never scored above 3 of 4 terms; the product is not findable. USDA
+  is strong for *generic* foods ("Peanut butter, reduced sodium", complete) and
+  that is what it is used for. Barcodes are an identity lookup, not a search.
+- **Both sources return partial entries routinely.** Nutella has no fiber. Every
+  lookup therefore surfaces a "N missing" count and lands in a review form
+  before it is saved.
 - Shell has no max-width, so it stretches on desktop. Fine on a phone; worth a
   container once there is a real screen to look at.
