@@ -970,6 +970,22 @@ Alpine.data('trainPage', () => ({
     return workout.routineExercises(this.data.routineExercises, routine.id).length;
   },
 
+  /** Everything a routine card shows, all derived from history. */
+  routineCard(routine) {
+    const stats = workout.routineStats(
+      routine, this.data.sessions, this.data.sessionSets, this.email,
+    );
+    return {
+      ...workout.coverage(routine, this.data.routineExercises, this.data.exercises),
+      ...stats,
+      exercises: this.routineCount(routine),
+      lastLabel: workout.relativeDay(stats.last),
+      volumeLabel: stats.avgVolume
+        ? `${(stats.avgVolume / 1000).toFixed(1)}k lb`
+        : null,
+    };
+  },
+
   /** What you last did, rather than a target — history is the better guide. */
   lastLine(row) {
     const p = workout.lastPerformance(

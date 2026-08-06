@@ -216,25 +216,9 @@
 
 .figure svg { height: 100%; width: auto; display: block; }
 
-/* The working muscle pulses. One universal motion rather than choreography per
-   exercise — it says "this is what's doing the work", which is the diagram's job.
- *
- * Opacity rather than a scale transform: scaling needs `transform-box: fill-box`
- * to pivot around the shape, and that is unreliable on a <g> element. Without it
- * the transform pivots on the SVG origin and browsers simply drop it — which is
- * why the first attempt animated nothing at all. */
-@keyframes muscle-flex {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: .55; }
-}
-
-.mm-lit {
-  animation: muscle-flex 1.5s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mm-lit { animation: none; }
-}
+/* Motion for the working muscle lives inside the SVG (see muscle-map.js), not
+   here — CSS animation on innerHTML-injected SVG proved unreliable. This class
+   remains as a styling hook only. */
 
 /* Front and back together, for the exercise detail sheet. */
 .figure-pair {

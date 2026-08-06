@@ -531,14 +531,33 @@
                 <span>Routines</span>
                 <button class="chip" @click="newRoutine()">New</button>
               </div>
-              <div class="rows" x-show="routines.length">
+              <div class="routine-grid" x-show="routines.length">
                 <template x-for="r in routines" :key="r.id">
-                  <button class="row" @click="openRoutine(r)">
-                    <div class="row-text">
-                      <b x-text="r.name"></b>
-                      <small x-text="`${routineCount(r)} exercises`"></small>
+                  <button class="routine-card" @click="openRoutine(r)" x-data="{ c: routineCard(r) }">
+                    <div class="routine-top">
+                      <div style="min-width:0">
+                        <div class="routine-name" x-text="r.name"></div>
+                        <div class="routine-meta">
+                          <span x-text="`${c.exercises} exercises`"></span>
+                          <span x-show="c.lastLabel"> · <span x-text="c.lastLabel"></span></span>
+                        </div>
+                      </div>
+                      <span class="tap">›</span>
                     </div>
-                    <span class="tap">›</span>
+
+                    <!-- What the routine works, as a share of its exercises. -->
+                    <div class="coverage" x-show="c.bars.length">
+                      <template x-for="b in c.bars" :key="b.family">
+                        <i :style="`background:${b.colour}; width:${b.width}%`"></i>
+                      </template>
+                      <span x-text="c.label"></span>
+                    </div>
+
+                    <div class="routine-stats" x-show="c.count">
+                      <span><b x-text="c.count"></b> done</span>
+                      <span x-show="c.volumeLabel"><b x-text="c.volumeLabel"></b> avg</span>
+                      <span x-show="c.avgMinutes"><b x-text="c.avgMinutes"></b> min</span>
+                    </div>
                   </button>
                 </template>
               </div>

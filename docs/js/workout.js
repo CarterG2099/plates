@@ -8,6 +8,7 @@
 
 import * as local from './local.js';
 import * as sync from './sync.js';
+import { muscleFor } from './muscle-map.js';
 
 export const DEFAULT_REST_SECONDS = 120;
 
@@ -502,4 +503,91 @@ export function isRecord(set, bestRmBefore) {
   if (!set.completed_at || set.is_warmup) return false;
   const rm = estimate1RM(set.weight_lb, set.reps);
   return Boolean(rm && (bestRmBefore == null || rm > bestRmBefore));
+}
+
+// ---- routine cards ---------------------------------------------------------
+
+/** Muscle families, for the coverage bar. */
+const FAMILY = {
+  chest: 'push', shoulders: 'push', traps: 'push',
+  biceps: 'pull', triceps: 'pull', forearms: 'pull', lats: 'pull', lowerBack: 'pull',
+  core: 'core',
+  quads: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs',
+};
+
+const FAMILY_COLOUR = { push: '#E0362A', pull: '#2D68C4', core: '#F2C230', legs: '#2FA84F' };
+const FAMILY_LABEL  = { push: 'Push', pull: 'Pull', core: 'Core', legs: 'Legs' };
+
+/**
+ * What a routine actually works, as a share of its exercises.
+ *
+ * Derived rather than stored — the routine already knows its exercises and the
+ * muscle map already knows what each one hits, so nothing new needs recording.
+ */
+export function coverage(routine, allRoutineExercises, exercises) {
+  const items = routineExercises(allRoutineExercises, routine.id);
+  if (!items.length) return { bars: [], label: null };
+
+  const counts = new Map();
+  for (const item of items) {
+    const exercise = exercises.find((e) => e.id === item.exercise_id) ?? null;
+    const key = muscleFor(exercise, item.notes ?? '');
+    const family = FAMILY[key] ?? null;
+    if (family) counts.set(family, (counts.get(family) ?? 0) + 1);
+  }
+
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  if (!total) return { bars: [], label: null };
+
+  const bars = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([family, n]) => ({
+      family,
+      colour: FAMILY_COLOUR[family],
+      width: Math.round((n / total) * 100),
+    }));
+
+  return { bars, label: FAMILY_LABEL[bars[0].family] };
+}
+
+/** Sessions belonging to a routine — by id, or by name for imported history. */
+function sessionsOf(routine, sessions, ownerEmail) {
+  return sessions.filter((s) =>
+    s.owner_email === ownerEmail && !s.deleted_at && s.ended_at
+    && (s.routine_id === routine.id || s.name === routine.name));
+}
+
+/** Times done, when it was last done, and what it typically costs. */
+export function routineStats(routine, sessions, sets, ownerEmail) {
+  const mine = sessionsOf(routine, sessions, ownerEmail);
+  if (!mine.length) return { count: 0, last: null, avgVolume: null, avgMinutes: null };
+
+  const last = mine.reduce((a, b) => (a.started_at > b.started_at ? a : b)).started_at;
+
+  const volumes = mine.map((s) => volume(setsForSession(sets, s.id))).filter((v) => v > 0);
+  const minutes = mine
+    .map((s) => (new Date(s.ended_at) - new Date(s.started_at)) / 60000)
+    .filter((m) => m > 0 && m < 300);   // ignore sessions left running overnight
+
+  const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+  return {
+    count: mine.length,
+    last,
+    avgVolume: volumes.length ? Math.round(mean(volumes)) : null,
+    avgMinutes: minutes.length ? Math.round(mean(minutes)) : null,
+  };
+}
+
+/** "today", "yesterday", "last Thu", "12 days ago" — what tells you it's overdue. */
+export function relativeDay(iso, now = new Date()) {
+  if (!iso) return null;
+  const startOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+  const days = Math.round((startOf(now) - startOf(iso)) / 86_400_000);
+
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `last ${new Date(iso).toLocaleDateString(undefined, { weekday: 'short' })}`;
+  if (days < 14) return 'last week';
+  return `${days} days ago`;
 }

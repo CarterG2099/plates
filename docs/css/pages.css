@@ -836,3 +836,87 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
+
+/* ---- routine cards --------------------------------------------------------- */
+/* A name and a count left the row mostly empty. These answer what you'd ask
+   before tapping: what does it hit, when did I last do it, what does it cost. */
+
+.routine-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 700px) {
+  .routine-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+}
+
+.routine-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  text-align: left;
+  box-shadow: var(--shadow-inset), var(--shadow-md);
+  transition: border-color var(--transition-fast);
+}
+
+.routine-card:hover { border-color: var(--color-primary); }
+
+.routine-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.routine-name {
+  font-size: var(--text-base);
+  font-weight: 700;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.routine-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: .05em;
+  margin-top: 2px;
+}
+
+/* Read the shape before the name: blue is a pull day, red a push day. */
+.coverage { display: flex; align-items: center; gap: 5px; }
+
+.coverage i {
+  height: 7px;
+  border-radius: var(--radius-pill);
+  display: block;
+  min-width: 6px;
+}
+
+.coverage span {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  margin-left: 2px;
+  flex: none;
+}
+
+.routine-stats {
+  display: flex;
+  gap: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: .04em;
+}
+
+.routine-stats b { color: var(--color-text); font-weight: 700; }
