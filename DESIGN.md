@@ -298,12 +298,39 @@ the critical path.
 - **Open Food Facts** — primary barcode lookup. Open database, no key, no quota,
   callable directly from the browser.
 - **USDA FoodData Central** — fallback. Free key, better US branded coverage.
-- **FatSecret Platform API** — candidate, not yet adopted. See below.
+- ~~FatSecret Platform API~~ — **rejected**, see below. Its terms forbid storing
+  nutrition data, which local-first depends on.
 
 > **Unverified:** endpoint shapes, rate limits and terms for all three were not
 > reachable for testing during design. Confirm empirically before relying on them.
 
-### FatSecret — evaluate before adopting
+### FatSecret — evaluated and rejected (2026-08-06)
+
+**Do not revisit without re-reading their terms.** Coverage is genuinely better
+than Open Food Facts for US foods, and it still does not matter.
+
+Their [Storable Data](https://platform.fatsecret.com/docs/guides/storable-data)
+terms permit caching **identifiers only** — `food_id`, `serving_id`, `recipe_id`.
+No nutrition value may be retained beyond 24 hours; everything else "must be
+requested from fatsecret each time".
+
+That is incompatible with this app in three places at once:
+
+- `plates.foods` cannot store macros, so there is no local catalogue.
+- IndexedDB cannot mirror them, so search cannot be local or offline.
+- `food_log` cannot snapshot them — and that snapshot is not an optimisation,
+  it is what stops logged history being rewritten when upstream data changes.
+
+Complying means storing `food_id` and re-fetching on render, so the Today screen
+would make a network call per logged item. That inverts the entire design.
+
+Second, independent blocker: OAuth 2.0 tokens "can only be requested from a
+finite number of IP addresses". Supabase Edge Functions provide no stable egress
+IP to allowlist.
+
+The original notes below are kept for context.
+
+### FatSecret — original evaluation notes
 
 Coverage is genuinely better than Open Food Facts for US foods, including
 restaurant items and generic entries, which is exactly where OFF is weakest. Two
@@ -429,9 +456,11 @@ itself. Phone testing still needs HTTPS via Pages.
 
 ## Open items
 
-- Open Food Facts and USDA endpoints unverified.
-- FatSecret caching terms and credential/IP model unverified — this decides
-  whether it can be used at all.
+- Open Food Facts and USDA endpoints unverified. The spike's "Type a code"
+  button tests OFF without a camera, so this can be closed on localhost.
+- **Unmeasured, and the biggest remaining product risk:** how complete OFF's
+  nutriments are for the US store brands actually bought. Manual entry already
+  exists as the mitigation.
 - Continuous barcode decode loop untested in an installed iOS PWA.
 - Shell has no max-width, so it stretches on desktop. Fine on a phone; worth a
   container once there is a real screen to look at.
