@@ -33,6 +33,8 @@ function json(body: unknown, status = 200): Response {
 // because the two identifiers are not consistently populated across datasets.
 const NUTRIENTS: Record<string, { id: number; number: string }> = {
   calories: { id: 1008, number: "208" },
+  // Some entries carry only kilojoules — "Peanut butter, creamy" is one.
+  energy_kj: { id: 1062, number: "268" },
   protein_g: { id: 1003, number: "203" },
   carbs_g: { id: 1005, number: "205" },
   fat_g: { id: 1004, number: "204" },
@@ -54,6 +56,7 @@ interface UsdaFood {
   brandOwner?: string;
   brandName?: string;
   gtinUpc?: string;
+  dataType?: string;
   foodNutrients?: UsdaNutrient[];
 }
 
@@ -82,7 +85,7 @@ function toDraft(food: UsdaFood) {
     brand,
     serving_qty: 100,
     serving_unit: "g",
-    calories: pick(nutrients, "calories"),
+    calories: pick(nutrients, "calories") ?? kjToKcal(pick(nutrients, "energy_kj")),
     protein_g: pick(nutrients, "protein_g"),
     carbs_g: pick(nutrients, "carbs_g"),
     fat_g: pick(nutrients, "fat_g"),
@@ -93,8 +96,16 @@ function toDraft(food: UsdaFood) {
 
   return {
     draft,
+    // Branded vs SR Legacy matters at review time: SR Legacy rows are generic
+    // reference foods ("Peanut butter, creamy"), Branded rows are a specific
+    // product off a shelf.
+    dataType: food.dataType ?? null,
     missing: REQUIRED.filter((k) => draft[k as keyof typeof draft] == null),
   };
+}
+
+function kjToKcal(kj: number | null): number | null {
+  return kj == null ? null : Math.round(kj / 4.184);
 }
 
 Deno.serve(async (req) => {
@@ -129,6 +140,11 @@ Deno.serve(async (req) => {
   url.searchParams.set("query", query);
   url.searchParams.set("dataType", DATA_TYPES);
   url.searchParams.set("pageSize", String(PAGE_SIZE));
+  // Without this USDA OR-matches the terms, so "great value peanut butter"
+  // returns Great Value lemonade and Reese's cups while missing the actual
+  // product. Requiring every word is the difference between the fallback being
+  // useful and being noise.
+  url.searchParams.set("requireAllWords", "true");
 
   let payload: { foods?: UsdaFood[] };
   try {
