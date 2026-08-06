@@ -215,3 +215,34 @@
 }
 
 .figure svg { height: 100%; width: auto; display: block; }
+
+/* The working muscle contracts. One universal motion rather than choreography
+   per exercise — it says "this is what's doing the work", which is what the
+   diagram is for. */
+@keyframes muscle-flex {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06, 0.94); }
+}
+
+.mm-lit {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: muscle-flex 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-lit { animation: none; }
+}
+
+/* Front and back together, for the exercise detail sheet. */
+.figure-pair {
+  display: grid;
+  place-items: center;
+  background: var(--color-ink);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-inset);
+}
+
+.figure-pair svg { width: 100%; height: auto; display: block; }

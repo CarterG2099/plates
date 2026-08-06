@@ -630,8 +630,10 @@
         </template>
 
         <!-- Exercise picker -------------------------------------------------- -->
+        <!-- is-nested: this also opens from inside the routine builder, which
+             sits later in the document and would otherwise paint over it. -->
         <template x-if="picker">
-          <div class="sheet-backdrop" @click.self="picker = false">
+          <div class="sheet-backdrop is-nested" @click.self="picker = false">
             <div class="sheet">
               <div class="grabber"></div>
               <div class="search">
@@ -688,10 +690,22 @@
               <div class="grabber"></div>
               <div style="font-size:var(--text-lg); font-weight:600" x-text="detail.name"></div>
 
-              <div class="figure" x-html="muscleMap(detail.exerciseId, detail.name)"></div>
-              <p class="card-label" style="text-align:center"
-                 x-show="detail.exercise.primary_muscle"
-                 x-text="detail.exercise.primary_muscle"></p>
+              <div class="detail-top">
+                <div class="figure-pair" x-html="muscleMapPair(detail.exerciseId, detail.name)"></div>
+
+                <div class="how">
+                  <div class="card-label" x-show="detail.exercise.primary_muscle"
+                       x-text="detail.exercise.primary_muscle"></div>
+                  <ol x-show="detailInstructions.length">
+                    <template x-for="(step, i) in detailInstructions" :key="i">
+                      <li x-text="step"></li>
+                    </template>
+                  </ol>
+                  <p class="empty" style="padding:var(--space-3) 0" x-show="!detailInstructions.length">
+                    No instructions for this one yet.
+                  </p>
+                </div>
+              </div>
 
               <div class="chips">
                 <span class="chip" x-show="detailBests.heaviest">

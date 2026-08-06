@@ -1075,6 +1075,19 @@ Alpine.data('trainPage', () => ({
     return muscleMap(this.exerciseById(exerciseId), name);
   },
 
+  /** Front and back together, for the detail sheet. */
+  muscleMapPair(exerciseId, name) {
+    return muscleMap(this.exerciseById(exerciseId), name, { both: true });
+  },
+
+  /** Written form cues. The figure says which muscle; these say how. */
+  get detailInstructions() {
+    const raw = this.detail?.exercise?.instructions;
+    if (Array.isArray(raw)) return raw.filter(Boolean);
+    if (typeof raw === 'string' && raw.trim()) return [raw];
+    return [];
+  },
+
   exerciseById(id) { return this.data.exercises.find((e) => e.id === id) ?? null; },
 
   // ---- Hevy import ---------------------------------------------------------
@@ -1124,6 +1137,19 @@ Alpine.data('trainPage', () => ({
 
   muscleMap(exerciseId, name) {
     return muscleMap(this.exerciseById(exerciseId), name);
+  },
+
+  /** Front and back together, for the detail sheet. */
+  muscleMapPair(exerciseId, name) {
+    return muscleMap(this.exerciseById(exerciseId), name, { both: true });
+  },
+
+  /** Written form cues. The figure says which muscle; these say how. */
+  get detailInstructions() {
+    const raw = this.detail?.exercise?.instructions;
+    if (Array.isArray(raw)) return raw.filter(Boolean);
+    if (typeof raw === 'string' && raw.trim()) return [raw];
+    return [];
   },
 
 }));

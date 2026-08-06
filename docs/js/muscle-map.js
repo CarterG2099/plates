@@ -1,120 +1,190 @@
 /**
  * muscle-map.js — a drawn figure with the worked muscle lit up.
  *
- * Replaces photographed demonstrations. The trade-off is deliberate: this tells
- * you *what an exercise works*, not *how to perform it*. In exchange it is
+ * Replaces photographed demonstrations. It shows *what an exercise works*, not
+ * *how to perform it* — the written instructions do that job. In exchange it is
  * consistent across every exercise, needs no network, has no licence attached,
- * and matches the app rather than looking like a stock photo dropped into it.
+ * and looks like the app rather than stock imagery.
  *
- * Inline SVG built from simple geometry — no anatomy illustration, because a bad
- * anatomical drawing reads worse than an honest diagram.
+ * Front and back are separate figures. That is the whole reason this exists in
+ * two views: on a single front-facing body, biceps and triceps occupy the same
+ * rectangle, which makes the diagram actively misleading.
  */
 
-/** Regions of the figure that can be lit. */
-const REGIONS = {
-  shoulders: ['deltL', 'deltR'],
-  chest:     ['chest'],
-  armsUpper: ['armUpperL', 'armUpperR'],
-  armsLower: ['armLowerL', 'armLowerR'],
-  torso:     ['chest', 'core'],
-  core:      ['core'],
-  glutes:    ['hips'],
-  legsUpper: ['thighL', 'thighR'],
-  calves:    ['calfL', 'calfR'],
-};
+// ---- geometry helpers ------------------------------------------------------
+
+const box = (x, y, w, h, r = 5) => ({ x, y, w, h, r });
+
+const rectSvg = ({ x, y, w, h, r }, fill, cls = '') =>
+  `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}"${cls ? ` class="${cls}"` : ''}/>`;
 
 /**
- * Muscle name to region. Covers Free Exercise DB's vocabulary and the names
- * Hevy uses, since exercises arrive from both.
+ * Striations across a muscle, suggesting fibre direction.
+ * `across` draws them perpendicular to the long axis, which is how muscle
+ * bellies actually read at a glance.
  */
-const MUSCLE_REGIONS = [
-  [/chest|pectoral/,                      'chest'],
-  [/shoulder|delt|trap/,                  'shoulders'],
-  [/bicep|tricep|arm(?!s? ?lower)/,       'armsUpper'],
-  [/forearm|grip|wrist/,                  'armsLower'],
-  [/lat|back|rhomboid|spine/,             'torso'],
-  [/core|abdominal|abs|oblique/,          'core'],
-  [/glute/,                               'glutes'],
-  [/quad|hamstring|adductor|abductor|leg/, 'legsUpper'],
-  [/calf|calves/,                         'calves'],
+function fibreSvg({ x, y, w, h }, count = 4, across = true) {
+  const lines = [];
+  for (let i = 1; i <= count; i++) {
+    const t = i / (count + 1);
+    if (across) {
+      const yy = y + h * t;
+      lines.push(`<line x1="${x + w * 0.16}" y1="${yy}" x2="${x + w * 0.84}" y2="${yy}"/>`);
+    } else {
+      const xx = x + w * t;
+      lines.push(`<line x1="${xx}" y1="${y + h * 0.16}" x2="${xx}" y2="${y + h * 0.84}"/>`);
+    }
+  }
+  return `<g stroke="rgba(0,0,0,.32)" stroke-width=".9" stroke-linecap="round">${lines.join('')}</g>`;
+}
+
+// ---- the body --------------------------------------------------------------
+
+/** Silhouette, identical in both views. Muscles are drawn on top of it. */
+const BASE = [
+  box(47, 7, 26, 26, 12),        // head
+  box(54, 30, 12, 9, 4),         // neck
+  box(40, 40, 40, 58, 12),       // torso
+  box(24, 46, 15, 40, 7),        // upper arm L
+  box(81, 46, 15, 40, 7),        // upper arm R
+  box(22, 86, 14, 34, 7),        // forearm L
+  box(84, 86, 14, 34, 7),        // forearm R
+  box(43, 96, 34, 18, 8),        // hips
+  box(44, 112, 15, 44, 7),       // thigh L
+  box(61, 112, 15, 44, 7),       // thigh R
+  box(45, 156, 13, 36, 6),       // shin L
+  box(62, 156, 13, 36, 6),       // shin R
 ];
 
-/** Fallback when an exercise has no muscle recorded: read it from the name. */
-const NAME_REGIONS = [
-  [/curl(?!.*leg)|tricep|pushdown|skullcrusher|dip|extension.*arm/, 'armsUpper'],
-  [/bench|chest|fly|push-?up|press.*(chest|incline|decline)/,       'chest'],
-  [/shoulder|overhead press|lateral raise|rear delt|shrug|face pull/, 'shoulders'],
-  [/row|pulldown|pull-?up|chin-?up|lat |deadlift|back extension/,    'torso'],
-  [/squat|lunge|leg press|leg extension|leg curl|hip thrust|split/,  'legsUpper'],
-  [/calf/,                                                          'calves'],
-  [/plank|crunch|ab |abs|russian twist|leg raise|rollout/,           'core'],
-  [/press/,                                                         'shoulders'],
-];
+/**
+ * Muscles, per view. Each is a set of boxes plus the fibre direction.
+ * `across: false` means the fibres run vertically — quads, lats, hamstrings.
+ */
+const MUSCLES = {
+  // ---- front ----
+  chest:     { view: 'front', boxes: [box(42, 44, 17, 20, 7), box(61, 44, 17, 20, 7)], across: true },
+  shoulders: { view: 'front', boxes: [box(26, 43, 15, 16, 7), box(79, 43, 15, 16, 7)], across: true },
+  biceps:    { view: 'front', boxes: [box(26, 55, 12, 26, 6), box(82, 55, 12, 26, 6)], across: true },
+  forearms:  { view: 'front', boxes: [box(23, 88, 12, 28, 6), box(85, 88, 12, 28, 6)], across: true },
+  core:      { view: 'front', boxes: [box(48, 66, 24, 30, 6)], across: true },
+  quads:     { view: 'front', boxes: [box(45, 114, 13, 38, 6), box(62, 114, 13, 38, 6)], across: false },
 
-/** Colour by movement family, using the plate palette. */
-const REGION_COLOUR = {
-  chest:     '#E0362A',
-  shoulders: '#E0362A',
-  armsUpper: '#2D68C4',
-  armsLower: '#2D68C4',
-  torso:     '#2D68C4',
-  core:      '#F2C230',
-  glutes:    '#2FA84F',
-  legsUpper: '#2FA84F',
-  calves:    '#2FA84F',
+  // ---- back ----
+  traps:      { view: 'back', boxes: [box(45, 38, 30, 18, 8)], across: true },
+  lats:       { view: 'back', boxes: [box(41, 54, 17, 32, 7), box(62, 54, 17, 32, 7)], across: false },
+  triceps:    { view: 'back', boxes: [box(26, 55, 12, 26, 6), box(82, 55, 12, 26, 6)], across: true },
+  lowerBack:  { view: 'back', boxes: [box(48, 84, 24, 14, 6)], across: true },
+  glutes:     { view: 'back', boxes: [box(44, 97, 16, 17, 7), box(60, 97, 16, 17, 7)], across: true },
+  hamstrings: { view: 'back', boxes: [box(45, 114, 13, 38, 6), box(62, 114, 13, 38, 6)], across: false },
+  calves:     { view: 'back', boxes: [box(46, 156, 12, 32, 6), box(63, 156, 12, 32, 6)], across: true },
 };
 
-export function regionFor(exercise, name = '') {
+/** Colour by movement family, using the plate palette. */
+const COLOUR = {
+  chest: '#E0362A', shoulders: '#E0362A', traps: '#E0362A',
+  biceps: '#2D68C4', triceps: '#2D68C4', forearms: '#2D68C4',
+  lats: '#2D68C4', lowerBack: '#2D68C4',
+  core: '#F2C230',
+  quads: '#2FA84F', hamstrings: '#2FA84F', glutes: '#2FA84F', calves: '#2FA84F',
+};
+
+// ---- naming ----------------------------------------------------------------
+
+/** Free Exercise DB vocabulary and Hevy's names both land here. */
+const FROM_MUSCLE = [
+  [/chest|pectoral/, 'chest'],
+  [/trap/, 'traps'],
+  [/shoulder|delt/, 'shoulders'],
+  [/bicep/, 'biceps'],
+  [/tricep/, 'triceps'],
+  [/forearm|grip|wrist/, 'forearms'],
+  [/lat(?!eral)|middle back|rhomboid/, 'lats'],
+  [/lower back|spine|erector/, 'lowerBack'],
+  [/glute/, 'glutes'],
+  [/hamstring/, 'hamstrings'],
+  [/quad|adductor|abductor/, 'quads'],
+  [/calf|calves/, 'calves'],
+  [/core|abdominal|abs|oblique/, 'core'],
+  [/back/, 'lats'],
+];
+
+/** Fallback when an exercise carries no muscle: read the movement's name. */
+const FROM_NAME = [
+  [/tricep|pushdown|skullcrusher|dip|close-?grip/, 'triceps'],
+  [/curl(?!.*leg)|chin-?up/, 'biceps'],
+  [/wrist|forearm/, 'forearms'],
+  [/bench|chest|fly|push-?up/, 'chest'],
+  [/shrug/, 'traps'],
+  [/lateral raise|rear delt|face pull|overhead press|shoulder press|arnold/, 'shoulders'],
+  [/row|pulldown|pull-?up|lat /, 'lats'],
+  [/deadlift|back extension|hyperextension|good morning/, 'lowerBack'],
+  [/hip thrust|glute/, 'glutes'],
+  [/leg curl|rdl|romanian/, 'hamstrings'],
+  [/squat|lunge|leg press|leg extension|split|step-?up/, 'quads'],
+  [/calf/, 'calves'],
+  [/plank|crunch|\bab\b|abs|russian twist|leg raise|rollout|sit-?up/, 'core'],
+  [/press/, 'shoulders'],
+];
+
+export function muscleFor(exercise, name = '') {
   const muscle = (exercise?.primary_muscle ?? '').toLowerCase();
-  for (const [pattern, region] of MUSCLE_REGIONS) {
-    if (pattern.test(muscle)) return region;
-  }
+  for (const [pattern, key] of FROM_MUSCLE) if (pattern.test(muscle)) return key;
 
   const label = `${exercise?.name ?? ''} ${name}`.toLowerCase();
-  for (const [pattern, region] of NAME_REGIONS) {
-    if (pattern.test(label)) return region;
-  }
+  for (const [pattern, key] of FROM_NAME) if (pattern.test(label)) return key;
   return null;
 }
 
-/** The figure, as a list of named shapes on a 120 × 200 canvas. */
-const SHAPES = [
-  ['head',      '<circle cx="60" cy="20" r="13"/>'],
-  ['neck',      '<rect x="54" y="31" width="12" height="8" rx="3"/>'],
-  ['deltL',     '<ellipse cx="37" cy="50" rx="11" ry="9"/>'],
-  ['deltR',     '<ellipse cx="83" cy="50" rx="11" ry="9"/>'],
-  ['chest',     '<rect x="42" y="42" width="36" height="25" rx="9"/>'],
-  ['core',      '<rect x="46" y="68" width="28" height="30" rx="7"/>'],
-  ['armUpperL', '<rect x="24" y="56" width="15" height="34" rx="7"/>'],
-  ['armUpperR', '<rect x="81" y="56" width="15" height="34" rx="7"/>'],
-  ['armLowerL', '<rect x="21" y="90" width="14" height="32" rx="7"/>'],
-  ['armLowerR', '<rect x="85" y="90" width="14" height="32" rx="7"/>'],
-  ['hips',      '<rect x="44" y="97" width="32" height="16" rx="7"/>'],
-  ['thighL',    '<rect x="44" y="111" width="15" height="42" rx="7"/>'],
-  ['thighR',    '<rect x="61" y="111" width="15" height="42" rx="7"/>'],
-  ['calfL',     '<rect x="45" y="153" width="13" height="36" rx="6"/>'],
-  ['calfR',     '<rect x="62" y="153" width="13" height="36" rx="6"/>'],
-];
+// ---- rendering -------------------------------------------------------------
+
+const BODY_FILL = '#5C554D';
+const MUSCLE_REST = '#6E675E';
+
+function figure(view, litKey) {
+  const base = BASE.map((b) => rectSvg(b, BODY_FILL)).join('');
+
+  const muscles = Object.entries(MUSCLES)
+    .filter(([, m]) => m.view === view)
+    .map(([key, m]) => {
+      const lit = key === litKey;
+      const fill = lit ? COLOUR[key] : MUSCLE_REST;
+      // Only the working muscle animates; the rest are context.
+      const cls = lit ? 'mm-lit' : '';
+      return m.boxes
+        .map((b) => `<g${cls ? ` class="${cls}"` : ''}>${rectSvg(b, fill)}${fibreSvg(b, 4, m.across)}</g>`)
+        .join('');
+    })
+    .join('');
+
+  return base + muscles;
+}
 
 /**
  * @param {object|null} exercise
- * @param {string} name  fallback name when the exercise row is missing
- * @returns {string} inline SVG
+ * @param {string} name   fallback name when the exercise row is missing
+ * @param {object} [opts] { both: render front and back side by side }
  */
-export function muscleMap(exercise, name = '') {
-  const region = regionFor(exercise, name);
-  const lit = new Set(region ? REGIONS[region] : []);
-  const colour = REGION_COLOUR[region] ?? 'var(--color-text-dim)';
+export function muscleMap(exercise, name = '', { both = false } = {}) {
+  const key = muscleFor(exercise, name);
+  const view = key ? MUSCLES[key].view : 'front';
+  const label = key ? `Works ${key.replace(/([A-Z])/g, ' $1').toLowerCase()}` : 'Muscle map';
 
-  const body = SHAPES.map(([id, shape]) => {
-    const on = lit.has(id);
-    // The unlit body has to read as a body, not as a smudge — it's the thing
-    // that gives the highlight somewhere to be.
-    const fill = on ? colour : '#5C554D';
-    return shape.replace('/>', ` fill="${fill}"/>`);
-  }).join('');
+  if (!both) {
+    return `<svg viewBox="0 0 120 200" role="img" aria-label="${label}" focusable="false">${
+      figure(view, key)
+    }</svg>`;
+  }
 
-  return `<svg viewBox="0 0 120 200" role="img" aria-label="${
-    region ? `Works ${region.replace(/([A-Z])/g, ' $1').toLowerCase()}` : 'Muscle map'
-  }" focusable="false">${body}</svg>`;
+  // Both views together. The labels are the point: the two silhouettes are
+  // otherwise near-identical, which is exactly the confusion this is meant to
+  // remove — a lit upper arm means biceps on one and triceps on the other.
+  const tag = (x, text) =>
+    `<text x="${x}" y="212" text-anchor="middle" fill="#8E8478" font-size="13"` +
+    ` font-family="ui-monospace, Menlo, monospace" letter-spacing="1.6">${text}</text>`;
+
+  return `<svg viewBox="0 0 250 220" role="img" aria-label="${label}" focusable="false">
+    <g>${figure('front', key)}</g>
+    <g transform="translate(130,0)">${figure('back', key)}</g>
+    ${tag(60, 'FRONT')}${tag(190, 'BACK')}
+  </svg>`;
 }
