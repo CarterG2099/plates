@@ -683,7 +683,7 @@
 
         <!-- Exercise history -------------------------------------------------- -->
         <template x-if="detail">
-          <div class="sheet-backdrop" @click.self="closeExercise()">
+          <div class="sheet-backdrop is-nested" @click.self="closeExercise()">
             <div class="sheet">
               <div class="grabber"></div>
               <div style="font-size:var(--text-lg); font-weight:600" x-text="detail.name"></div>

@@ -108,9 +108,10 @@ export function muscleMap(exercise, name = '') {
 
   const body = SHAPES.map(([id, shape]) => {
     const on = lit.has(id);
-    const fill = on ? colour : 'var(--color-border)';
-    const opacity = on ? '1' : '.55';
-    return shape.replace('/>', ` fill="${fill}" opacity="${opacity}"/>`);
+    // The unlit body has to read as a body, not as a smudge — it's the thing
+    // that gives the highlight somewhere to be.
+    const fill = on ? colour : '#5C554D';
+    return shape.replace('/>', ` fill="${fill}"/>`);
   }).join('');
 
   return `<svg viewBox="0 0 120 200" role="img" aria-label="${

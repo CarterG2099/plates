@@ -799,3 +799,8 @@
 @media (min-width: 1400px) {
   .app-main { max-width: 820px; }
 }
+
+/* A sheet opened from inside another sheet. Equal z-index means DOM order
+   decides, and the exercise history sits earlier in the document than the
+   routine sheet it opens from — so it needs saying explicitly. */
+.sheet-backdrop.is-nested { z-index: 30; }
