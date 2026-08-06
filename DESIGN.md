@@ -402,9 +402,36 @@ answer: carterg2099.github.io
 Plus a `CNAME` file in the repo containing `plates.cartergividen.com`, and
 "Enforce HTTPS" enabled in the repo's Pages settings once the cert issues.
 
+## Supabase configuration
+
+Not derivable from the code, and easy to lose:
+
+- **Exposed schemas** (Settings → API) must include `plates` alongside `public`
+  and `graphql_public`. Removing `public` would take recipes down.
+- **Redirect URLs** (Authentication → URL Configuration) must include
+  `https://plates.cartergividen.com/**` and `http://localhost:8080/**`. The
+  `/**` matters: without it the trailing slash fails to match, and Supabase
+  silently falls back to **Site URL** — which points at recipes — rather than
+  erroring. That failure looks like "sign-in sends me to the wrong app".
+- **Site URL** stays pointed at recipes. Plates never depends on it.
+- Google Cloud Console needs **nothing** app-specific. Google redirects to
+  Supabase's `/auth/v1/callback`, which is per-project and already registered by
+  recipes.
+
+## Local development
+
+```bash
+python3 -m http.server 8080 --bind 127.0.0.1   # from docs/
+```
+
+`localhost` is a secure context, so camera and OAuth both work on the machine
+itself. Phone testing still needs HTTPS via Pages.
+
 ## Open items
 
 - Open Food Facts and USDA endpoints unverified.
 - FatSecret caching terms and credential/IP model unverified — this decides
   whether it can be used at all.
 - Continuous barcode decode loop untested in an installed iOS PWA.
+- Shell has no max-width, so it stretches on desktop. Fine on a phone; worth a
+  container once there is a real screen to look at.
