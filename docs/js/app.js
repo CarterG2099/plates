@@ -646,6 +646,7 @@ Alpine.data('logPage', () => ({
 // ---- train -----------------------------------------------------------------
 
 Alpine.data('trainPage', () => ({
+  menu: false,
   picker: false,
   pickerTerm: '',
   finishing: false,

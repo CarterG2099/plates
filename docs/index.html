@@ -519,6 +519,11 @@
         <!-- No workout running ---------------------------------------------- -->
         <template x-if="!session">
           <div style="display: contents;">
+            <div class="section-head">
+              <span>Train</span>
+              <button class="chip" @click="menu = true" aria-label="More options">⋯</button>
+            </div>
+
             <button class="btn btn-primary btn-block" @click="startEmpty()">Start workout</button>
 
             <div>
@@ -537,55 +542,10 @@
                   </button>
                 </template>
               </div>
+              <p class="empty" x-show="!routines.length">
+                No routines yet. Start a workout and save it as one at the end.
+              </p>
             </div>
-
-            <div class="section-head">
-              <span>Import</span>
-            </div>
-            <label class="btn btn-block" style="cursor:pointer">
-              Import from Hevy (CSV)
-              <input type="file" accept=".csv,text/csv" @change="importFile($event)" hidden>
-            </label>
-            <div class="sync-line" x-show="hevy && hevy.phase !== 'done' && hevy.phase !== 'error'">
-              <span class="spinner" style="width:14px;height:14px"></span>
-              <span x-text="hevyLabel"></span>
-            </div>
-            <div class="notice" x-show="hevy && hevy.phase === 'done'" x-text="hevyLabel"></div>
-            <div class="notice notice-error" x-show="hevy && hevy.phase === 'error'"
-                 x-text="hevy && hevy.message"></div>
-
-            <div class="section-head" x-show="imagesMissing">
-              <span>Exercise images</span>
-              <button class="chip" @click="loadImages()" x-show="!imageImport">
-                Load <span x-text="imagesMissing"></span>
-              </button>
-            </div>
-            <div class="sync-line" x-show="imageImport && imageImport.status !== 'done'">
-              <span class="spinner" style="width:14px;height:14px"></span>
-              <span x-text="imageLabel"></span>
-            </div>
-            <div class="notice notice-error" x-show="imageImport && imageImport.status === 'error'"
-                 x-text="imageLabel"></div>
-
-            <template x-if="history.length">
-              <div>
-                <div class="section-head"><span>Recent</span></div>
-                <div class="rows">
-                  <template x-for="s in history" :key="s.id">
-                    <div class="row">
-                      <div class="row-text">
-                        <b x-text="s.name || 'Workout'"></b>
-                        <small x-text="`${sessionDate(s)} · ${sessionSummary(s)}`"></small>
-                      </div>
-                    </div>
-                  </template>
-                </div>
-              </div>
-            </template>
-
-            <p class="empty" x-show="!routines.length && !history.length">
-              Start a workout and add exercises as you go. Save it as a routine at the end.
-            </p>
           </div>
         </template>
 
@@ -695,6 +655,31 @@
                 </template>
               </div>
               <button class="btn btn-ghost btn-block" @click="picker = false">Cancel</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Overflow menu ----------------------------------------------------- -->
+        <template x-if="menu">
+          <div class="sheet-backdrop" @click.self="menu = false">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="card-label">Options</div>
+
+              <label class="btn btn-block" style="cursor:pointer">
+                Import from Hevy (CSV)
+                <input type="file" accept=".csv,text/csv" @change="importFile($event)" hidden>
+              </label>
+
+              <div class="sync-line" x-show="hevy && hevy.phase !== 'done' && hevy.phase !== 'error'">
+                <span class="spinner" style="width:14px;height:14px"></span>
+                <span x-text="hevyLabel"></span>
+              </div>
+              <div class="notice" x-show="hevy && hevy.phase === 'done'" x-text="hevyLabel"></div>
+              <div class="notice notice-error" x-show="hevy && hevy.phase === 'error'"
+                   x-text="hevy && hevy.message"></div>
+
+              <button class="btn btn-ghost btn-block" @click="menu = false">Close</button>
             </div>
           </div>
         </template>
