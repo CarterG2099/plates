@@ -520,14 +520,13 @@
               </div>
               <div class="rows" x-show="routines.length">
                 <template x-for="r in routines" :key="r.id">
-                  <div class="row">
-                    <button class="row-text" @click="startFromRoutine(r)">
+                  <button class="row" @click="openRoutine(r)">
+                    <div class="row-text">
                       <b x-text="r.name"></b>
-                      <small>Start this routine</small>
-                    </button>
-                    <button class="tap" @click="editRoutine(r)" :aria-label="`Edit ${r.name}`">✎</button>
-                    <button class="tap" @click="deleteRoutine(r)" :aria-label="`Delete ${r.name}`">×</button>
-                  </div>
+                      <small x-text="`${routineCount(r)} exercises`"></small>
+                    </div>
+                    <span class="tap">›</span>
+                  </button>
                 </template>
               </div>
             </div>
@@ -688,6 +687,36 @@
           <div class="sheet-backdrop" @click.self="closeBuilder()">
             <div class="sheet">
               <div class="grabber"></div>
+              <!-- View ------------------------------------------------------ -->
+              <template x-if="builder.mode === 'view'">
+                <div>
+                  <div style="font-size:var(--text-lg); font-weight:600" x-text="builder.name"></div>
+
+                  <div class="rows">
+                    <template x-for="row in builderExercises" :key="row.item.id">
+                      <div class="row">
+                        <img class="thumb" x-show="imageFor(row.exercise)" :src="imageFor(row.exercise)"
+                             alt="" loading="lazy" decoding="async">
+                        <div class="row-text">
+                          <b x-text="row.name"></b>
+                          <small x-text="targetLine(row.item)"></small>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+
+                  <p class="empty" x-show="!builderExercises.length">No exercises in this routine.</p>
+
+                  <button class="btn btn-primary btn-block" @click="startFromBuilder()">Start workout</button>
+                  <button class="btn btn-block" @click="toEdit()">Edit</button>
+                  <button class="btn btn-ghost btn-block" @click="closeBuilder()">Close</button>
+                  <button class="btn btn-ghost btn-block" @click="deleteFromBuilder()">Delete routine</button>
+                </div>
+              </template>
+
+              <!-- Edit ------------------------------------------------------ -->
+              <template x-if="builder.mode === 'edit'">
+                <div>
               <div class="card-label" x-text="builder.routine ? 'Edit routine' : 'New routine'"></div>
 
               <div class="field">
@@ -730,6 +759,8 @@
 
               <p class="empty" x-show="!builder.routine">Name it first, then add exercises.</p>
               <button class="btn btn-primary btn-block" @click="saveRoutineName(); closeBuilder()">Done</button>
+                </div>
+              </template>
             </div>
           </div>
         </template>

@@ -827,13 +827,43 @@ Alpine.data('trainPage', () => ({
 
   // ---- routine builder -----------------------------------------------------
 
-  builder: null,   // { routine, name } — null when closed
+  // { routine, name, mode: 'view' | 'edit' } — null when closed. Opening a
+  // routine shows what's in it; starting it is a deliberate second action, so a
+  // curious tap can't accidentally begin a workout.
+  builder: null,
 
-  newRoutine() { this.builder = { routine: null, name: '' }; },
+  newRoutine() { this.builder = { routine: null, name: '', mode: 'edit' }; },
 
-  editRoutine(routine) { this.builder = { routine, name: routine.name }; },
+  openRoutine(routine) { this.builder = { routine, name: routine.name, mode: 'view' }; },
+
+  toEdit() { this.builder.mode = 'edit'; },
 
   closeBuilder() { this.builder = null; },
+
+  async startFromBuilder() {
+    const routine = this.builder.routine;
+    this.closeBuilder();
+    await this.startFromRoutine(routine);
+  },
+
+  async deleteFromBuilder() {
+    const routine = this.builder.routine;
+    this.closeBuilder();
+    await this.deleteRoutine(routine);
+  },
+
+  routineCount(routine) {
+    return workout.routineExercises(this.data.routineExercises, routine.id).length;
+  },
+
+  /** Summary line for the read-only view: "3 × 8 @ 125 lb". */
+  targetLine(item) {
+    const parts = [];
+    if (item.target_sets) parts.push(`${item.target_sets} ×`);
+    if (item.target_reps) parts.push(item.target_reps);
+    if (item.target_weight_lb) parts.push(`@ ${item.target_weight_lb} lb`);
+    return parts.join(' ') || 'No target set';
+  },
 
   get builderExercises() {
     if (!this.builder?.routine) return [];
