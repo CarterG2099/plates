@@ -104,7 +104,13 @@ export async function importHevy(text, { ownerEmail, existingExercises }, onProg
 
     // owner_email null: exercise definitions are shared, so both of us benefit
     // and the image import covers them too.
-    const exercise = await local.save('exercises', { name, owner_email: null }, null);
+    const exercise = await local.save('exercises', {
+      name,
+      owner_email: null,
+      secondary_muscles: [],
+      instructions: [],
+      image_urls: [],
+    }, null);
     byKey.set(key, exercise);
     created++;
   }

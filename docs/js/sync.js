@@ -62,6 +62,32 @@ async function refreshPending() {
 // ---- push ------------------------------------------------------------------
 
 /**
+ * Columns that are NOT NULL with a database default.
+ *
+ * A bulk upsert normalises every row to the union of their keys, so one row
+ * omitting a column makes PostgREST send an explicit NULL for it — and an
+ * explicit NULL defeats the default. Filling them here rather than at each call
+ * site also repairs rows already sitting in the outbox from before the fix.
+ */
+const NOT_NULL_DEFAULTS = {
+  exercises: { secondary_muscles: [], instructions: [], image_urls: [] },
+  routines: { notes: null },
+  meal_combos: { items: [] },
+  day_templates: { items: [] },
+};
+
+function fillDefaults(table, row) {
+  const defaults = NOT_NULL_DEFAULTS[table];
+  if (!defaults) return row;
+
+  const filled = { ...row };
+  for (const [key, value] of Object.entries(defaults)) {
+    if (filled[key] == null) filled[key] = value;
+  }
+  return filled;
+}
+
+/**
  * Drain the outbox. Entries are grouped per table and upserted in one call each,
  * which matters when a whole workout's sets sync at once after leaving the gym.
  */
@@ -78,7 +104,7 @@ async function push() {
   for (const [table, entries] of byTable) {
     // Later writes to the same row supersede earlier ones; send one row each.
     const latest = new Map();
-    for (const entry of entries) latest.set(entry.row.id, entry.row);
+    for (const entry of entries) latest.set(entry.row.id, fillDefaults(table, entry.row));
     const rows = [...latest.values()];
 
     // Chunked because a bulk import (a Hevy export is thousands of sets) would
