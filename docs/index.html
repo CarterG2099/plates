@@ -70,6 +70,23 @@
       <!-- Today ------------------------------------------------------------ -->
       <main class="app-main" x-data="todayPage" x-show="$store.ui.view === 'today'">
 
+        <div class="datenav">
+          <button class="tap" @click="$store.ui.shiftDay(-1)" aria-label="Previous day">‹</button>
+          <button class="datenav-label" @click="$store.ui.goToday()">
+            <b x-text="$store.ui.dayLabel"></b>
+            <small x-show="!$store.ui.isToday">
+              <span x-text="$store.ui.viewDate"></span> · tap for today
+            </small>
+          </button>
+          <button class="tap" @click="$store.ui.shiftDay(1)" aria-label="Next day">›</button>
+        </div>
+
+        <!-- A future day with entries is a plan, not a record. Say so, so the
+             numbers aren't mistaken for something already eaten. -->
+        <div class="sync-line" x-show="$store.ui.isFuture && entries.length">
+          <span class="dot dot-pending"></span> Planned
+        </div>
+
         <div class="card readout">
           <div class="readout-head">
             <div>
@@ -133,10 +150,86 @@
             </div>
           </div>
         </template>
+
+        <!-- Meal prep --------------------------------------------------------- -->
+        <div class="section-head" style="margin-top: var(--space-4);"><span>Meal prep</span></div>
+        <div class="chips">
+          <button class="chip" x-show="entries.length" @click="openPrep('copy')">Copy day forward</button>
+          <button class="chip" x-show="entries.length" @click="openPrep('save')">Save as template</button>
+          <button class="chip" x-show="templates.length" @click="openPrep('apply')">Apply template</button>
+        </div>
+
+        <template x-if="prep === 'copy'">
+          <div class="sheet-backdrop" @click.self="closePrep()">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="card-label">Copy this day forward</div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-muted)">
+                Copies all <span x-text="entries.length"></span> entries from
+                <span x-text="$store.ui.dayLabel.toLowerCase()"></span> onto the days that follow.
+              </p>
+              <div class="qty">
+                <button class="qty-step" @click="copyCount = Math.max(1, copyCount - 1)" aria-label="Fewer days">−</button>
+                <label class="qty-amount">
+                  <input type="number" inputmode="numeric" min="1" max="14" x-model.number="copyCount">
+                  <small>days</small>
+                </label>
+                <button class="qty-step" @click="copyCount = Math.min(14, copyCount + 1)" aria-label="More days">+</button>
+              </div>
+              <button class="btn btn-primary btn-block" @click="copyForward()">Copy</button>
+              <button class="btn btn-ghost btn-block" @click="closePrep()">Cancel</button>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="prep === 'save'">
+          <div class="sheet-backdrop" @click.self="closePrep()">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="card-label">Save this day as a template</div>
+              <div class="field">
+                <label for="t-name">Name</label>
+                <input id="t-name" type="text" x-model="templateName" placeholder="Cut day A" autocomplete="off">
+              </div>
+              <button class="btn btn-primary btn-block" :disabled="!templateName.trim()" @click="saveAsTemplate()">
+                Save <span x-text="entries.length"></span> entries
+              </button>
+              <button class="btn btn-ghost btn-block" @click="closePrep()">Cancel</button>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="prep === 'apply'">
+          <div class="sheet-backdrop" @click.self="closePrep()">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="card-label">Add a template to <span x-text="$store.ui.dayLabel.toLowerCase()"></span></div>
+              <div class="rows">
+                <template x-for="t in templates" :key="t.id">
+                  <div class="row">
+                    <button class="row-text" @click="applyTemplate(t)">
+                      <b x-text="t.name"></b>
+                      <small x-text="`${(t.items || []).length} entries`"></small>
+                    </button>
+                    <button class="tap" @click="removeTemplate(t)" :aria-label="`Delete ${t.name}`">×</button>
+                  </div>
+                </template>
+              </div>
+              <button class="btn btn-ghost btn-block" @click="closePrep()">Cancel</button>
+            </div>
+          </div>
+        </template>
       </main>
 
       <!-- Log -------------------------------------------------------------- -->
-      <main class="app-main" x-data="logPage" x-show="$store.ui.view === 'log'">
+      <main class="app-main log-panel" x-data="logPage" x-show="$store.ui.logOpen" x-cloak>
+
+        <div class="app-bar" style="padding-left: 0; padding-right: 0;">
+          <h1>Add food</h1>
+          <button class="chip" @click="$store.ui.closeLog()">
+            <span x-text="$store.ui.dayLabel"></span> · Done
+          </button>
+        </div>
 
         <div class="search-row">
           <div class="search">
@@ -421,9 +514,13 @@
         <div class="notice notice-error" x-show="$store.sync.error" x-text="$store.sync.error"></div>
       </div>
 
+      <!-- The way food gets added. Log is a panel over this screen, not a
+           destination you navigate to and come back from. -->
+      <button class="fab" x-show="$store.ui.view === 'today' && !$store.ui.logOpen"
+              @click="$store.ui.openLog()" aria-label="Add food">+</button>
+
       <nav class="tabbar">
         <button :class="$store.ui.view === 'today' && 'is-active'" @click="$store.ui.go('today')">Today</button>
-        <button :class="$store.ui.view === 'log'   && 'is-active'" @click="$store.ui.go('log')">Log</button>
         <button :class="$store.ui.view === 'train' && 'is-active'" @click="$store.ui.go('train')">Train</button>
         <button :class="$store.ui.view === 'stats' && 'is-active'" @click="$store.ui.go('stats')">Stats</button>
       </nav>

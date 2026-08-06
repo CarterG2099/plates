@@ -121,18 +121,21 @@ Alpine.store('data', {
   foods: [],
   log: [],
   combos: [],
+  templates: [],
 
   async refresh() {
-    const [goals, foods, log, combos] = await Promise.all([
+    const [goals, foods, log, combos, templates] = await Promise.all([
       local.all('goals'),
       local.all('foods'),
       local.all('food_log'),
       local.all('meal_combos'),
+      local.all('day_templates'),
     ]);
     this.goals = goals;
     this.foods = foods;
     this.log = log;
     this.combos = combos;
+    this.templates = templates;
     this.ready = true;
   },
 });
@@ -141,10 +144,25 @@ Alpine.store('data', {
 
 Alpine.store('ui', {
   view: 'today',
+  // The day being viewed and written to. Logging is always "to this date", which
+  // is what makes meal prep work without a separate planning mode.
+  viewDate: food.toDateOnly(new Date()),
+  logOpen: false,
   toast: '',
   _toastTimer: null,
 
   go(view) { this.view = view; },
+
+  get date() { return food.fromDateOnly(this.viewDate); },
+  get dayLabel() { return food.dayLabel(this.date); },
+  get isToday() { return this.viewDate === food.toDateOnly(new Date()); },
+  get isFuture() { return food.isFuture(this.date); },
+
+  shiftDay(n) { this.viewDate = food.toDateOnly(food.addDays(this.date, n)); },
+  goToday() { this.viewDate = food.toDateOnly(new Date()); },
+
+  openLog() { this.logOpen = true; },
+  closeLog() { this.logOpen = false; },
 
   flash(message) {
     this.toast = message;
@@ -157,13 +175,14 @@ Alpine.store('ui', {
 
 Alpine.data('todayPage', () => ({
   get email() { return Alpine.store('auth').email; },
+  get date() { return Alpine.store('ui').date; },
 
   get goal() {
-    return food.currentGoal(Alpine.store('data').goals, this.email);
+    return food.currentGoal(Alpine.store('data').goals, this.email, this.date);
   },
 
   get entries() {
-    return food.entriesForDay(Alpine.store('data').log, this.email);
+    return food.entriesForDay(Alpine.store('data').log, this.email, this.date);
   },
 
   get totals() { return food.sumTotals(this.entries); },
@@ -203,6 +222,69 @@ Alpine.data('todayPage', () => ({
     await food.deleteEntry(id);
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash('Removed');
+  },
+
+  // ---- meal prep -----------------------------------------------------------
+
+  prep: null,       // 'copy' | 'save' | 'apply'
+  copyCount: 3,
+  templateName: '',
+
+  openPrep(mode) {
+    this.prep = mode;
+    this.templateName = '';
+  },
+  closePrep() { this.prep = null; },
+
+  get templates() { return Alpine.store('data').templates; },
+
+  /** Cook once, eat for the next N days. */
+  async copyForward() {
+    const targets = Array.from({ length: this.copyCount }, (_, i) => food.addDays(this.date, i + 1));
+    const rows = await food.copyDay({
+      log: Alpine.store('data').log,
+      ownerEmail: this.email,
+      from: this.date,
+      targets,
+    });
+
+    this.closePrep();
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`Copied ${rows.length} entries to ${this.copyCount} days`);
+  },
+
+  async saveAsTemplate() {
+    const name = this.templateName.trim();
+    if (!name) return;
+
+    await food.saveDayTemplate({
+      name,
+      log: Alpine.store('data').log,
+      ownerEmail: this.email,
+      date: this.date,
+    });
+
+    this.closePrep();
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`Saved “${name}”`);
+  },
+
+  async applyTemplate(template) {
+    const rows = await food.applyDayTemplate({
+      template,
+      ownerEmail: this.email,
+      date: this.date,
+    });
+
+    this.closePrep();
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`Added ${rows.length} entries`);
+  },
+
+  async removeTemplate(template) {
+    await food.deleteTemplate(template.id);
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash('Template deleted');
   },
 }));
 
@@ -252,6 +334,7 @@ Alpine.data('logPage', () => ({
 
   get combos() { return Alpine.store('data').combos; },
 
+  get date() { return Alpine.store('ui').date; },
   get mealSlot() { return food.inferMealSlot(); },
 
   /** The one-tap path: log at the amount you last used for this food. */
@@ -262,6 +345,7 @@ Alpine.data('logPage', () => ({
       quantity,
       unit: item.lastUnit ?? item.serving_unit,
       ownerEmail: this.email,
+      date: this.date,
     });
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash(`${item.name} · ${Math.round(quantity)}${item.serving_unit}`);
@@ -269,7 +353,7 @@ Alpine.data('logPage', () => ({
 
   /** Times logged today. The undo button only exists when there's something to undo. */
   loggedToday(item) {
-    return food.countLoggedToday(Alpine.store('data').log, this.email, item.id);
+    return food.countLoggedToday(Alpine.store('data').log, this.email, item.id, this.date);
   },
 
   /**
@@ -278,7 +362,7 @@ Alpine.data('logPage', () => ({
    * and hunting for the row.
    */
   async undoLast(item) {
-    const entry = food.lastEntryForFood(Alpine.store('data').log, this.email, item.id);
+    const entry = food.lastEntryForFood(Alpine.store('data').log, this.email, item.id, this.date);
     if (!entry) return;
 
     await food.deleteEntry(entry.id);
@@ -312,7 +396,7 @@ Alpine.data('logPage', () => ({
 
   async confirmSheet() {
     const { food: item, quantity, unit } = this.sheet;
-    await food.logFood({ food: item, quantity, unit, ownerEmail: this.email });
+    await food.logFood({ food: item, quantity, unit, ownerEmail: this.email, date: this.date });
     this.closeSheet();
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash('Logged');
@@ -320,7 +404,7 @@ Alpine.data('logPage', () => ({
 
   async logCombo(combo) {
     const byId = new Map(Alpine.store('data').foods.map((f) => [f.id, f]));
-    const rows = await food.logCombo({ combo, foodsById: byId, ownerEmail: this.email });
+    const rows = await food.logCombo({ combo, foodsById: byId, ownerEmail: this.email, date: this.date });
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash(`${combo.name} · ${rows.length} items`);
   },
@@ -490,9 +574,6 @@ Alpine.data('logPage', () => ({
 }));
 
 // ---- boot ------------------------------------------------------------------
-
-Alpine.store('auth').init();
-Alpine.store('sync').init();
 
 window.Alpine = Alpine;
 

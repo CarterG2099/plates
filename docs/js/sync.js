@@ -15,6 +15,7 @@ import * as local from './local.js';
 /** Pulled in this order so the screens you open first fill first. */
 const PULL_ORDER = [
   'goals',
+  'day_templates',
   'foods',
   'food_log',
   'weight_log',

@@ -34,6 +34,68 @@
   margin: 0 auto var(--space-2);
 }
 
+/* ---- date navigation ------------------------------------------------------ */
+
+.datenav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.datenav-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.datenav-label b {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  letter-spacing: -.02em;
+}
+
+.datenav-label small {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+/* ---- add-food entry point ------------------------------------------------- */
+
+.fab {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(72px + var(--inset-bottom));
+  z-index: 12;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: var(--text-2xl);
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  box-shadow: var(--shadow-md);
+}
+
+/* Log is a panel over Today rather than a separate destination, so adding food
+   never loses your place on the day you're looking at. */
+.log-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  background: var(--color-bg);
+  overflow-y: auto;
+  padding: calc(var(--inset-top) + var(--space-3)) var(--space-4)
+           calc(var(--inset-bottom) + var(--space-12));
+}
+
 /* ---- daily readout -------------------------------------------------------- */
 
 .readout { gap: var(--space-3); }

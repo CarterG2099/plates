@@ -43,6 +43,48 @@ export function inferMealSlot(date = new Date()) {
 
 export const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
 
+/** Nominal times, used when logging to a day that isn't today. */
+const SLOT_HOURS = { breakfast: 8, lunch: 12, dinner: 18, snack: 15 };
+
+export function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+export function toDateOnly(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function fromDateOnly(iso) {
+  return new Date(`${iso}T00:00:00`);   // parsed as local, not UTC
+}
+
+export function dayLabel(date, now = new Date()) {
+  const diff = Math.round((dayBounds(date).start - dayBounds(now).start) / 86_400_000);
+  if (diff === 0) return 'Today';
+  if (diff === -1) return 'Yesterday';
+  if (diff === 1) return 'Tomorrow';
+  return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+export function isFuture(date, now = new Date()) {
+  return dayBounds(date).start > dayBounds(now).start;
+}
+
+/**
+ * When to stamp an entry. Logging to today means now; logging to another day
+ * uses the meal's nominal hour, so planned days still sort sensibly.
+ */
+export function timestampFor(date, mealSlot, now = new Date()) {
+  if (dayBounds(date).start.getTime() === dayBounds(now).start.getTime()) return now;
+
+  const at = new Date(date);
+  at.setHours(SLOT_HOURS[mealSlot] ?? 12, 0, 0, 0);
+  return at;
+}
+
 // ---- goals -----------------------------------------------------------------
 
 /** The goal whose date window contains `date` — the latest one that qualifies. */
@@ -52,11 +94,6 @@ export function currentGoal(goals, ownerEmail, date = new Date()) {
     .filter((g) => g.owner_email === ownerEmail && !g.deleted_at)
     .filter((g) => g.starts_on <= day && (!g.ends_on || g.ends_on >= day))
     .sort((a, b) => (a.starts_on < b.starts_on ? 1 : -1))[0] ?? null;
-}
-
-function toDateOnly(date) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 // ---- totals ----------------------------------------------------------------
@@ -195,10 +232,12 @@ function round(n, dp) {
  * Log a food. Macros are snapshotted onto the entry rather than referenced, so
  * editing or deleting the food later cannot rewrite what you already ate.
  */
-export async function logFood({ food, quantity, unit, mealSlot, ownerEmail, loggedAt }) {
+export async function logFood({ food, quantity, unit, mealSlot, ownerEmail, date }) {
+  const slot = mealSlot ?? inferMealSlot();
+
   const entry = await local.save('food_log', {
-    logged_at: (loggedAt ?? new Date()).toISOString(),
-    meal_slot: mealSlot ?? inferMealSlot(),
+    logged_at: timestampFor(date ?? new Date(), slot).toISOString(),
+    meal_slot: slot,
     food_id: food.id ?? null,
     recipe_id: food.recipe_id ?? null,
     description: food.brand ? `${food.name} · ${food.brand}` : food.name,
@@ -212,7 +251,7 @@ export async function logFood({ food, quantity, unit, mealSlot, ownerEmail, logg
 }
 
 /** Log every item of a saved combo in one go. */
-export async function logCombo({ combo, foodsById, mealSlot, ownerEmail }) {
+export async function logCombo({ combo, foodsById, mealSlot, ownerEmail, date }) {
   const slot = mealSlot ?? inferMealSlot();
   const logged = [];
 
@@ -225,9 +264,79 @@ export async function logCombo({ combo, foodsById, mealSlot, ownerEmail }) {
       unit: item.unit,
       mealSlot: slot,
       ownerEmail,
+      date,
     }));
   }
   return logged;
+}
+
+// ---- meal prep -------------------------------------------------------------
+
+/** The fields that make an entry reproducible on another day. */
+function portable(entry) {
+  return {
+    meal_slot: entry.meal_slot,
+    food_id: entry.food_id ?? null,
+    recipe_id: entry.recipe_id ?? null,
+    description: entry.description,
+    quantity: entry.quantity,
+    unit: entry.unit,
+    calories: entry.calories,
+    protein_g: entry.protein_g,
+    carbs_g: entry.carbs_g,
+    fat_g: entry.fat_g,
+    fiber_g: entry.fiber_g,
+    sodium_mg: entry.sodium_mg,
+  };
+}
+
+/**
+ * Copy a day's entries onto other days — cook once, eat Monday through Thursday.
+ * Macros come from the copied entries, not from the foods, so a copy is a true
+ * snapshot even if the food is edited afterwards.
+ */
+export async function copyDay({ log, ownerEmail, from, targets }) {
+  const entries = entriesForDay(log, ownerEmail, from);
+  const created = [];
+
+  for (const target of targets) {
+    for (const entry of entries) {
+      const item = portable(entry);
+      created.push(await logEntry(item, target, ownerEmail));
+    }
+  }
+
+  sync.nudge();
+  return created;
+}
+
+export async function saveDayTemplate({ name, log, ownerEmail, date }) {
+  const items = entriesForDay(log, ownerEmail, date).map(portable);
+  const template = await local.save('day_templates', { name, items }, ownerEmail);
+  sync.nudge();
+  return template;
+}
+
+export async function applyDayTemplate({ template, ownerEmail, date }) {
+  const created = [];
+  for (const item of template.items ?? []) {
+    created.push(await logEntry(item, date, ownerEmail));
+  }
+  sync.nudge();
+  return created;
+}
+
+function logEntry(item, date, ownerEmail) {
+  return local.save('food_log', {
+    ...item,
+    logged_at: timestampFor(date, item.meal_slot).toISOString(),
+  }, ownerEmail);
+}
+
+export async function deleteTemplate(id) {
+  const row = await local.remove('day_templates', id);
+  sync.nudge();
+  return row;
 }
 
 export async function saveFood(fields, ownerEmail) {

@@ -159,6 +159,18 @@ create table if not exists plates.goals (
   deleted_at       timestamptz
 );
 
+-- A saved day, for meal prep. Entries are snapshotted exactly like food_log:
+-- applying a template months from now must not depend on the food still
+-- existing or still carrying the same macros.
+create table if not exists plates.day_templates (
+  id          uuid primary key default gen_random_uuid(),
+  owner_email text not null default auth.email(),
+  name        text not null,
+  items       jsonb not null default '[]'::jsonb,
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+
 -- ============================================================================
 -- Workouts
 -- ============================================================================
@@ -243,6 +255,7 @@ create index if not exists foods_barcode_idx        on plates.foods        (barc
 create index if not exists foods_owner_idx          on plates.foods        (owner_email);
 create index if not exists weight_owner_time_idx    on plates.weight_log   (owner_email, measured_at desc);
 create index if not exists goals_owner_start_idx    on plates.goals        (owner_email, starts_on desc);
+create index if not exists day_templates_owner_idx  on plates.day_templates (owner_email);
 create index if not exists sessions_owner_time_idx  on plates.sessions     (owner_email, started_at desc);
 create index if not exists session_sets_session_idx on plates.session_sets (session_id);
 create index if not exists routine_ex_routine_idx   on plates.routine_exercises (routine_id);
@@ -251,6 +264,7 @@ create index if not exists exercises_name_idx       on plates.exercises    (lowe
 -- Sync pulls everything changed since the last cursor.
 create index if not exists food_log_sync_idx     on plates.food_log     (updated_at);
 create index if not exists goals_sync_idx        on plates.goals        (updated_at);
+create index if not exists day_templates_sync_idx on plates.day_templates (updated_at);
 create index if not exists foods_sync_idx        on plates.foods        (updated_at);
 create index if not exists session_sets_sync_idx on plates.session_sets (updated_at);
 
@@ -269,6 +283,7 @@ alter table plates.food_log          enable row level security;
 alter table plates.weight_log        enable row level security;
 alter table plates.meal_combos       enable row level security;
 alter table plates.goals             enable row level security;
+alter table plates.day_templates     enable row level security;
 alter table plates.exercises         enable row level security;
 alter table plates.routines          enable row level security;
 alter table plates.routine_exercises enable row level security;
@@ -307,7 +322,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'food_log','weight_log','meal_combos','goals',
+    'food_log','weight_log','meal_combos','goals','day_templates',
     'routines','routine_exercises','sessions','session_sets'
   ] loop
     execute format('drop policy if exists %1$s_read   on plates.%1$I', t);

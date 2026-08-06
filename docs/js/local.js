@@ -12,7 +12,7 @@
 const DB_NAME = 'plates';
 // Bump whenever TABLES changes: onupgradeneeded is the only place object stores
 // get created, and it only runs on a version increase.
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 /**
  * Synced tables.
@@ -23,6 +23,7 @@ const DB_VERSION = 2;
  */
 export const TABLES = [
   'goals',
+  'day_templates',
   'foods',
   'food_log',
   'weight_log',
