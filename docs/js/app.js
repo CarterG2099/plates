@@ -679,18 +679,23 @@ Alpine.data('trainPage', () => ({
       const exercise = library.find((e) => e.id === item.exercise_id)
         ?? { id: item.exercise_id, name: item.notes || 'Exercise' };
 
-      for (let i = 0; i < (item.target_sets || 1); i++) {
-        const { set } = await workout.addSet({
-          session,
-          exercise,
-          weight: item.target_weight_lb,
-          reps: item.target_reps ? Number(item.target_reps) : null,
-          isWarmup: false,
-          ownerEmail: this.email,
-          existingSets: existing,
-        });
-        existing = [...existing, set];
-      }
+      // One set to start, prefilled from the last time you did it. Add more as
+      // you go — a routine says which exercises, not how many sets.
+      const previous = workout.lastPerformance(
+        this.data.sessionSets, this.data.sessions, this.email,
+        exercise.id, exercise.name, session.id,
+      );
+
+      const { set } = await workout.addSet({
+        session,
+        exercise,
+        weight: previous?.best?.weight_lb ?? null,
+        reps: previous?.best?.reps ?? null,
+        isWarmup: false,
+        ownerEmail: this.email,
+        existingSets: existing,
+      });
+      existing = [...existing, set];
     }
 
     await this.data.refresh();
@@ -856,13 +861,14 @@ Alpine.data('trainPage', () => ({
     return workout.routineExercises(this.data.routineExercises, routine.id).length;
   },
 
-  /** Summary line for the read-only view: "3 × 8 @ 125 lb". */
-  targetLine(item) {
-    const parts = [];
-    if (item.target_sets) parts.push(`${item.target_sets} ×`);
-    if (item.target_reps) parts.push(item.target_reps);
-    if (item.target_weight_lb) parts.push(`@ ${item.target_weight_lb} lb`);
-    return parts.join(' ') || 'No target set';
+  /** What you last did, rather than a target — history is the better guide. */
+  lastLine(row) {
+    const p = workout.lastPerformance(
+      this.data.sessionSets, this.data.sessions, this.email,
+      row.item.exercise_id, row.name, null,
+    );
+    if (!p?.best) return 'Not done yet';
+    return `Last: ${p.best.weight_lb ?? '—'} lb × ${p.best.reps ?? '—'}`;
   },
 
   get builderExercises() {
@@ -955,6 +961,14 @@ Alpine.data('trainPage', () => ({
   // ---- demonstration images ------------------------------------------------
 
   imageImport: null,
+
+  get imageLabel() {
+    const p = this.imageImport;
+    if (!p) return '';
+    if (p.status === 'fetching') return 'Fetching exercise database…';
+    if (p.status === 'error') return p.message ?? 'Import failed.';
+    return `Matching ${p.done ?? 0}/${p.total ?? 0} · ${p.matched ?? 0} found`;
+  },
 
   imageFor(exercise) { return workout.imageFor(exercise); },
 

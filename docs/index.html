@@ -554,12 +554,10 @@
             </div>
             <div class="sync-line" x-show="imageImport && imageImport.status !== 'done'">
               <span class="spinner" style="width:14px;height:14px"></span>
-              <span x-text="imageImport.status === 'fetching'
-                ? 'Fetching exercise database…'
-                : `Matching ${imageImport.done}/${imageImport.total} · ${imageImport.matched} found`"></span>
+              <span x-text="imageLabel"></span>
             </div>
             <div class="notice notice-error" x-show="imageImport && imageImport.status === 'error'"
-                 x-text="imageImport && imageImport.message"></div>
+                 x-text="imageLabel"></div>
 
             <template x-if="history.length">
               <div>
@@ -699,7 +697,7 @@
                              alt="" loading="lazy" decoding="async">
                         <div class="row-text">
                           <b x-text="row.name"></b>
-                          <small x-text="targetLine(row.item)"></small>
+                          <small x-text="lastLine(row)"></small>
                         </div>
                       </div>
                     </template>
@@ -727,27 +725,14 @@
 
               <template x-if="builder.routine">
                 <div>
-                  <div class="setgrid">
-                    <div class="sethead">
-                      <span></span><span>Sets</span><span>Reps</span><span>lb</span><span></span>
-                    </div>
+                  <div class="rows">
                     <template x-for="row in builderExercises" :key="row.item.id">
-                      <div>
-                        <div class="prev" style="padding-top:var(--space-2)" x-text="row.name"></div>
-                        <div class="setrow">
-                          <span class="idx">·</span>
-                          <input class="cell num" type="number" inputmode="numeric" :value="row.item.target_sets"
-                                 @change="editRoutineItem(row.item, 'target_sets', $event.target.value)"
-                                 aria-label="Target sets">
-                          <input class="cell num" type="text" inputmode="numeric" :value="row.item.target_reps"
-                                 @change="editRoutineItem(row.item, 'target_reps', $event.target.value)"
-                                 aria-label="Target reps">
-                          <input class="cell num" type="number" inputmode="decimal" step="any"
-                                 :value="row.item.target_weight_lb"
-                                 @change="editRoutineItem(row.item, 'target_weight_lb', $event.target.value)"
-                                 aria-label="Target weight">
-                          <button class="tap" @click="dropRoutineItem(row.item)" aria-label="Remove exercise">×</button>
-                        </div>
+                      <div class="row">
+                        <img class="thumb" x-show="imageFor(row.exercise)" :src="imageFor(row.exercise)"
+                             alt="" loading="lazy" decoding="async">
+                        <div class="row-text"><b x-text="row.name"></b></div>
+                        <button class="tap" @click="dropRoutineItem(row.item)"
+                                :aria-label="`Remove ${row.name}`">×</button>
                       </div>
                     </template>
                   </div>

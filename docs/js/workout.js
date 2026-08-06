@@ -248,8 +248,10 @@ export async function addRoutineExercise({ routineId, exercise, position, ownerE
     routine_id: routineId,
     exercise_id: exercise.id ?? null,
     position,
-    target_sets: 3,
-    target_reps: '8',
+    // A routine is just an ordered list of exercises. Weights and rep ranges
+    // live in history, which is more honest than a target that goes stale.
+    target_sets: null,
+    target_reps: null,
     target_weight_lb: null,
     rest_seconds: DEFAULT_REST_SECONDS,
     // Keeps the name readable even if the exercise row is later deleted.
