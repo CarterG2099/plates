@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+  style-src 'self' 'unsafe-inline';
+  connect-src 'self' https://world.openfoodfacts.org https://cdn.jsdelivr.net;
+  img-src 'self' data: blob: https://images.openfoodfacts.org;
+  media-src 'self' blob:;
+  base-uri 'none';
+  form-action 'none';
+">
+<title>Plates — barcode spike</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#171512">
+<style>
+  :root {
+    --surface:#171512; --raised:#201D19; --line:#302B25;
+    --text:#F4EFE8; --muted:#9C948A; --dim:#6E665D;
+    --blue:#3B7DD8; --green:#4FA96B; --red:#D6453A; --yellow:#E5B02E;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--surface); color:var(--text);
+    font-family:var(--sans); font-size:14px; line-height:1.5;
+    padding: env(safe-area-inset-top) 12px calc(env(safe-area-inset-bottom) + 24px);
+    -webkit-font-smoothing:antialiased;
+  }
+  h1 { font-family:var(--mono); font-size:16px; font-weight:600; margin:16px 0 4px; }
+  .sub { color:var(--dim); font-family:var(--mono); font-size:10px;
+         letter-spacing:.14em; text-transform:uppercase; margin-bottom:14px; }
+
+  #stage { position:relative; background:#0a0908; border:1px solid var(--line);
+           border-radius:22px; overflow:hidden; aspect-ratio:3/4; max-height:46vh; }
+  #video { width:100%; height:100%; object-fit:cover; display:block; }
+  #reticle { position:absolute; inset:22% 12%; border:2px solid rgba(244,239,232,.5);
+             border-radius:16px; pointer-events:none; }
+  #reticle.hit { border-color:var(--green); }
+
+  .controls { display:flex; gap:8px; margin:12px 0; flex-wrap:wrap; }
+  button {
+    flex:1 1 auto; min-width:110px; font-family:var(--mono); font-size:12px;
+    letter-spacing:.1em; text-transform:uppercase; padding:13px 14px;
+    border-radius:999px; border:1px solid var(--line); background:var(--raised);
+    color:var(--text); cursor:pointer;
+  }
+  button.primary { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:600; }
+  button:disabled { opacity:.4; cursor:default; }
+  button:focus-visible { outline:2px solid var(--yellow); outline-offset:2px; }
+
+  .card { background:var(--raised); border:1px solid var(--line);
+          border-radius:16px; padding:13px 15px; margin-bottom:10px; }
+  .card h2 { font-family:var(--mono); font-size:9.5px; letter-spacing:.16em;
+             text-transform:uppercase; color:var(--dim); margin:0 0 9px; font-weight:500; }
+  .kv { display:flex; justify-content:space-between; gap:12px; padding:4px 0;
+        font-family:var(--mono); font-size:12px; font-variant-numeric:tabular-nums; }
+  .kv span:first-child { color:var(--muted); }
+  .kv span:last-child { text-align:right; word-break:break-all; }
+  .ok   { color:var(--green); }
+  .bad  { color:var(--red); }
+  .warn { color:var(--yellow); }
+
+  pre { margin:0; font-family:var(--mono); font-size:10.5px; line-height:1.45;
+        white-space:pre-wrap; word-break:break-word; color:var(--muted);
+        max-height:280px; overflow:auto; }
+  #log { max-height:170px; }
+</style>
+</head>
+<body>
+
+<h1>Barcode spike</h1>
+<div class="sub">Phase 0 · throwaway · not product code</div>
+
+<div id="stage">
+  <video id="video" playsinline muted autoplay></video>
+  <div id="reticle"></div>
+</div>
+
+<div class="controls">
+  <button id="start" class="primary">Start camera</button>
+  <button id="stop" disabled>Stop</button>
+  <button id="manual">Type a code</button>
+</div>
+
+<div class="card">
+  <h2>Environment</h2>
+  <div class="kv"><span>Secure context</span><span id="e-secure">—</span></div>
+  <div class="kv"><span>Installed PWA</span><span id="e-standalone">—</span></div>
+  <div class="kv"><span>BarcodeDetector</span><span id="e-bd">—</span></div>
+  <div class="kv"><span>Formats</span><span id="e-formats">—</span></div>
+  <div class="kv"><span>Decoder in use</span><span id="e-decoder">—</span></div>
+</div>
+
+<div class="card">
+  <h2>Decode performance</h2>
+  <div class="kv"><span>Attempts</span><span id="d-attempts">0</span></div>
+  <div class="kv"><span>Attempts / sec</span><span id="d-rate">—</span></div>
+  <div class="kv"><span>Time to first hit</span><span id="d-first">—</span></div>
+  <div class="kv"><span>Last barcode</span><span id="d-code">—</span></div>
+</div>
+
+<div class="card">
+  <h2>Open Food Facts</h2>
+  <div class="kv"><span>Endpoint</span><span id="o-endpoint">—</span></div>
+  <div class="kv"><span>Status</span><span id="o-status">—</span></div>
+  <div class="kv"><span>Latency</span><span id="o-latency">—</span></div>
+  <div class="kv"><span>Product</span><span id="o-name">—</span></div>
+  <div class="kv"><span>Per 100g</span><span id="o-macros">—</span></div>
+</div>
+
+<div class="card">
+  <h2>Raw response</h2>
+  <pre id="raw">Nothing yet.</pre>
+</div>
+
+<div class="card">
+  <h2>Log</h2>
+  <pre id="log"></pre>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var logEl = $("log");
+
+  function log(msg) {
+    var t = new Date().toISOString().slice(11, 23);
+    logEl.textContent += "[" + t + "] " + msg + "\n";
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function set(id, text, cls) {
+    var el = $(id);
+    el.textContent = text;
+    el.className = cls || "";
+  }
+
+  // ---- environment ---------------------------------------------------------
+  var isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
+
+  set("e-secure", window.isSecureContext ? "yes" : "NO — camera will fail",
+      window.isSecureContext ? "ok" : "bad");
+  set("e-standalone", isStandalone ? "yes" : "no (browser tab)",
+      isStandalone ? "ok" : "warn");
+
+  var hasBD = typeof window.BarcodeDetector !== "undefined";
+  set("e-bd", hasBD ? "available" : "missing — will use ZXing",
+      hasBD ? "ok" : "warn");
+
+  // The formats we care about for packaged food.
+  var WANTED = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"];
+
+  // ---- state ---------------------------------------------------------------
+  var stream = null;
+  var running = false;
+  var detector = null;
+  var zxingReader = null;
+  var attempts = 0;
+  var startedAt = 0;
+  var firstHitLogged = false;
+  var lastCode = null;
+  var rateTimer = null;
+
+  var video = $("video");
+
+  // ---- camera --------------------------------------------------------------
+  async function startCamera() {
+    if (!window.isSecureContext) {
+      log("Refusing to start: not a secure context. Serve over HTTPS.");
+      return;
+    }
+    try {
+      log("Requesting camera (facingMode: environment)…");
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+
+      var track = stream.getVideoTracks()[0];
+      var s = track.getSettings ? track.getSettings() : {};
+      log("Camera up: " + (s.width || "?") + "x" + (s.height || "?") +
+          " @ " + (s.frameRate ? Math.round(s.frameRate) : "?") + "fps" +
+          (s.facingMode ? " (" + s.facingMode + ")" : ""));
+
+      $("start").disabled = true;
+      $("stop").disabled = false;
+
+      running = true;
+      attempts = 0;
+      firstHitLogged = false;
+      startedAt = performance.now();
+      startRateMeter();
+
+      if (hasBD) {
+        await runBarcodeDetector();
+      } else {
+        await runZXing();
+      }
+    } catch (err) {
+      log("Camera failed: " + err.name + " — " + err.message);
+      set("e-decoder", "camera failed", "bad");
+    }
+  }
+
+  function stopCamera() {
+    running = false;
+    if (rateTimer) { clearInterval(rateTimer); rateTimer = null; }
+    if (zxingReader) {
+      try { zxingReader.reset(); } catch (e) { /* older builds differ */ }
+      zxingReader = null;
+    }
+    if (stream) {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      stream = null;
+    }
+    video.srcObject = null;
+    $("start").disabled = false;
+    $("stop").disabled = true;
+    log("Stopped.");
+  }
+
+  function startRateMeter() {
+    var last = 0;
+    rateTimer = setInterval(function () {
+      var delta = attempts - last;
+      last = attempts;
+      set("d-rate", delta + " /s");
+    }, 1000);
+  }
+
+  // ---- decoder A: native BarcodeDetector ------------------------------------
+  async function runBarcodeDetector() {
+    var supported = [];
+    try {
+      supported = await window.BarcodeDetector.getSupportedFormats();
+    } catch (e) {
+      log("getSupportedFormats failed: " + e.message);
+    }
+    var use = WANTED.filter(function (f) { return supported.indexOf(f) !== -1; });
+    set("e-formats", use.length ? use.join(", ") : "none of the wanted formats",
+        use.length ? "" : "bad");
+
+    if (!use.length) {
+      log("BarcodeDetector supports none of the wanted formats — falling back.");
+      await runZXing();
+      return;
+    }
+
+    detector = new window.BarcodeDetector({ formats: use });
+    set("e-decoder", "BarcodeDetector (native)", "ok");
+    log("Using native BarcodeDetector.");
+
+    // Throttled loop rather than rAF — battery matters more than latency here.
+    (function tick() {
+      if (!running) return;
+      attempts++;
+      $("d-attempts").textContent = attempts;
+      detector.detect(video).then(function (codes) {
+        if (codes && codes.length) onDecode(codes[0].rawValue, codes[0].format);
+      }).catch(function (e) {
+        log("detect() threw: " + e.message);
+      }).then(function () {
+        if (running) setTimeout(tick, 80);
+      });
+    })();
+  }
+
+  // ---- decoder B: ZXing (pure JS port — deliberately not the WASM build) -----
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = src;
+      // NOTE: no SRI hash here — this is a throwaway spike. Production must pin
+      // a version AND an integrity hash, matching the recipes convention.
+      s.onload = function () { resolve(); };
+      s.onerror = function () { reject(new Error("script load failed: " + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function runZXing() {
+    set("e-decoder", "loading ZXing…", "warn");
+    var url = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js";
+    try {
+      await loadScript(url);
+    } catch (e) {
+      log(e.message);
+      log("If this 404s, the UMD path or version is wrong — check the package " +
+          "listing on jsdelivr and update the URL.");
+      set("e-decoder", "ZXing failed to load", "bad");
+      return;
+    }
+
+    if (typeof window.ZXing === "undefined") {
+      log("Script loaded but window.ZXing is undefined — wrong bundle path.");
+      set("e-decoder", "ZXing global missing", "bad");
+      return;
+    }
+    log("ZXing loaded. Exports: " + Object.keys(window.ZXing).slice(0, 8).join(", ") + "…");
+
+    try {
+      zxingReader = new window.ZXing.BrowserMultiFormatReader();
+    } catch (e) {
+      log("Could not construct BrowserMultiFormatReader: " + e.message);
+      set("e-decoder", "ZXing construct failed", "bad");
+      return;
+    }
+
+    set("e-decoder", "ZXing (pure JS)", "ok");
+    set("e-formats", "ZXing multi-format");
+
+    var cb = function (result, err) {
+      attempts++;
+      $("d-attempts").textContent = attempts;
+      if (result) {
+        var fmt = "";
+        try { fmt = String(result.getBarcodeFormat()); } catch (e) { fmt = "?"; }
+        onDecode(result.getText(), fmt);
+      }
+      // err on every non-decoding frame is normal and intentionally ignored.
+    };
+
+    // API surface has moved across versions — try in order, report what worked.
+    var attemptsList = [
+      ["decodeFromVideoElement", function () {
+        return zxingReader.decodeFromVideoElement(video, cb);
+      }],
+      ["decodeFromStream", function () {
+        return zxingReader.decodeFromStream(stream, video, cb);
+      }],
+      ["decodeFromVideoDevice", function () {
+        return zxingReader.decodeFromVideoDevice(null, video, cb);
+      }]
+    ];
+
+    for (var i = 0; i < attemptsList.length; i++) {
+      var name = attemptsList[i][0];
+      if (typeof zxingReader[name] !== "function") continue;
+      try {
+        attemptsList[i][1]();
+        log("ZXing decoding via " + name + "().");
+        return;
+      } catch (e) {
+        log(name + "() failed: " + e.message);
+      }
+    }
+    log("No usable ZXing decode method found on this build.");
+    set("e-decoder", "ZXing: no decode method", "bad");
+  }
+
+  // ---- on decode -----------------------------------------------------------
+  function onDecode(code, format) {
+    if (!code || code === lastCode) return;
+    lastCode = code;
+
+    if (!firstHitLogged) {
+      firstHitLogged = true;
+      var ms = Math.round(performance.now() - startedAt);
+      set("d-first", ms + " ms");
+      log("First decode after " + ms + "ms and " + attempts + " attempts.");
+    }
+    set("d-code", code + (format ? "  (" + format + ")" : ""), "ok");
+    log("Decoded: " + code);
+
+    $("reticle").classList.add("hit");
+    setTimeout(function () { $("reticle").classList.remove("hit"); }, 900);
+
+    if (navigator.vibrate) navigator.vibrate(40);
+    lookup(code);
+  }
+
+  // ---- Open Food Facts -----------------------------------------------------
+  // Both v2 and v0 are tried; whichever answers first is what we standardise on.
+  async function lookup(code) {
+    var endpoints = [
+      "https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(code) + ".json",
+      "https://world.openfoodfacts.org/api/v0/product/" + encodeURIComponent(code) + ".json"
+    ];
+
+    for (var i = 0; i < endpoints.length; i++) {
+      var url = endpoints[i];
+      var label = url.indexOf("/v2/") !== -1 ? "v2" : "v0";
+      set("o-endpoint", label);
+      set("o-status", "requesting…", "warn");
+      var t0 = performance.now();
+      try {
+        var res = await fetch(url, { headers: { "Accept": "application/json" } });
+        var ms = Math.round(performance.now() - t0);
+        set("o-latency", ms + " ms");
+        log(label + " responded " + res.status + " in " + ms + "ms");
+
+        if (!res.ok) {
+          set("o-status", res.status + " " + res.statusText, "bad");
+          continue;
+        }
+        var data = await res.json();
+        set("o-status", "200 OK", "ok");
+        render(data);
+        return;
+      } catch (e) {
+        set("o-status", "network error", "bad");
+        log(label + " failed: " + e.message);
+      }
+    }
+    log("Both OFF endpoints failed for " + code + ".");
+  }
+
+  function render(data) {
+    $("raw").textContent = JSON.stringify(data, null, 2);
+
+    var p = data.product;
+    if (!p || data.status === 0) {
+      set("o-name", "NOT FOUND in Open Food Facts", "warn");
+      set("o-macros", "—");
+      log("Product not in OFF — this is the manual-entry / label-photo path.");
+      return;
+    }
+
+    var name = p.product_name || p.generic_name || "(unnamed)";
+    var brand = p.brands ? " · " + p.brands : "";
+    set("o-name", name + brand, "ok");
+
+    var n = p.nutriments || {};
+    function num(k) {
+      var v = n[k];
+      return (v === undefined || v === null || v === "") ? "?" : Math.round(v * 10) / 10;
+    }
+    set("o-macros",
+      num("energy-kcal_100g") + " kcal · " +
+      "P " + num("proteins_100g") + " · " +
+      "C " + num("carbohydrates_100g") + " · " +
+      "F " + num("fat_100g") + " · " +
+      "Fib " + num("fiber_100g") + " · " +
+      "Na " + num("sodium_100g")
+    );
+
+    var missing = ["energy-kcal_100g", "proteins_100g", "carbohydrates_100g", "fat_100g"]
+      .filter(function (k) { return n[k] === undefined; });
+    if (missing.length) {
+      log("Incomplete nutriments, missing: " + missing.join(", "));
+    }
+  }
+
+  // ---- manual entry, so OFF can be tested without a camera ------------------
+  $("manual").addEventListener("click", function () {
+    var code = prompt("Barcode (EAN/UPC):", "3017620422003");
+    if (code) {
+      lastCode = null;
+      onDecode(code.trim(), "manual");
+    }
+  });
+
+  $("start").addEventListener("click", startCamera);
+  $("stop").addEventListener("click", stopCamera);
+
+  window.addEventListener("pagehide", stopCamera);
+
+  log("Ready. Tap Start camera, or Type a code to test Open Food Facts alone.");
+})();
+</script>
+</body>
+</html>
