@@ -165,7 +165,7 @@ Alpine.store('ui', {
   // The day being viewed and written to. Logging is always "to this date", which
   // is what makes meal prep work without a separate planning mode.
   viewDate: food.toDateOnly(new Date()),
-  logOpen: false,
+  logOpen: window.matchMedia('(min-width: 900px)').matches,
   toast: '',
   _toastTimer: null,
 
