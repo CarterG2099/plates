@@ -13,8 +13,14 @@
  *
  * - **Navigations are network-first.** Cache-first HTML is how a deploy fails to
  *   land and you spend an afternoon wondering why. Offline falls back to cache.
- * - **Static assets are stale-while-revalidate.** Instant from cache, refreshed
- *   in the background, so cold start never waits on the network.
+ * - **Same-origin code is network-first**, like navigations. Stale-while-
+ *   revalidate was tried and was a mistake: it serves the *previous* build on
+ *   every load and fetches the new one for next time, so a fresh index.html can
+ *   pair with month-old JS. That produced real bugs — missing functions
+ *   rendering as "undefined" — that looked like application faults. A handful of
+ *   small files are not worth that class of confusion.
+ * - **Vendor and icons stay stale-while-revalidate**, because they're version-
+ *   pinned and genuinely don't change.
  * - **Supabase and Open Food Facts are never intercepted.** Caching auth tokens
  *   or API responses would be actively harmful; those either reach the network
  *   or fail honestly, and the app already handles failing honestly.
@@ -28,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v1';
+const CACHE_VERSION = 'plates-v2';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -46,6 +52,9 @@ const SHELL = [
   '/js/food.js',
   '/js/lookup.js',
   '/js/scanner.js',
+  '/js/workout.js',
+  '/js/muscle-map.js',
+  '/js/import-hevy.js',
   '/js/vendor/alpine.esm.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -98,27 +107,40 @@ self.addEventListener('fetch', (event) => {
 
   // Page loads: fresh if possible, cached if not.
   if (request.mode === 'navigate') {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(request, true));
     return;
   }
 
   const sameOrigin = url.origin === self.location.origin;
   const isVendor = VENDOR.includes(url.href);
-  if (sameOrigin || isVendor) {
+
+  // Pinned or immutable: serve instantly, refresh behind the scenes.
+  if (isVendor || /\.(png|jpg|svg|webmanifest)$/.test(url.pathname)) {
     event.respondWith(staleWhileRevalidate(request));
+    return;
+  }
+
+  // Our own code: correct beats fast. Offline still falls back to the cache.
+  if (sameOrigin) {
+    event.respondWith(networkFirst(request));
   }
 });
 
-async function networkFirst(request) {
+/**
+ * @param {boolean} indexFallback  only for navigations. Falling back to the page
+ *   for *any* request would hand HTML to a <script> tag, turning an offline miss
+ *   into a syntax error.
+ */
+async function networkFirst(request, indexFallback = false) {
   const cache = await caches.open(CACHE_VERSION);
   try {
     const response = await fetch(request);
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch {
-    return (await cache.match(request))
-      ?? (await cache.match('/index.html'))
-      ?? Response.error();
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    return indexFallback ? (await cache.match('/index.html')) ?? Response.error() : Response.error();
   }
 }
 
