@@ -376,7 +376,19 @@ export async function createExercise(fields, ownerEmail) {
 const EXERCISE_DB = 'https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/dist/exercises.json';
 const IMAGE_BASE = 'https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/exercises/';
 
-const normalise = (s) => (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+/**
+ * Strips the bracketed equipment Hevy appends, so "Iso-Lateral Row (Machine)"
+ * and "Iso-Lateral Row" are the same movement.
+ */
+const normalise = (s) => (s ?? '')
+  .toLowerCase()
+  .replace(/\([^)]*\)/g, '')
+  .replace(/[^a-z0-9]/g, '');
+
+/** Words that describe kit rather than the movement, and shouldn't block a match. */
+const NOISE = /(machine|cable|barbell|dumbbell|smith|bodyweight|weighted|assisted|isolateral|seated|standing|lying)/g;
+
+const loose = (s) => normalise(s).replace(NOISE, '');
 
 /**
  * Match the library against the Free Exercise DB by name and store image URLs.
@@ -395,18 +407,28 @@ export async function importExerciseImages(exercises, ownerEmail, onProgress = (
   const catalogue = await response.json();
 
   const byName = new Map();
+  const byLoose = new Map();
   for (const entry of catalogue) {
     const key = normalise(entry.name);
     if (!byName.has(key)) byName.set(key, entry);
+    const l = loose(entry.name);
+    if (l.length > 4 && !byLoose.has(l)) byLoose.set(l, entry);
   }
 
   const targets = exercises.filter((e) => !e.deleted_at && !(e.image_urls ?? []).length);
   let matched = 0;
 
   for (const [index, exercise] of targets.entries()) {
+    // Widest net that still can't produce an absurd match: exact, then either
+    // name being a prefix of the other, then equipment words ignored entirely.
     const key = normalise(exercise.name);
+    const l = loose(exercise.name);
+
     const hit = byName.get(key)
-      ?? catalogue.find((e) => normalise(e.name).startsWith(key) && key.length > 6);
+      ?? (key.length > 5 && catalogue.find((e) => normalise(e.name).startsWith(key)))
+      ?? (key.length > 5 && catalogue.find((e) => key.startsWith(normalise(e.name)) && normalise(e.name).length > 5))
+      ?? (l.length > 4 && byLoose.get(l))
+      ?? null;
 
     if (hit?.images?.length) {
       await local.save('exercises', {
