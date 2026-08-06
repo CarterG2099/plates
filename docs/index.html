@@ -506,8 +506,164 @@
       </main>
 
       <!-- Train / Stats ---------------------------------------------------- -->
-      <main class="app-main" x-show="$store.ui.view === 'train'">
-        <p class="empty">Workouts come next.</p>
+      <main class="app-main" x-data="trainPage" x-show="$store.ui.view === 'train'">
+
+        <!-- No workout running ---------------------------------------------- -->
+        <template x-if="!session">
+          <div style="display: contents;">
+            <button class="btn btn-primary btn-block" @click="startEmpty()">Start workout</button>
+
+            <template x-if="routines.length">
+              <div>
+                <div class="section-head"><span>Routines</span></div>
+                <div class="rows">
+                  <template x-for="r in routines" :key="r.id">
+                    <div class="row">
+                      <button class="row-text" @click="startFromRoutine(r)">
+                        <b x-text="r.name"></b>
+                        <small>Start this routine</small>
+                      </button>
+                      <button class="tap" @click="deleteRoutine(r)" :aria-label="`Delete ${r.name}`">×</button>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="history.length">
+              <div>
+                <div class="section-head"><span>Recent</span></div>
+                <div class="rows">
+                  <template x-for="s in history" :key="s.id">
+                    <div class="row">
+                      <div class="row-text">
+                        <b x-text="s.name || 'Workout'"></b>
+                        <small x-text="`${sessionDate(s)} · ${sessionSummary(s)}`"></small>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <p class="empty" x-show="!routines.length && !history.length">
+              Start a workout and add exercises as you go. Save it as a routine at the end.
+            </p>
+          </div>
+        </template>
+
+        <!-- Workout in progress --------------------------------------------- -->
+        <template x-if="session">
+          <div style="display: contents;">
+
+            <div class="timer">
+              <div>
+                <div class="t" x-text="elapsed"></div>
+                <small>Elapsed</small>
+              </div>
+              <div class="rest" x-show="restEndsAt">
+                <b x-text="restClock"></b>
+                <small>Rest</small>
+              </div>
+              <div class="rest" x-show="!restEndsAt">
+                <b class="num" x-text="volume.toLocaleString()"></b>
+                <small>lb volume</small>
+              </div>
+            </div>
+
+            <div class="chips" x-show="restEndsAt">
+              <button class="chip" @click="addRest(30)">+30s</button>
+              <button class="chip" @click="addRest(-30)">−30s</button>
+              <button class="chip" @click="endRest()">Skip rest</button>
+            </div>
+
+            <template x-for="group in groups" :key="group.key">
+              <div class="card">
+                <div class="readout-head">
+                  <div>
+                    <b x-text="group.name"></b>
+                    <div class="prev" x-show="previous(group)">
+                      Last: <span x-text="previous(group)"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="setgrid">
+                  <div class="sethead">
+                    <span>#</span><span>lb</span><span>Reps</span><span></span><span></span>
+                  </div>
+                  <template x-for="(set, i) in group.sets" :key="set.id">
+                    <div class="setrow" :class="set.completed_at && 'done'">
+                      <span class="idx" :class="set.is_warmup && 'warm'" x-text="set.is_warmup ? 'W' : i + 1"></span>
+                      <input class="cell num" type="number" inputmode="decimal" step="any"
+                             :value="set.weight_lb" @change="edit(set, 'weight_lb', $event.target.value)"
+                             aria-label="Weight in pounds">
+                      <input class="cell num" type="number" inputmode="numeric"
+                             :value="set.reps" @change="edit(set, 'reps', $event.target.value)"
+                             aria-label="Reps">
+                      <button class="check" @click="toggleDone(set)"
+                              :aria-label="set.completed_at ? 'Mark set incomplete' : 'Mark set done'"
+                              x-text="set.completed_at ? '✓' : '○'"></button>
+                      <button class="tap" @click="dropSet(set)" aria-label="Remove set">×</button>
+                    </div>
+                  </template>
+                </div>
+
+                <button class="btn btn-ghost btn-block" @click="addSetTo(group)">Add set</button>
+              </div>
+            </template>
+
+            <button class="btn btn-block" @click="picker = true">Add exercise</button>
+            <button class="btn btn-primary btn-block" @click="finishing = true">Finish workout</button>
+          </div>
+        </template>
+
+        <!-- Exercise picker -------------------------------------------------- -->
+        <template x-if="picker">
+          <div class="sheet-backdrop" @click.self="picker = false">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="search">
+                <span aria-hidden="true">⌕</span>
+                <input type="search" placeholder="Search exercises…" x-model="pickerTerm" autocomplete="off">
+              </div>
+              <div class="rows">
+                <template x-for="e in library.slice(0, 40)" :key="e.id">
+                  <button class="row" @click="addExercise(e)">
+                    <div class="row-text">
+                      <b x-text="e.name"></b>
+                      <small x-text="[e.primary_muscle, e.equipment].filter(Boolean).join(' · ')"></small>
+                    </div>
+                    <span class="tap">›</span>
+                  </button>
+                </template>
+              </div>
+              <button class="btn btn-ghost btn-block" @click="picker = false">Cancel</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Finish ----------------------------------------------------------- -->
+        <template x-if="finishing">
+          <div class="sheet-backdrop" @click.self="finishing = false">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="card-label">Finish workout</div>
+              <p style="font-size: var(--text-sm); color: var(--color-text-muted)">
+                <span x-text="groups.length"></span> exercises ·
+                <span x-text="volume.toLocaleString()"></span> lb ·
+                <span x-text="elapsed"></span>
+              </p>
+              <div class="field">
+                <label for="r-name">Save as routine (optional)</label>
+                <input id="r-name" type="text" x-model="routineName" placeholder="Push A" autocomplete="off">
+              </div>
+              <button class="btn btn-primary btn-block" @click="finishSession()">Finish</button>
+              <button class="btn btn-ghost btn-block" @click="discard()">Discard workout</button>
+              <button class="btn btn-ghost btn-block" @click="finishing = false">Cancel</button>
+            </div>
+          </div>
+        </template>
       </main>
 
       <main class="app-main" x-show="$store.ui.view === 'stats'">

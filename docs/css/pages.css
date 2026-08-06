@@ -7,7 +7,7 @@
   bottom: 0;
   flex: none;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   border-top: 1px solid var(--color-border);
   background: var(--color-ink);
   padding-bottom: var(--inset-bottom);
@@ -461,4 +461,115 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ---- training -------------------------------------------------------------- */
+
+.timer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  flex: none;
+}
+
+.timer .t {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer .rest { text-align: right; }
+
+.timer .rest b {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-carbs);      /* the only thing counting down */
+}
+
+.timer small {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.prev {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  padding-top: 4px;
+}
+
+.setgrid { display: flex; flex-direction: column; }
+
+.sethead,
+.setrow {
+  display: grid;
+  grid-template-columns: 26px 1fr 1fr 40px 32px;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) 0;
+}
+
+.sethead {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.setrow { border-bottom: 1px solid var(--color-border); }
+.setrow:last-child { border-bottom: 0; }
+
+.setrow .idx {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-dim);
+  text-align: center;
+}
+.setrow .idx.warm { color: var(--color-carbs); }
+
+.setrow .cell {
+  width: 100%;
+  min-width: 0;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: var(--space-2);
+  text-align: center;
+  outline: none;
+  font-size: var(--text-base);
+}
+.setrow .cell:focus { border-color: var(--color-primary); }
+
+/* A done set recedes: the row you're working on should be the loud one. */
+.setrow.done .cell { background: transparent; color: var(--color-text-dim); }
+
+.setrow .check {
+  height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  color: var(--color-text-dim);
+  font-size: var(--text-base);
+}
+
+.setrow.done .check {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: var(--color-ink);
 }

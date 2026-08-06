@@ -14,6 +14,7 @@ import * as sync from './sync.js';
 import * as food from './food.js';
 import { lookupBarcode } from './lookup.js';
 import * as scanner from './scanner.js';
+import * as workout from './workout.js';
 
 // ---- auth ------------------------------------------------------------------
 
@@ -122,20 +123,36 @@ Alpine.store('data', {
   log: [],
   combos: [],
   templates: [],
+  exercises: [],
+  routines: [],
+  routineExercises: [],
+  sessions: [],
+  sessionSets: [],
 
   async refresh() {
-    const [goals, foods, log, combos, templates] = await Promise.all([
+    const [goals, foods, log, combos, templates,
+           exercises, routines, routineExercises, sessions, sessionSets] = await Promise.all([
       local.all('goals'),
       local.all('foods'),
       local.all('food_log'),
       local.all('meal_combos'),
       local.all('day_templates'),
+      local.all('exercises'),
+      local.all('routines'),
+      local.all('routine_exercises'),
+      local.all('sessions'),
+      local.all('session_sets'),
     ]);
     this.goals = goals;
     this.foods = foods;
     this.log = log;
     this.combos = combos;
     this.templates = templates;
+    this.exercises = exercises;
+    this.routines = routines;
+    this.routineExercises = routineExercises;
+    this.sessions = sessions;
+    this.sessionSets = sessionSets;
     this.ready = true;
   },
 });
@@ -597,6 +614,216 @@ Alpine.data('logPage', () => ({
 }));
 
 // ---- boot ------------------------------------------------------------------
+
+// ---- train -----------------------------------------------------------------
+
+Alpine.data('trainPage', () => ({
+  picker: false,
+  pickerTerm: '',
+  finishing: false,
+  routineName: '',
+  restEndsAt: null,
+  restLeft: 0,
+  tick: 0,          // bumped by an interval so the timers re-render
+
+  init() {
+    // One ticker for both clocks. Only runs while the tab is visible, because a
+    // phone in a pocket mid-set doesn't need to repaint a stopwatch.
+    setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      this.tick++;
+      if (this.restEndsAt) {
+        this.restLeft = Math.ceil((this.restEndsAt - Date.now()) / 1000);
+        if (this.restLeft <= 0) this.endRest(true);
+      }
+    }, 1000);
+  },
+
+  get email() { return Alpine.store('auth').email; },
+  get data() { return Alpine.store('data'); },
+
+  get session() { return workout.activeSession(this.data.sessions, this.email); },
+  get sets() { return this.session ? workout.setsForSession(this.data.sessionSets, this.session.id) : []; },
+  get groups() { return workout.groupByExercise(this.sets); },
+  get routines() { return workout.routinesFor(this.data.routines, this.email); },
+  get history() { return workout.recentSessions(this.data.sessions, this.email); },
+
+  get elapsed() {
+    this.tick;   // read so Alpine re-evaluates each second
+    return this.session ? workout.elapsed(this.session.started_at) : '00:00';
+  },
+
+  get volume() { return Math.round(workout.volume(this.sets)); },
+
+  // ---- session lifecycle ---------------------------------------------------
+
+  async startEmpty() {
+    await workout.startSession({ name: null, ownerEmail: this.email });
+    await this.data.refresh();
+    this.picker = true;
+  },
+
+  async startFromRoutine(routine) {
+    const session = await workout.startSession({
+      name: routine.name, routineId: routine.id, ownerEmail: this.email,
+    });
+
+    // Seed the session with the routine's exercises so you start with the plan
+    // in front of you rather than an empty screen.
+    const planned = workout.routineExercises(this.data.routineExercises, routine.id);
+    const library = workout.libraryFor(this.data.exercises, this.email);
+
+    let existing = [];
+    for (const item of planned) {
+      const exercise = library.find((e) => e.id === item.exercise_id)
+        ?? { id: item.exercise_id, name: item.notes || 'Exercise' };
+
+      for (let i = 0; i < (item.target_sets || 1); i++) {
+        const { set } = await workout.addSet({
+          session,
+          exercise,
+          weight: item.target_weight_lb,
+          reps: item.target_reps ? Number(item.target_reps) : null,
+          isWarmup: false,
+          ownerEmail: this.email,
+          existingSets: existing,
+        });
+        existing = [...existing, set];
+      }
+    }
+
+    await this.data.refresh();
+  },
+
+  async finishSession() {
+    const name = this.routineName.trim();
+    if (name) {
+      await workout.saveSessionAsRoutine({
+        name, session: this.session, sets: this.data.sessionSets, ownerEmail: this.email,
+      });
+    }
+    await workout.finishSession(this.session);
+    this.finishing = false;
+    this.routineName = '';
+    this.endRest();
+    await this.data.refresh();
+    Alpine.store('ui').flash(name ? `Finished · saved “${name}”` : 'Workout finished');
+  },
+
+  async discard() {
+    await workout.discardSession(this.session, this.data.sessionSets);
+    this.finishing = false;
+    this.endRest();
+    await this.data.refresh();
+    Alpine.store('ui').flash('Workout discarded');
+  },
+
+  // ---- sets ----------------------------------------------------------------
+
+  get library() {
+    return workout.searchExercises(
+      workout.libraryFor(this.data.exercises, this.email), this.pickerTerm,
+    );
+  },
+
+  async addExercise(exercise) {
+    await workout.addSet({
+      session: this.session, exercise, weight: null, reps: null,
+      isWarmup: false, ownerEmail: this.email, existingSets: this.sets,
+    });
+    this.picker = false;
+    this.pickerTerm = '';
+    await this.data.refresh();
+  },
+
+  async addSetTo(group) {
+    const previous = group.sets[group.sets.length - 1];
+    await workout.addSet({
+      session: this.session,
+      exercise: { id: group.exerciseId, name: group.name },
+      weight: previous?.weight_lb ?? null,
+      reps: previous?.reps ?? null,
+      isWarmup: false,
+      ownerEmail: this.email,
+      existingSets: this.sets,
+    });
+    await this.data.refresh();
+  },
+
+  async edit(set, field, value) {
+    await workout.updateSet(set, { [field]: value === '' ? null : Number(value) });
+    await this.data.refresh();
+  },
+
+  /** Checking a set is what starts the rest clock — the moment you finish lifting. */
+  async toggleDone(set) {
+    const done = Boolean(set.completed_at);
+    await workout.updateSet(set, { completed_at: done ? null : new Date().toISOString() });
+    await this.data.refresh();
+
+    if (!done) {
+      this.startRest(workout.DEFAULT_REST_SECONDS);
+      if (navigator.vibrate) navigator.vibrate(30);
+    }
+  },
+
+  async dropSet(set) {
+    await workout.removeSet(set.id);
+    await this.data.refresh();
+  },
+
+  previous(group) {
+    const p = workout.lastPerformance(
+      this.data.sessionSets, this.data.sessions, this.email,
+      group.exerciseId, group.name, this.session?.id,
+    );
+    if (!p?.best) return null;
+    return `${p.best.weight_lb ?? '—'} lb × ${p.best.reps ?? '—'}`;
+  },
+
+  oneRm(set) { return workout.estimate1RM(set.weight_lb, set.reps); },
+
+  // ---- rest timer ----------------------------------------------------------
+
+  startRest(seconds) {
+    this.restEndsAt = Date.now() + seconds * 1000;
+    this.restLeft = seconds;
+  },
+
+  endRest(rang = false) {
+    this.restEndsAt = null;
+    this.restLeft = 0;
+    if (rang && navigator.vibrate) navigator.vibrate([120, 60, 120]);
+  },
+
+  addRest(seconds) {
+    if (!this.restEndsAt) return this.startRest(Math.max(0, seconds));
+    this.restEndsAt += seconds * 1000;
+    this.restLeft = Math.ceil((this.restEndsAt - Date.now()) / 1000);
+  },
+
+  get restClock() { return workout.formatClock(this.restLeft); },
+
+  // ---- misc ----------------------------------------------------------------
+
+  sessionDate(session) {
+    return new Date(session.started_at).toLocaleDateString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric',
+    });
+  },
+
+  sessionSummary(session) {
+    const sets = workout.setsForSession(this.data.sessionSets, session.id);
+    const groups = workout.groupByExercise(sets);
+    return `${groups.length} exercises · ${Math.round(workout.volume(sets)).toLocaleString()} lb`;
+  },
+
+  async deleteRoutine(routine) {
+    await workout.deleteRoutine(routine, this.data.routineExercises);
+    await this.data.refresh();
+    Alpine.store('ui').flash('Routine deleted');
+  },
+}));
 
 // The offline shell. Registered after the app is up so it never delays first
 // paint, and skipped in dev-by-file-protocol where it can't work anyway.
