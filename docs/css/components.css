@@ -77,6 +77,15 @@
   color: var(--color-text);
 }
 
+/* Inline SVG icons: no icon font, no sprite sheet, nothing to load. Sized in the
+   element that holds them and coloured by currentColor. */
+.icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex: none;
+}
+
 .dot {
   width: 7px;
   height: 7px;
