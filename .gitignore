@@ -9,3 +9,6 @@ client_secret*.json
 # Supabase CLI local artifacts
 supabase/.branches/
 supabase/.temp/
+
+# Personal exports used for one-off imports
+workout_data.csv

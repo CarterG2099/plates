@@ -532,6 +532,21 @@
               </div>
             </div>
 
+            <div class="section-head">
+              <span>Import</span>
+            </div>
+            <label class="btn btn-block" style="cursor:pointer">
+              Import from Hevy (CSV)
+              <input type="file" accept=".csv,text/csv" @change="importFile($event)" hidden>
+            </label>
+            <div class="sync-line" x-show="hevy && hevy.phase !== 'done' && hevy.phase !== 'error'">
+              <span class="spinner" style="width:14px;height:14px"></span>
+              <span x-text="hevyLabel"></span>
+            </div>
+            <div class="notice" x-show="hevy && hevy.phase === 'done'" x-text="hevyLabel"></div>
+            <div class="notice notice-error" x-show="hevy && hevy.phase === 'error'"
+                 x-text="hevy && hevy.message"></div>
+
             <div class="section-head" x-show="imagesMissing">
               <span>Exercise images</span>
               <button class="chip" @click="loadImages()" x-show="!imageImport">

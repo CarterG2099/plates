@@ -28,6 +28,8 @@ const PULL_ORDER = [
 ];
 
 const PAGE_SIZE = 1000;
+/** Rows per upsert request. Keeps a bulk import inside PostgREST's limits. */
+const PUSH_CHUNK = 500;
 const POLL_MS = 60_000;
 
 const listeners = new Set();
@@ -77,13 +79,16 @@ async function push() {
     // Later writes to the same row supersede earlier ones; send one row each.
     const latest = new Map();
     for (const entry of entries) latest.set(entry.row.id, entry.row);
+    const rows = [...latest.values()];
 
-    const { error } = await db(table).upsert([...latest.values()], { onConflict: 'id' });
+    // Chunked because a bulk import (a Hevy export is thousands of sets) would
+    // otherwise be one request far past what PostgREST will accept.
+    for (let i = 0; i < rows.length; i += PUSH_CHUNK) {
+      const { error } = await db(table).upsert(rows.slice(i, i + PUSH_CHUNK), { onConflict: 'id' });
 
-    if (error) {
-      // Leave the entries queued and try again on the next pass. A failure here
+      // Leave everything queued and try again on the next pass. A failure here
       // is usually just absent signal.
-      throw error;
+      if (error) throw error;
     }
     await local.dequeue(entries.map((e) => e.seq));
   }

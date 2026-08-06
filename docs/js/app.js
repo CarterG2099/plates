@@ -15,6 +15,7 @@ import * as food from './food.js';
 import { lookupBarcode } from './lookup.js';
 import * as scanner from './scanner.js';
 import * as workout from './workout.js';
+import { importHevy } from './import-hevy.js';
 
 // ---- auth ------------------------------------------------------------------
 
@@ -881,6 +882,44 @@ Alpine.data('trainPage', () => ({
   async dropRoutineItem(item) {
     await workout.removeRoutineExercise(item.id);
     await this.data.refresh();
+  },
+
+  // ---- Hevy import ---------------------------------------------------------
+
+  hevy: null,
+
+  async importFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    this.hevy = { phase: 'reading' };
+    try {
+      const text = await file.text();
+      await importHevy(text, {
+        ownerEmail: this.email,
+        existingExercises: this.data.exercises,
+      }, (p) => { this.hevy = p; });
+
+      await this.data.refresh();
+      Alpine.store('ui').flash(
+        `Imported ${this.hevy.sessions} workouts · ${this.hevy.routines} routines`);
+    } catch (e) {
+      this.hevy = { phase: 'error', message: e.message };
+    } finally {
+      event.target.value = '';   // let the same file be picked again after a fix
+    }
+  },
+
+  get hevyLabel() {
+    if (!this.hevy) return '';
+    switch (this.hevy.phase) {
+      case 'reading':   return 'Reading file…';
+      case 'parsing':   return 'Parsing…';
+      case 'exercises': return `Exercises: ${this.hevy.created} new of ${this.hevy.total}`;
+      case 'sessions':  return `Workouts ${this.hevy.done}/${this.hevy.total} · ${this.hevy.sets} sets`;
+      case 'done':      return `Done · ${this.hevy.sessions} workouts, ${this.hevy.sets} sets, ${this.hevy.routines} routines`;
+      default:          return '';
+    }
   },
 
   // ---- demonstration images ------------------------------------------------
