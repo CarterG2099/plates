@@ -248,3 +248,38 @@
 }
 
 .figure-pair svg { width: 100%; height: auto; display: block; }
+
+/* ---- sheet furniture ------------------------------------------------------- */
+/* A title row with a close control, so sheets stop ending in a stack of
+   full-width buttons where only one is the actual action. */
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-1);
+}
+
+.sheet-head h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Secondary actions sit beside each other; only the primary gets full width. */
+.btn-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.btn-row .btn { flex: 1; padding-left: var(--space-3); padding-right: var(--space-3); }
+
+.btn-danger {
+  border-color: rgba(224, 54, 42, .5);
+  color: var(--color-danger);
+}
+.btn-danger:hover:not(:disabled) { background: rgba(224, 54, 42, .12); }

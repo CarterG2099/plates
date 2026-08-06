@@ -688,7 +688,10 @@
           <div class="sheet-backdrop is-nested" @click.self="closeExercise()">
             <div class="sheet">
               <div class="grabber"></div>
-              <div style="font-size:var(--text-lg); font-weight:600" x-text="detail.name"></div>
+              <div class="sheet-head">
+                <h2 x-text="detail.name"></h2>
+                <button class="tap" @click="closeExercise()" aria-label="Close">×</button>
+              </div>
 
               <div class="detail-top">
                 <div class="figure-pair" x-html="muscleMapPair(detail.exerciseId, detail.name)"></div>
@@ -731,7 +734,6 @@
               </div>
 
               <p class="empty" x-show="!detailHistory.length">No history for this exercise yet.</p>
-              <button class="btn btn-ghost btn-block" @click="closeExercise()">Close</button>
             </div>
           </div>
         </template>
@@ -743,8 +745,11 @@
               <div class="grabber"></div>
               <!-- View ------------------------------------------------------ -->
               <template x-if="builder.mode === 'view'">
-                <div>
-                  <div style="font-size:var(--text-lg); font-weight:600" x-text="builder.name"></div>
+                <div style="display:flex; flex-direction:column; gap:var(--space-4)">
+                  <div class="sheet-head">
+                    <h2 x-text="builder.name"></h2>
+                    <button class="tap" @click="closeBuilder()" aria-label="Close">×</button>
+                  </div>
 
                   <div class="rows">
                     <template x-for="row in builderExercises" :key="row.item.id">
@@ -762,9 +767,10 @@
                   <p class="empty" x-show="!builderExercises.length">No exercises in this routine.</p>
 
                   <button class="btn btn-primary btn-block" @click="startFromBuilder()">Start workout</button>
-                  <button class="btn btn-block" @click="toEdit()">Edit</button>
-                  <button class="btn btn-ghost btn-block" @click="closeBuilder()">Close</button>
-                  <button class="btn btn-ghost btn-block" @click="deleteFromBuilder()">Delete routine</button>
+                  <div class="btn-row">
+                    <button class="btn" @click="toEdit()">Edit</button>
+                    <button class="btn btn-danger" @click="deleteFromBuilder()">Delete</button>
+                  </div>
                 </div>
               </template>
 
@@ -821,8 +827,10 @@
                 <input id="r-name" type="text" x-model="routineName" placeholder="Push A" autocomplete="off">
               </div>
               <button class="btn btn-primary btn-block" @click="finishSession()">Finish</button>
-              <button class="btn btn-ghost btn-block" @click="discard()">Discard workout</button>
-              <button class="btn btn-ghost btn-block" @click="finishing = false">Cancel</button>
+              <div class="btn-row">
+                <button class="btn" @click="finishing = false">Cancel</button>
+                <button class="btn btn-danger" @click="discard()">Discard</button>
+              </div>
             </div>
           </div>
         </template>
