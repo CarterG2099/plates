@@ -958,7 +958,7 @@ Alpine.data('logPage', () => ({
   // is a draft you review, never a silent write — OFF is crowd-sourced and
   // USDA's name matching is loose.
 
-  online: { status: 'idle', results: [], error: '', term: '' },
+  online: { status: 'idle', results: [], error: '', term: '', unmatched: [] },
 
   get looksLikeBarcode() {
     return /^\d{8,14}$/.test(this.term.trim());
@@ -981,6 +981,12 @@ Alpine.data('logPage', () => ({
     return this.online.status === 'searching' && this.online.term === this.term.trim();
   },
 
+  /** A word nothing matched. Reads as "did you mean", without guessing at one. */
+  get onlineUnmatched() {
+    if (this.online.term !== this.term.trim()) return [];
+    return this.online.unmatched ?? [];
+  },
+
   /**
    * Debounced so a network call isn't fired per keystroke, and generation-
    * guarded so a slow response for "ch" can't land on top of results for
@@ -997,7 +1003,7 @@ Alpine.data('logPage', () => ({
     // Two characters match half your foods; there is nothing useful to ask for.
     if (term.length < 3 && !this.looksLikeBarcode) {
       this._onlineGen = (this._onlineGen ?? 0) + 1;
-      this.online = { status: 'idle', results: [], error: '', term: '' };
+      this.online = { status: 'idle', results: [], error: '', term: '', unmatched: [] };
       return;
     }
 
@@ -1050,6 +1056,9 @@ Alpine.data('logPage', () => ({
         missing: r.missing ?? [],
         source: r.dataType ?? 'USDA',
       })),
+      // Words that matched nothing at all. Almost always a typo, and without
+      // saying so the results look confident rather than wrong.
+      unmatched: data.unmatched ?? [],
       error: data.error ?? '',
     };
   },

@@ -121,7 +121,8 @@ function servingOf(food: UsdaFood): { grams: number; label: string } | null {
 
 function toDraft(food: UsdaFood) {
   const nutrients = food.foodNutrients ?? [];
-  const brand = (food.brandName || food.brandOwner || "").trim() || null;
+  const rawBrand = (food.brandName || food.brandOwner || "").trim();
+  const brand = rawBrand ? tidyName(rawBrand) : null;
   const serving = servingOf(food);
 
   // Nutrients are per 100 g; a serving is `grams` of that.
@@ -134,7 +135,7 @@ function toDraft(food: UsdaFood) {
   const draft = {
     external_id: food.fdcId ? String(food.fdcId) : null,
     barcode: food.gtinUpc?.trim() || null,
-    name: (food.description ?? "").trim() || "Unnamed food",
+    name: tidyName((food.description ?? "").trim()) || "Unnamed food",
     brand,
     serving_qty: serving ? 1 : 100,
     serving_unit: serving ? "serving" : "g",
@@ -156,6 +157,27 @@ function toDraft(food: UsdaFood) {
     dataType: food.dataType ?? null,
     missing: REQUIRED.filter((k) => draft[k as keyof typeof draft] == null),
   };
+}
+
+/**
+ * Undo USDA's shouting.
+ *
+ * Branded descriptions are stored in caps — "GREAT VALUE, BLACK TEA" — which
+ * arrives in the UI as a shouted row. SR Legacy and Foundation descriptions are
+ * already sentence case, so only names that are genuinely almost all uppercase
+ * are rewritten; anything else is left exactly as USDA wrote it.
+ */
+function tidyName(text: string): string {
+  const letters = text.replace(/[^A-Za-z]/g, "");
+  if (letters.length < 3) return text;
+
+  const upper = (text.match(/[A-Z]/g) ?? []).length;
+  if (upper / letters.length < 0.8) return text;
+
+  return text.toLowerCase().replace(
+    /(^|[\s(\[\/-])([a-z])/g,
+    (_, lead: string, c: string) => lead + c.toUpperCase(),
+  );
 }
 
 function kjToKcal(kj: number | null): number | null {
@@ -350,10 +372,20 @@ Deno.serve(async (req) => {
     .filter((r) => r.score >= best * RELEVANCE_FLOOR)
     .slice(0, RETURN_LIMIT);
 
+  // Words that matched nothing anywhere. A typo silently degrades the query —
+  // "2% great value mlik" quietly becomes a search for "2% great value", and the
+  // results look confident rather than wrong. Naming the dead word lets the UI
+  // say so instead of presenting tea as an answer about milk.
+  const unmatched = terms.filter((t) => !foods.some((f) => {
+    const hay = [f.description, f.brandName, f.brandOwner].filter(Boolean).join(" ").toLowerCase();
+    return hay.includes(t);
+  }));
+
   return json({
     query,
     count: ranked.length,
     fetched: foods.length,
+    unmatched,
     results: ranked.map(({ food, score }) => ({ ...toDraft(food), score })),
   });
 });
