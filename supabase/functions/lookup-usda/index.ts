@@ -21,7 +21,10 @@ const SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
 const OFF_SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl";
 const OFF_FIELDS = "code,product_name,generic_name,brands,nutriments"
   + ",serving_size,serving_quantity,serving_quantity_unit";
-const OFF_PAGE_SIZE = 12;
+// Raised for brands USDA cannot help with at all. MyProtein is UK-only, so
+// every result has to come from OFF, and twelve slots fill up with generic
+// protein powders before a specific brand appears.
+const OFF_PAGE_SIZE = 30;
 // OFF asks for a descriptive agent and throttles anything that omits one.
 const OFF_AGENT = "Plates/1.0 (https://plates.cartergividen.com)";
 const OFF_TIMEOUT_MS = 9000;
@@ -229,6 +232,13 @@ function scoreAgainst(terms: string[], food: UsdaFood): number {
   const head = words[0] ?? "";
   const tail = words[words.length - 1] ?? "";
 
+  // Whole words, not substrings. "myprotein".includes("protein") is true, so a
+  // substring test classified "protein" as a brand word when searching
+  // Myprotein — worth 5 instead of 12, and barred from the head bonus, on a
+  // product literally called "Impact Whey Protein".
+  const brandWords = brand.split(/[^a-z0-9%.]+/).filter(Boolean);
+  const isBrandTerm = (t: string) => brandWords.some((w) => w.startsWith(t));
+
   // A term found in the brand is a brand term even when the description repeats
   // it. Otherwise "Great Value Black Tea" earns description credit for "great
   // value" while "2% Reduced Fat Milk" earns only brand credit, and a search for
@@ -237,7 +247,7 @@ function scoreAgainst(terms: string[], food: UsdaFood): number {
   let inDesc = 0;
   let inBrand = 0;
   for (const term of terms) {
-    if (brand && brand.includes(term)) inBrand += 1;
+    if (isBrandTerm(term)) inBrand += 1;
     else if (desc.includes(term)) inDesc += 1;
   }
 
@@ -256,12 +266,18 @@ function scoreAgainst(terms: string[], food: UsdaFood): number {
 
   // Brand words cannot earn the bonus: branded descriptions often lead with the
   // brand, so "great" would hand it to "Great Value Sandwich Cookies".
-  const headable = terms.filter((t) => !(brand && brand.includes(t)));
+  const headable = terms.filter((t) => !isBrandTerm(t));
   if (headable.some((t) => heads.some((h) => h && (h.startsWith(t) || (t.length > 3 && t.startsWith(h)))))) {
     score += 45;
   }
 
-  score -= Math.min(Math.max(words.length - matched, 0), 14) * 2;
+  // Padding punishes a long description that carries the query incidentally.
+  // That only makes sense for a description match — on a brand match the other
+  // words are the product's own name, not noise. Applying it flat meant a
+  // brand-only search scored that brand's products at zero: "myprotein" cost
+  // more in padding (-8) than it earned in brand credit (+5).
+  const padding = Math.min(Math.max(words.length - matched, 0), 14) * 2;
+  score -= padding * (inDesc / matched);
 
   return Math.max(score, 0) * (matched / terms.length) ** 1.5;
 }

@@ -280,10 +280,16 @@ export function scoreDraft(terms, draft) {
   const head = words[0] ?? '';
   const tail = words[words.length - 1] ?? '';
 
+  // Whole words, not substrings: "myprotein".includes("protein") is true, which
+  // classified "protein" as a brand word on a product called "Impact Whey
+  // Protein".
+  const brandWords = brand.split(/[^a-z0-9%.]+/).filter(Boolean);
+  const isBrandTerm = (t) => brandWords.some((w) => w.startsWith(t));
+
   let inName = 0;
   let inBrand = 0;
   for (const term of terms) {
-    if (brand && brand.includes(term)) inBrand += 1;
+    if (isBrandTerm(term)) inBrand += 1;
     else if (name.includes(term)) inName += 1;
   }
 
@@ -295,12 +301,16 @@ export function scoreDraft(terms, draft) {
   // A branded name is natural English and ends on its head noun; USDA's own
   // descriptions invert it. Only branded rows get the tail checked.
   const heads = brand ? [head, tail] : [head];
-  const headable = terms.filter((t) => !(brand && brand.includes(t)));
+  const headable = terms.filter((t) => !isBrandTerm(t));
   if (headable.some((t) => heads.some((h) => h && (h.startsWith(t) || (t.length > 3 && t.startsWith(h)))))) {
     score += 45;
   }
 
-  score -= Math.min(Math.max(words.length - matched, 0), 14) * 2;
+  // Scaled by how much of the match was in the name. On a brand-only match the
+  // other words are the product's own name, not padding — flat, it scored a
+  // brand search at zero.
+  const padding = Math.min(Math.max(words.length - matched, 0), 14) * 2;
+  score -= padding * (inName / matched);
 
   return Math.max(score, 0) * (matched / terms.length) ** 1.5;
 }
