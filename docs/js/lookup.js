@@ -31,9 +31,14 @@ const ENDPOINTS = [
 ];
 
 const SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
-const SEARCH_PAGE_SIZE = 25;
+// Smaller than it looks like it should be: OFF's CGI search is slow, and it is
+// not certain `fields` is honoured there — if it isn't, each product comes back
+// whole, and 25 of those is megabytes over a phone connection.
+const SEARCH_PAGE_SIZE = 12;
 
 const TIMEOUT_MS = 6000;
+// Search is markedly slower than a barcode lookup, which is a keyed index hit.
+const SEARCH_TIMEOUT_MS = 9000;
 
 /** Macros we need to consider a lookup usable without hand-editing. */
 const REQUIRED = ['calories', 'protein_g', 'carbs_g', 'fat_g'];
@@ -78,7 +83,8 @@ export async function lookupBarcode(code) {
  */
 export async function searchByName(query) {
   const term = query.trim();
-  if (!term || !navigator.onLine) return [];
+  if (!term) return { results: [], error: '', fetched: 0 };
+  if (!navigator.onLine) return { results: [], error: 'offline', fetched: 0 };
 
   const url = `${SEARCH_URL}?search_terms=${encodeURIComponent(term)}`
     + `&search_simple=1&action=process&json=1`
@@ -86,14 +92,17 @@ export async function searchByName(query) {
 
   let data;
   try {
-    data = await fetchJson(url);
-  } catch {
-    return [];
+    data = await fetchJson(url, SEARCH_TIMEOUT_MS);
+  } catch (e) {
+    // Reported, not swallowed. Returning [] on failure made a timeout and a
+    // genuine zero-result search identical from the outside, so there was no
+    // way to tell whether this source had run at all.
+    return { results: [], error: e.name === 'AbortError' ? 'timed out' : (e.message ?? 'failed'), fetched: 0 };
   }
 
   const products = Array.isArray(data?.products) ? data.products : [];
 
-  return products
+  const results = products
     // No name is unusable, and OFF has plenty of half-entered products.
     .filter((p) => (p.product_name || p.generic_name || '').trim())
     .map((product) => {
@@ -106,11 +115,13 @@ export async function searchByName(query) {
     })
     // Nothing with no calories at all — those are stubs someone photographed.
     .filter((r) => r.draft.calories != null);
+
+  return { results, error: '', fetched: products.length };
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, timeout = TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeout);
   try {
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },

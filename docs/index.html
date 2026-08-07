@@ -346,6 +346,7 @@
             <div class="notice notice-error" x-show="online.error" x-text="online.error"></div>
             <p class="prefill" x-show="onlineUnmatched.length"
                x-text="`Nothing matched “${onlineUnmatched.join('”, “')}” — check the spelling.`"></p>
+            <p class="servingraw" x-show="onlineSources" x-text="onlineSources"></p>
 
             <div class="rows">
               <template x-for="(r, i) in onlineResults" :key="i">

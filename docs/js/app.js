@@ -981,6 +981,19 @@ Alpine.data('logPage', () => ({
     return this.online.status === 'searching' && this.online.term === this.term.trim();
   },
 
+  /** Per-source counts, so a silent failure is visible rather than inferred. */
+  get onlineSources() {
+    if (this.online.term !== this.term.trim()) return null;
+    const s = this.online.sources;
+    if (!s) return null;
+
+    const parts = [
+      s.usdaError ? `USDA ${s.usdaError}` : `USDA ${s.usda}`,
+      s.offError ? `OFF ${s.offError}` : `OFF ${s.off}/${s.offFetched}`,
+    ];
+    return parts.join(' · ');
+  },
+
   /** A word nothing matched. Reads as "did you mean", without guessing at one. */
   get onlineUnmatched() {
     if (this.online.term !== this.term.trim()) return [];
@@ -1076,20 +1089,31 @@ Alpine.data('logPage', () => ({
         })
         .catch((e) => ({ results: [], unmatched: [], error: e.message ?? String(e) })),
 
-      lookupByNameOff(term).catch(() => []),
+      lookupByNameOff(term).catch((e) => ({ results: [], error: e.message ?? String(e), fetched: 0 })),
     ]);
 
     // USDA first on a collision: its values are lab-measured or label-verified,
     // where OFF is whatever the last person to scan it typed in.
-    const results = food.mergeDrafts([usda.results, off], term);
+    const results = food.mergeDrafts([usda.results, off.results], term);
 
     return {
       results,
       // Only trust the typo hint when USDA actually answered, and only when the
       // word is missing from OFF's results too.
       unmatched: usda.error ? [] : (usda.unmatched ?? []).filter(
-        (t) => !off.some((r) => `${r.draft.name} ${r.draft.brand ?? ''}`.toLowerCase().includes(t)),
+        (t) => !off.results.some((r) => `${r.draft.name} ${r.draft.brand ?? ''}`.toLowerCase().includes(t)),
       ),
+      // Which source produced what. Both failure modes are silent by design —
+      // one source going down must not take the other with it — so without this
+      // there is no way to tell a source that returned nothing from one that
+      // never answered.
+      sources: {
+        usda: usda.results.length,
+        usdaError: usda.error || '',
+        off: off.results.length,
+        offFetched: off.fetched ?? 0,
+        offError: off.error || '',
+      },
       // Only an error if it left us with nothing to show.
       error: results.length ? '' : usda.error,
     };
