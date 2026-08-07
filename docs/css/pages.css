@@ -781,6 +781,8 @@
 
   /* Pointer users get hover feedback that touch users never see. */
   .row:hover .row-text b { color: var(--color-primary-hover); }
+  .row:hover { border-color: var(--color-primary-soft); }
+  .card .row:hover { border-color: transparent; border-bottom-color: var(--color-border); }
   .tap:hover  { border-color: var(--color-primary); }
   .chip:hover { border-color: var(--color-primary); }
 }

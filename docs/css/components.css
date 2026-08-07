@@ -115,18 +115,41 @@
 
 /* ---- rows ----------------------------------------------------------------- */
 
-.rows { display: flex; flex-direction: column; }
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
 
+/* Each row is its own surface rather than a hairline-separated line of text.
+   A dense list of near-identical rows reads as one block and gives the eye no
+   place to land; separating them costs vertical space and is worth it. */
 .row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-inset);
   text-align: left;
   width: 100%;
 }
-.row:last-child { border-bottom: 0; }
+
+/* Inside a card the surfaces would stack — a raised panel holding lifted rows
+   reads as two competing layers. There, the original hairline is right. */
+.card .rows { gap: 0; }
+
+.card .row {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: none;
+  padding: var(--space-3) 0;
+}
+.card .row:last-child { border-bottom: 0; }
 
 /* text-align is set explicitly because this is often a <button>, and the UA
    stylesheet's `center` beats the `left` it would otherwise inherit. */
@@ -353,13 +376,14 @@
 .row-swipe {
   position: relative;
   overflow: hidden;
+  border-radius: var(--radius-md);
 }
 
 /* Opaque, or the action behind it shows through the row it is meant to sit
    under. Matches the surface the rows are painted on. */
 .row-swipe > .row {
   position: relative;
-  background: var(--color-bg);
+  background: var(--color-surface);
   transition: transform var(--transition-fast);
   will-change: transform;
 }
@@ -376,8 +400,6 @@
   font-size: var(--text-sm);
   font-weight: 600;
 }
-
-.row-swipe:last-child > .row { border-bottom: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .row-swipe > .row { transition: none; }
