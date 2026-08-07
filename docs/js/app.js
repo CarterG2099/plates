@@ -773,11 +773,13 @@ Alpine.data('logPage', () => ({
     this.scan = {
       status: 'ready',
       decoder: result.decoder,
+      focus: result.focus,
+      focusAt: null,
       // Say so rather than letting it look broken: on iOS there is no focus
       // control, and the camera app is the answer.
       message: result.focus === 'unavailable'
         ? 'This browser can’t control focus — use the camera app if it won’t read.'
-        : '',
+        : 'Tap the preview to focus.',
     };
 
     scanner.startDecoding(video, {
@@ -824,6 +826,42 @@ Alpine.data('logPage', () => ({
     }
 
     await this.acceptCode(code);
+  },
+
+  /**
+   * Tap-to-focus.
+   *
+   * The video is object-fit: cover, so the element's box is a crop of the
+   * frame — the tap has to be mapped back through that crop or the camera
+   * focuses somewhere other than where you touched.
+   */
+  async focusHere(event) {
+    if (this.scan?.status !== 'ready') return;
+
+    const box = event.currentTarget.getBoundingClientRect();
+    const left = ((event.clientX - box.left) / box.width) * 100;
+    const top = ((event.clientY - box.top) / box.height) * 100;
+    this.scan.focusAt = { left, top };
+
+    const video = this.$refs.video;
+    const source = video.videoWidth / video.videoHeight;
+    const shown = box.width / box.height;
+
+    // cover: the wider dimension is the one cropped.
+    let x = left / 100;
+    let y = top / 100;
+    if (source > shown) {
+      const visible = shown / source;                 // fraction of source width shown
+      x = (1 - visible) / 2 + x * visible;
+    } else if (source < shown) {
+      const visible = source / shown;
+      y = (1 - visible) / 2 + y * visible;
+    }
+
+    const ok = await scanner.focusAt(x, y);
+    if (!ok) this.scan.message = 'This browser won’t let the page steer focus — use the camera app.';
+
+    setTimeout(() => { if (this.scan) this.scan.focusAt = null; }, 700);
   },
 
   /** Put the live loop back after a photo attempt that didn't resolve. */

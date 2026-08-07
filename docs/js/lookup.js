@@ -88,39 +88,77 @@ async function fetchJson(url) {
  */
 function toDraft(product, code) {
   const n = product.nutriments ?? {};
-  const serving = servingBasis(product, n);
-  const per = serving ? '_serving' : '_100g';
+  const size = parseServing(product);
+  const basis = servingBasis(n, size);
 
   return {
     barcode: code,
     name: (product.product_name || product.generic_name || '').trim() || `Barcode ${code}`,
     brand: firstBrand(product.brands),
-    serving_qty: serving ? serving.qty : 100,
-    serving_unit: serving ? serving.unit : 'g',
-    calories: num(n[`energy-kcal${per}`]) ?? kjToKcal(n[`energy${per}`]),
-    protein_g: num(n[`proteins${per}`]),
-    carbs_g: num(n[`carbohydrates${per}`]),
-    fat_g: num(n[`fat${per}`]),
-    fiber_g: num(n[`fiber${per}`]),
-    sodium_mg: sodiumMg(n, per),
-    basis: serving ? serving.label : 'per 100 g',
+    serving_qty: basis.qty,
+    serving_unit: basis.unit,
+    calories: basis.read('energy-kcal') ?? kjToKcal(basis.raw('energy')),
+    protein_g: basis.read('proteins'),
+    carbs_g: basis.read('carbohydrates'),
+    fat_g: basis.read('fat'),
+    fiber_g: basis.read('fiber'),
+    sodium_mg: sodiumMg(basis),
+    basis: basis.label,
     source: 'off',
   };
 }
 
 /**
- * The serving OFF recorded, or null to fall back to per-100g.
+ * Which numbers to read, and how to get them onto one serving.
  *
- * Requires both a parseable size and per-serving calories — a serving size with
- * no serving nutriments would otherwise pair the label's quantity with 100g
- * macros, which is worse than either basis on its own.
+ * Three tiers, because OFF is inconsistent about what it stores:
+ *
+ *  1. Per-serving nutriments exist — read them straight.
+ *  2. Only per-100g, but the serving size is known in g or ml — scale. This is
+ *     exact arithmetic, not an estimate, and it is the common case: most OFF
+ *     entries carry `serving_size` but populate only the `_100g` keys. Gating on
+ *     per-serving nutriments alone sent nearly everything to the 100g fallback,
+ *     which is the bug this tier fixes.
+ *  3. No usable serving size at all — per 100g, honestly labelled.
  */
-function servingBasis(product, n) {
-  const kcal = num(n['energy-kcal_serving']) ?? kjToKcal(n.energy_serving);
-  if (kcal == null) return null;
+function servingBasis(n, size) {
+  const perServing = num(n['energy-kcal_serving']) ?? kjToKcal(n.energy_serving);
 
-  const size = parseServing(product);
-  return size && size.qty > 0 ? size : null;
+  if (size && perServing != null) {
+    return {
+      qty: size.qty,
+      unit: size.unit,
+      label: size.label,
+      raw: (key) => n[`${key}_serving`],
+      read: (key) => num(n[`${key}_serving`]),
+    };
+  }
+
+  // Scaling only holds for a mass or volume. A "1 biscuit" serving with no
+  // gram weight cannot be derived from a per-100g figure.
+  if (size && (size.unit === 'g' || size.unit === 'ml')) {
+    const factor = size.qty / 100;
+    return {
+      qty: size.qty,
+      unit: size.unit,
+      label: size.label,
+      raw: (key) => scale(n[`${key}_100g`], factor),
+      read: (key) => num(scale(n[`${key}_100g`], factor)),
+    };
+  }
+
+  return {
+    qty: 100,
+    unit: 'g',
+    label: 'per 100 g',
+    raw: (key) => n[`${key}_100g`],
+    read: (key) => num(n[`${key}_100g`]),
+  };
+}
+
+function scale(value, factor) {
+  const v = Number(value);
+  return Number.isFinite(v) ? v * factor : null;
 }
 
 /**
@@ -165,18 +203,19 @@ function kjToKcal(kj) {
  * is 43 mg — displaying the raw gram figure rounds it to zero, which is why this
  * conversion happens at the mapping layer rather than in the view.
  */
-function sodiumMg(n, per = '_100g') {
-  // Deliberately not num(): its 1-decimal rounding happens in grams, where it
-  // is catastrophic. Nutella's 0.0428 g would round to 0.0 and report 0 mg.
-  const raw = (key) => {
-    const v = Number(n[key]);
+function sodiumMg(basis) {
+  // basis.raw, not basis.read: read()'s 1-decimal rounding happens in grams,
+  // where it is catastrophic. Nutella's 0.0428 g would round to 0.0 and report
+  // 0 mg. Rounding belongs after the conversion, not before it.
+  const grams = (key) => {
+    const v = Number(basis.raw(key));
     return Number.isFinite(v) ? v : null;
   };
 
-  const sodium = raw(`sodium${per}`);
+  const sodium = grams('sodium');
   if (sodium != null) return Math.round(sodium * 1000);
 
-  const salt = raw(`salt${per}`);
+  const salt = grams('salt');
   return salt == null ? null : Math.round((salt / 2.5) * 1000);
 }
 

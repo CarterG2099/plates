@@ -369,9 +369,13 @@
               <div class="grabber"></div>
               <div class="card-label">Scan a barcode</div>
 
-              <div class="viewfinder">
+              <!-- Tap anywhere to focus there, as in a camera app. -->
+              <div class="viewfinder" @click="focusHere($event)">
                 <video x-ref="video" playsinline muted autoplay></video>
                 <div class="reticle" aria-hidden="true"></div>
+                <div class="focus-ping" x-show="scan.focusAt" x-cloak
+                     :style="`left:${scan.focusAt?.left}%; top:${scan.focusAt?.top}%`"
+                     aria-hidden="true"></div>
               </div>
 
               <p class="prefill" x-show="scan.message" x-text="scan.message"></p>

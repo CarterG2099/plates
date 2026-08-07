@@ -44,10 +44,10 @@ export async function start(video) {
         facingMode: { ideal: 'environment' },
         width: { ideal: 1920 },      // barcodes are small; resolution is what decodes them
         height: { ideal: 1080 },
-        // A getUserMedia stream does NOT inherit the camera app's autofocus.
-        // Without asking, many devices hand back a fixed-focus stream, which is
-        // why a barcode that the system camera nails stays blurred here.
-        focusMode: 'continuous',
+        // focusMode deliberately NOT requested here. As a basic constraint it is
+        // required, so a device without focus control fails the whole call and
+        // you get no camera at all. Focus is asked for on the live track below,
+        // where a refusal costs nothing.
       },
       audio: false,
     });
@@ -78,33 +78,70 @@ export function stop(video) {
   zxingReader = null;
 }
 
+const videoTrack = () => stream?.getVideoTracks?.()[0] ?? null;
+
 /**
- * Ask the track for continuous autofocus after the fact.
+ * Ask the track for autofocus after the fact.
  *
- * The initial constraint is advisory and widely ignored; applying it to the live
- * track is what actually engages autofocus where the platform supports it. iOS
- * Safari exposes no focus control at all — hence the camera-app fallback.
+ * `focusDistance` is NOT a hint — it is the manual-focus control, and setting it
+ * takes the camera out of autofocus and pins it at that distance. This function
+ * used to request continuous mode and then immediately set focusDistance to the
+ * near limit, which overrode the autofocus it had just asked for and left every
+ * frame fixed at minimum range. That is why Android never focused while the
+ * camera app, which does nothing of the sort, focused fine.
  *
- * @returns {Promise<'continuous'|'unavailable'>}
+ * The applied mode is read back from getSettings() rather than assumed, because
+ * applyConstraints resolves happily having satisfied nothing in `advanced`.
+ *
+ * @returns {Promise<'continuous'|'single-shot'|'unavailable'>}
  */
 async function requestFocus() {
-  const track = stream?.getVideoTracks?.()[0];
-  const caps = track?.getCapabilities?.() ?? {};
+  const track = videoTrack();
+  const modes = track?.getCapabilities?.().focusMode ?? [];
 
-  const advanced = [];
-  if (caps.focusMode?.includes('continuous')) advanced.push({ focusMode: 'continuous' });
-  // Macro-ish: bias toward the near end of the focus range for a barcode in hand.
-  if (caps.focusDistance) advanced.push({ focusDistance: caps.focusDistance.min });
-
-  if (!advanced.length) return 'unavailable';
+  // Continuous first; single-shot is still far better than a fixed lens.
+  const wanted = ['continuous', 'single-shot'].find((m) => modes.includes(m));
+  if (!wanted) return 'unavailable';
 
   try {
-    await track.applyConstraints({ advanced });
-    return 'continuous';
+    await track.applyConstraints({ advanced: [{ focusMode: wanted }] });
   } catch {
     return 'unavailable';
   }
+
+  const applied = track.getSettings?.().focusMode;
+  return applied === 'continuous' || applied === 'single-shot' ? applied : 'unavailable';
 }
+
+/**
+ * Focus on a point in the frame, in normalised 0–1 coordinates.
+ *
+ * This is what tapping the preview does in a camera app. `pointsOfInterest`
+ * steers the existing autofocus rather than replacing it, so it composes with
+ * continuous mode instead of fighting it the way focusDistance did.
+ */
+export async function focusAt(x, y) {
+  const track = videoTrack();
+  const caps = track?.getCapabilities?.() ?? {};
+  if (!caps.pointsOfInterest) return false;
+
+  const point = { x: clamp01(x), y: clamp01(y) };
+
+  try {
+    await track.applyConstraints({ advanced: [{ pointsOfInterest: [point] }] });
+
+    // A single-shot camera needs re-triggering to act on the new point;
+    // continuous will pick it up on its own.
+    if (caps.focusMode?.includes('single-shot')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'single-shot', pointsOfInterest: [point] }] });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const clamp01 = (n) => Math.min(1, Math.max(0, Number(n) || 0));
 
 /**
  * Decode a photo taken with the system camera app.
