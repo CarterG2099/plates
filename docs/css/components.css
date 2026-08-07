@@ -294,24 +294,26 @@
  * dumbbell or a cable, and inventing 150 individual animations would be wrong
  * more often than right. */
 
-.mm-arm   { transform-origin: 34px 47px; }   /* shoulder */
-.mm-fore  { transform-origin: 33px 89px; }   /* elbow */
+/* Pivots sit at the JOINT — where the segment meets its parent — not at the
+   middle of the segment. Getting this wrong tears the limb off the body. */
+.mm-arm   { transform-origin: 40px 48px; }   /* shoulder */
+.mm-fore  { transform-origin: 34px 88px; }   /* elbow */
 .mm-thigh { transform-origin: 50px 99px; }   /* hip */
 .mm-shin  { transform-origin: 51px 153px; }  /* knee */
 .mm-torso { transform-origin: 60px 97px; }   /* pelvis */
 
-@keyframes mv-curl      { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-78deg); } }
-@keyframes mv-extend    { 0%, 100% { transform: rotate(-70deg);  } 55% { transform: rotate(0deg);   } }
-@keyframes mv-press     { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-38deg); } }
-@keyframes mv-press-fore{ 0%, 100% { transform: rotate(-95deg);  } 55% { transform: rotate(0deg);   } }
-@keyframes mv-raise     { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-72deg); } }
-@keyframes mv-pull      { 0%, 100% { transform: rotate(-46deg);  } 55% { transform: rotate(4deg);   } }
-@keyframes mv-pull-fore { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-52deg); } }
+@keyframes mv-curl      { 0%, 100% { transform: rotate(-4deg);   } 55% { transform: rotate(-95deg); } }
+@keyframes mv-extend    { 0%, 100% { transform: rotate(-85deg);  } 55% { transform: rotate(-4deg);  } }
+@keyframes mv-press     { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-16deg); } }
+@keyframes mv-press-fore{ 0%, 100% { transform: rotate(-88deg);  } 55% { transform: rotate(-14deg); } }
+@keyframes mv-raise     { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-22deg); } }
+@keyframes mv-pull      { 0%, 100% { transform: rotate(-10deg);  } 55% { transform: rotate(10deg);  } }
+@keyframes mv-pull-fore { 0%, 100% { transform: rotate(-6deg);   } 55% { transform: rotate(-46deg); } }
 @keyframes mv-dip       { 0%, 100% { transform: translateY(0);   } 55% { transform: translateY(13px); } }
 @keyframes mv-knee      { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(9deg);  } }
 @keyframes mv-fold      { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-13deg); } }
 @keyframes mv-rise      { 0%, 100% { transform: translateY(0);   } 55% { transform: translateY(-6px); } }
-@keyframes mv-bench     { 0%, 100% { transform: rotate(26deg);   } 55% { transform: rotate(-4deg);  } }
+@keyframes mv-bench     { 0%, 100% { transform: rotate(18deg);   } 55% { transform: rotate(-6deg);  } }
 
 .mm [class^="mm-"] { animation-duration: 2.2s; animation-timing-function: ease-in-out;
                      animation-iteration-count: infinite; }
