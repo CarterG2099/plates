@@ -30,6 +30,9 @@ const ENDPOINTS = [
   (code) => `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`,
 ];
 
+const SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
+const SEARCH_PAGE_SIZE = 25;
+
 const TIMEOUT_MS = 6000;
 
 /** Macros we need to consider a lookup usable without hand-editing. */
@@ -60,6 +63,49 @@ export async function lookupBarcode(code) {
   }
 
   return { status: 'error', message: lastError?.message ?? 'Lookup failed.' };
+}
+
+/**
+ * Search Open Food Facts by name.
+ *
+ * OFF is crowd-sourced, which is exactly why it is worth asking: US store
+ * brands get added by whoever scanned them, and that is the coverage USDA's
+ * manufacturer-submitted Branded set is weakest on. It also needs no key, so it
+ * runs here in the browser rather than through the Edge Function.
+ *
+ * A failure returns an empty list rather than throwing. This runs alongside the
+ * USDA lookup and must never take that down with it.
+ */
+export async function searchByName(query) {
+  const term = query.trim();
+  if (!term || !navigator.onLine) return [];
+
+  const url = `${SEARCH_URL}?search_terms=${encodeURIComponent(term)}`
+    + `&search_simple=1&action=process&json=1`
+    + `&page_size=${SEARCH_PAGE_SIZE}&fields=${FIELDS}`;
+
+  let data;
+  try {
+    data = await fetchJson(url);
+  } catch {
+    return [];
+  }
+
+  const products = Array.isArray(data?.products) ? data.products : [];
+
+  return products
+    // No name is unusable, and OFF has plenty of half-entered products.
+    .filter((p) => (p.product_name || p.generic_name || '').trim())
+    .map((product) => {
+      const draft = toDraft(product, product.code ?? null);
+      return {
+        draft,
+        missing: REQUIRED.filter((k) => draft[k] == null),
+        source: 'Open Food Facts',
+      };
+    })
+    // Nothing with no calories at all — those are stubs someone photographed.
+    .filter((r) => r.draft.calories != null);
 }
 
 async function fetchJson(url) {

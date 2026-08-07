@@ -12,7 +12,7 @@ import { supabase, signIn, signOut, loadMembership, describeError } from './supa
 import * as local from './local.js';
 import * as sync from './sync.js';
 import * as food from './food.js';
-import { lookupBarcode } from './lookup.js';
+import { lookupBarcode, searchByName as lookupByNameOff } from './lookup.js';
 import * as scanner from './scanner.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
@@ -1046,20 +1046,52 @@ Alpine.data('logPage', () => ({
     };
   },
 
+  /**
+   * Both sources at once, merged into one ranked list.
+   *
+   * USDA's Branded set is manufacturer-submitted, so store brands are patchy —
+   * Great Value milk simply is not in it. Open Food Facts is crowd-sourced and
+   * covers exactly that gap, and its ODbL licence permits storing what it
+   * returns, which is what makes it usable in a local-first app at all.
+   *
+   * Neither is allowed to take the other down: each is caught separately, and
+   * one source failing still returns the other's results.
+   */
   async lookupByName(term) {
-    const { data, error } = await supabase.functions.invoke('lookup-usda', { body: { query: term } });
-    if (error) throw error;
+    const [usda, off] = await Promise.all([
+      supabase.functions.invoke('lookup-usda', { body: { query: term } })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return {
+            results: (data.results ?? []).map((r) => ({
+              draft: r.draft,
+              missing: r.missing ?? [],
+              source: r.dataType ?? 'USDA',
+            })),
+            // Words that matched nothing at all. Almost always a typo, and
+            // without saying so the results look confident rather than wrong.
+            unmatched: data.unmatched ?? [],
+            error: data.error ?? '',
+          };
+        })
+        .catch((e) => ({ results: [], unmatched: [], error: e.message ?? String(e) })),
+
+      lookupByNameOff(term).catch(() => []),
+    ]);
+
+    // USDA first on a collision: its values are lab-measured or label-verified,
+    // where OFF is whatever the last person to scan it typed in.
+    const results = food.mergeDrafts([usda.results, off], term);
 
     return {
-      results: (data.results ?? []).map((r) => ({
-        draft: r.draft,
-        missing: r.missing ?? [],
-        source: r.dataType ?? 'USDA',
-      })),
-      // Words that matched nothing at all. Almost always a typo, and without
-      // saying so the results look confident rather than wrong.
-      unmatched: data.unmatched ?? [],
-      error: data.error ?? '',
+      results,
+      // Only trust the typo hint when USDA actually answered, and only when the
+      // word is missing from OFF's results too.
+      unmatched: usda.error ? [] : (usda.unmatched ?? []).filter(
+        (t) => !off.some((r) => `${r.draft.name} ${r.draft.brand ?? ''}`.toLowerCase().includes(t)),
+      ),
+      // Only an error if it left us with nothing to show.
+      error: results.length ? '' : usda.error,
     };
   },
 

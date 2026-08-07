@@ -263,12 +263,79 @@ export function searchFoods(ranked, term) {
     .sort((a, b) => (b.score - a.score) || a.name.localeCompare(b.name));
 }
 
+/**
+ * Score a lookup result against a query.
+ *
+ * Deliberately the same rules as the USDA Edge Function's scoreAgainst — head
+ * noun dominant, coverage as a multiplier, brand matches worth less than name
+ * matches, padding penalised. USDA and Open Food Facts results are merged into
+ * one list, so they have to be ordered by one yardstick; scoring both here is
+ * what makes that list coherent rather than two sorted lists stapled together.
+ */
+export function scoreDraft(terms, draft) {
+  const name = (draft.name ?? '').toLowerCase();
+  const brand = (draft.brand ?? '').toLowerCase();
+
+  const words = name.split(/[^a-z0-9%.]+/).filter(Boolean);
+  const head = words[0] ?? '';
+  const tail = words[words.length - 1] ?? '';
+
+  let inName = 0;
+  let inBrand = 0;
+  for (const term of terms) {
+    if (brand && brand.includes(term)) inBrand += 1;
+    else if (name.includes(term)) inName += 1;
+  }
+
+  const matched = inName + inBrand;
+  if (!matched) return 0;
+
+  let score = inName * 12 + inBrand * 5;
+
+  // A branded name is natural English and ends on its head noun; USDA's own
+  // descriptions invert it. Only branded rows get the tail checked.
+  const heads = brand ? [head, tail] : [head];
+  const headable = terms.filter((t) => !(brand && brand.includes(t)));
+  if (headable.some((t) => heads.some((h) => h && (h.startsWith(t) || (t.length > 3 && t.startsWith(h)))))) {
+    score += 45;
+  }
+
+  score -= Math.min(Math.max(words.length - matched, 0), 14) * 2;
+
+  return Math.max(score, 0) * (matched / terms.length) ** 1.5;
+}
+
 /** Does this food already cover what a lookup returned? */
 export function matchesDraft(food, draft) {
   if (draft.barcode && food.barcode && String(food.barcode) === String(draft.barcode)) return true;
 
   const norm = (s) => (s ?? '').trim().toLowerCase();
   return norm(food.name) === norm(draft.name) && norm(food.brand) === norm(draft.brand);
+}
+
+/**
+ * Merge results from more than one source into one ranked list.
+ *
+ * The same product often exists in both USDA and Open Food Facts — the same
+ * barcode, or the same name and brand — and showing it twice makes the list
+ * look broken. Earlier sources win a collision, so pass the better-trusted one
+ * first.
+ */
+export function mergeDrafts(groups, term) {
+  const terms = term.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const seen = [];
+
+  for (const group of groups) {
+    for (const result of group) {
+      if (seen.some((kept) => matchesDraft(kept.draft, result.draft))) continue;
+      seen.push(result);
+    }
+  }
+
+  return seen
+    .map((r) => ({ ...r, score: scoreDraft(terms, r.draft) }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score);
 }
 
 // ---- scaling ---------------------------------------------------------------
