@@ -84,6 +84,11 @@ create table if not exists plates.foods (
   brand         text,
   serving_qty   numeric not null default 100,
   serving_unit  text    not null default 'g',
+  -- How much you normally eat, which is NOT the basis the macros are stored
+  -- against. OFF publishes nutriments per 100 g for most products but also
+  -- publishes the label serving; serving_qty has to stay consistent with the
+  -- macros, so the serving gets its own column. Null falls back to serving_qty.
+  default_qty   numeric,
   calories      numeric,
   protein_g     numeric,
   carbs_g       numeric,

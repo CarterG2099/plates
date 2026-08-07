@@ -509,6 +509,7 @@ function blankDraft(name = '') {
     barcode: null,
     serving_qty: 100,
     serving_unit: 'g',
+    default_qty: null,
     calories: '',
     protein_g: '',
     carbs_g: '',
@@ -568,7 +569,7 @@ Alpine.data('logPage', () => ({
 
   /** The one-tap path: log at the amount you last used for this food. */
   async quickLog(item) {
-    const quantity = item.lastQuantity ?? item.serving_qty ?? 1;
+    const quantity = item.lastQuantity ?? item.default_qty ?? item.serving_qty ?? 1;
     await food.logFood({
       food: item,
       quantity,
@@ -602,7 +603,9 @@ Alpine.data('logPage', () => ({
   openSheet(item) {
     this.sheet = {
       food: item,
-      quantity: item.lastQuantity ?? item.serving_qty ?? 1,
+      // What you ate last wins; then the label's serving; then the basis the
+      // macros are stored against, which is only a sensible amount by accident.
+      quantity: item.lastQuantity ?? item.default_qty ?? item.serving_qty ?? 1,
       unit: item.lastUnit ?? item.serving_unit ?? 'g',
       prefilled: item.lastQuantity != null,
     };
@@ -788,15 +791,59 @@ Alpine.data('logPage', () => ({
     });
   },
 
-  /** Shared by the live loop and the camera-app photo. */
-  acceptCode(code) {
+  /**
+   * Shared by the live loop and the camera-app photo.
+   *
+   * A scan goes straight to the quantity sheet, so the whole gesture is: point
+   * the camera, press Add. It used to require tapping the result, then Save on a
+   * review form, then Add — three taps to log something the app had already
+   * identified.
+   *
+   * The review form is still there, but only when it earns its place: a product
+   * the app has never seen AND whose macros came back incomplete. Reviewing a
+   * result that is already complete is a confirmation step with nothing to
+   * confirm.
+   */
+  async acceptCode(code) {
     if (navigator.vibrate) navigator.vibrate(40);
     this.closeScanner();
-
-    // Just fill the search box. If you already own this barcode it ranks first
-    // locally and no lookup is needed; if you don't, the online group fills in.
     this.term = code;
-    this.runOnlineSearch(code);      // immediately — a scan is not a keystroke
+
+    // Already yours: no lookup, no write, straight to the amount.
+    const mine = this.data.foods.find(
+      (f) => !f.deleted_at && f.barcode && String(f.barcode) === code,
+    );
+    if (mine) {
+      const ranked = this.ranked.find((f) => f.id === mine.id) ?? mine;
+      this.openSheet(ranked);
+      return;
+    }
+
+    this.online = { status: 'searching', results: [], error: '', term: code };
+    const gen = ++this._onlineGen;
+
+    let found;
+    try {
+      found = await this.lookupByBarcode(code);
+    } catch (e) {
+      found = { results: [], error: e.message ?? String(e) };
+    }
+    if (gen !== this._onlineGen) return;
+
+    this.online = { status: 'done', ...found, term: code };
+
+    const hit = found.results[0];
+    if (!hit) return;                       // nothing found; the row area explains
+
+    if (hit.missing.length) {
+      this.acceptLookup(hit);               // gaps to fill — review it
+      return;
+    }
+
+    const saved = await this.persistDraft({ ...blankDraft(''), ...hit.draft });
+    this.term = '';
+    await Alpine.store('data').refresh();
+    this.openSheet({ ...saved, lastQuantity: null, lastUnit: null });
   },
 
   /** A photo from the system camera app, which focuses properly. */
@@ -891,10 +938,21 @@ Alpine.data('logPage', () => ({
   },
 
   async saveDraft() {
-    const d = this.draft;
+    const saved = await this.persistDraft(this.draft);
+
+    this.cancelCreate();
+    this.term = '';
+    await Alpine.store('data').refresh();
+
+    // Straight into the quantity sheet — you added it because you're eating it.
+    this.openSheet({ ...saved, lastQuantity: null, lastUnit: null });
+  },
+
+  /** The write itself, shared with the scan path which skips the review form. */
+  async persistDraft(d) {
     const numeric = (v) => (v === '' || v == null ? null : Number(v));
 
-    const saved = await food.saveFood({
+    return food.saveFood({
       name: d.name.trim(),
       brand: (d.brand ?? '').trim() || null,
       // No external_id here: plates.foods has no such column. The barcode is the
@@ -903,6 +961,7 @@ Alpine.data('logPage', () => ({
       barcode: d.barcode || null,
       serving_qty: Number(d.serving_qty),
       serving_unit: d.serving_unit.trim() || 'g',
+      default_qty: d.default_qty == null || d.default_qty === '' ? null : Number(d.default_qty),
       calories: numeric(d.calories),
       protein_g: numeric(d.protein_g),
       carbs_g: numeric(d.carbs_g),
@@ -911,13 +970,6 @@ Alpine.data('logPage', () => ({
       sodium_mg: numeric(d.sodium_mg),
       source: d.source ?? 'manual',
     }, this.email);
-
-    this.cancelCreate();
-    this.term = '';
-    await Alpine.store('data').refresh();
-
-    // Straight into the quantity sheet — you added it because you're eating it.
-    this.openSheet({ ...saved, lastQuantity: null, lastUnit: null });
   },
 }));
 

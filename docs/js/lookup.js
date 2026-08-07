@@ -98,6 +98,10 @@ function toDraft(product, code) {
     brand: firstBrand(product.brands),
     serving_qty: basis.qty,
     serving_unit: basis.unit,
+    // What the label calls a serving. Separate from serving_qty because the
+    // macros above are measured against that basis and must stay consistent
+    // with it — this is only the amount to prefill when you log the food.
+    default_qty: size && size.unit === basis.unit ? size.qty : null,
     calories: basis.read('energy-kcal') ?? kjToKcal(basis.raw('energy')),
     protein_g: basis.read('proteins'),
     carbs_g: basis.read('carbohydrates'),
