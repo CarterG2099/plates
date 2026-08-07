@@ -347,6 +347,12 @@
                 <span x-show="scan.status !== 'reading'">Capture</span>
               </button>
 
+              <label class="btn btn-block" style="cursor:pointer">
+                Use camera app
+                <input type="file" accept="image/*" capture="environment"
+                       @change="decodePhoto($event)" hidden>
+              </label>
+
               <button class="btn btn-ghost btn-block" @click="closeScanner(); startCreate()">
                 Add by hand instead
               </button>
@@ -514,7 +520,8 @@
       </main>
 
       <!-- Train / Stats ---------------------------------------------------- -->
-      <main class="app-main" x-data="trainPage" x-show="$store.ui.view === 'train'">
+      <template x-if="$store.ui.view === 'train'">
+      <main class="app-main" x-data="trainPage">
 
         <!-- No workout running ---------------------------------------------- -->
         <template x-if="!session">
@@ -862,8 +869,10 @@
           </div>
         </template>
       </main>
+      </template>
 
-      <main class="app-main" x-data="statsPage" x-show="$store.ui.view === 'stats'">
+      <template x-if="$store.ui.view === 'stats'">
+      <main class="app-main" x-data="statsPage">
 
         <!-- Targets ---------------------------------------------------------- -->
         <div class="card">
@@ -1093,6 +1102,7 @@
           </div>
         </template>
       </main>
+      </template>
 
       <!-- Status + nav ----------------------------------------------------- -->
       <div class="app-main" style="flex: none; padding-bottom: var(--space-3);">

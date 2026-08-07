@@ -119,8 +119,10 @@ Alpine.store('auth', {
     );
 
     if (isMember) {
-      await Alpine.store('data').refresh();
+      // Paint Today, then fill in training in the background.
+      await Alpine.store('data').refreshCore();
       sync.start();
+      Alpine.store('data').refreshTraining();
     }
   },
 
@@ -637,8 +639,44 @@ Alpine.data('logPage', () => ({
 
     const result = await scanner.start(video);
     this.scan = result.ok
-      ? { status: 'ready', message: '', decoder: result.decoder }
+      ? {
+          status: 'ready',
+          decoder: result.decoder,
+          // Say so rather than letting it look broken: on iOS there is no focus
+          // control, and the camera app is the answer.
+          message: result.focus === 'unavailable'
+            ? 'This browser can’t control focus — use the camera app if it won’t read.'
+            : '',
+        }
       : { status: 'error', message: result.reason, decoder: '' };
+  },
+
+  /** A photo from the system camera app, which focuses properly. */
+  async decodePhoto(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    this.scan = { ...(this.scan ?? {}), status: 'reading', message: '' };
+
+    let code = null;
+    try {
+      code = await scanner.decodeImageFile(file);
+    } catch (e) {
+      this.scan = { status: 'error', message: e.message, decoder: '' };
+      return;
+    }
+
+    if (!code) {
+      this.scan = { ...(this.scan ?? {}), status: 'ready',
+                    message: 'No barcode in that photo — fill the frame and try again.' };
+      return;
+    }
+
+    if (navigator.vibrate) navigator.vibrate(40);
+    this.closeScanner();
+    this.term = code;
+    await this.searchOnline();
   },
 
   closeScanner() {

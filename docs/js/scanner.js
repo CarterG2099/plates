@@ -39,6 +39,10 @@ export async function start(video) {
         facingMode: { ideal: 'environment' },
         width: { ideal: 1920 },      // barcodes are small; resolution is what decodes them
         height: { ideal: 1080 },
+        // A getUserMedia stream does NOT inherit the camera app's autofocus.
+        // Without asking, many devices hand back a fixed-focus stream, which is
+        // why a barcode that the system camera nails stays blurred here.
+        focusMode: 'continuous',
       },
       audio: false,
     });
@@ -53,7 +57,8 @@ export async function start(video) {
   video.setAttribute('playsinline', '');   // iOS refuses to inline-play without it
   await video.play();
 
-  return { ok: true, decoder: await prepareDecoder() };
+  const focus = await requestFocus();
+  return { ok: true, decoder: await prepareDecoder(), focus };
 }
 
 export function stop(video) {
@@ -65,6 +70,64 @@ export function stop(video) {
 
   try { zxingReader?.reset(); } catch { /* older builds differ */ }
   zxingReader = null;
+}
+
+/**
+ * Ask the track for continuous autofocus after the fact.
+ *
+ * The initial constraint is advisory and widely ignored; applying it to the live
+ * track is what actually engages autofocus where the platform supports it. iOS
+ * Safari exposes no focus control at all — hence the camera-app fallback.
+ *
+ * @returns {Promise<'continuous'|'unavailable'>}
+ */
+async function requestFocus() {
+  const track = stream?.getVideoTracks?.()[0];
+  const caps = track?.getCapabilities?.() ?? {};
+
+  const advanced = [];
+  if (caps.focusMode?.includes('continuous')) advanced.push({ focusMode: 'continuous' });
+  // Macro-ish: bias toward the near end of the focus range for a barcode in hand.
+  if (caps.focusDistance) advanced.push({ focusDistance: caps.focusDistance.min });
+
+  if (!advanced.length) return 'unavailable';
+
+  try {
+    await track.applyConstraints({ advanced });
+    return 'continuous';
+  } catch {
+    return 'unavailable';
+  }
+}
+
+/**
+ * Decode a photo taken with the system camera app.
+ *
+ * `<input capture>` hands the shot to the real camera UI — tap-to-focus, macro,
+ * the lot — and gives back a still. On iOS, where getUserMedia has no focus
+ * control, this is simply the better instrument.
+ */
+export async function decodeImageFile(file) {
+  if (!file) return null;
+
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+
+  if (typeof window.BarcodeDetector !== 'undefined') {
+    try {
+      const supported = await window.BarcodeDetector.getSupportedFormats();
+      const formats = FORMATS.filter((f) => supported.includes(f));
+      if (formats.length) {
+        const codes = await new window.BarcodeDetector({ formats }).detect(canvas);
+        if (codes?.length) return codes[0].rawValue;
+      }
+    } catch { /* fall through to ZXing */ }
+  }
+  return decodeWithZxing(canvas);
 }
 
 async function prepareDecoder() {
