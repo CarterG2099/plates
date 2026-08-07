@@ -142,26 +142,39 @@ export function lastEntryForFood(log, ownerEmail, foodId, date = new Date()) {
 
 // ---- ranking ---------------------------------------------------------------
 
-const RANK_WINDOW_DAYS = 90;
+const RANK_WINDOW_DAYS = 180;
+const HALF_LIFE_DAYS = 21;
+
+const DAY_MS = 86400_000;
 
 /**
- * Your foods, ordered by how often you actually eat them.
+ * Your foods, ordered by how much you're eating them *now*.
  *
- * This is the screen that decides whether the app gets used, so it is computed
- * entirely from the local log — no query, no round trip, and correct offline.
- * Recency breaks ties so a food you ate this morning outranks one you ate
- * equally often but months ago.
+ * Each log entry is worth 0.5^(age / half-life) rather than a flat 1, so the
+ * ordering follows the phase you're in. A raw count lets something you ate ten
+ * times in March sit above what you've eaten three times this week, and the
+ * staples rotate often enough that this was visibly wrong.
+ *
+ * Computed entirely from the local log — no query, no round trip, correct
+ * offline. This is the screen that decides whether the app gets used.
  */
 export function rankFoods(foods, log, ownerEmail) {
-  const cutoff = Date.now() - RANK_WINDOW_DAYS * 86400_000;
+  const now = Date.now();
+  const cutoff = now - RANK_WINDOW_DAYS * DAY_MS;
 
   const stats = new Map();
   for (const e of log) {
     if (e.owner_email !== ownerEmail || e.deleted_at || !e.food_id) continue;
-    if (new Date(e.logged_at).getTime() < cutoff) continue;
 
-    const s = stats.get(e.food_id) ?? { count: 0, last: '', quantity: null, unit: null };
+    const at = new Date(e.logged_at).getTime();
+    if (!(at >= cutoff)) continue;      // also rejects an unparseable date
+
+    const s = stats.get(e.food_id)
+      ?? { count: 0, frecency: 0, last: '', quantity: null, unit: null };
+
     s.count += 1;
+    s.frecency += 0.5 ** ((now - at) / (HALF_LIFE_DAYS * DAY_MS));
+
     if (e.logged_at > s.last) {
       s.last = e.logged_at;
       s.quantity = e.quantity;
@@ -177,26 +190,56 @@ export function rankFoods(foods, log, ownerEmail) {
       return {
         ...f,
         count: s?.count ?? 0,
+        frecency: s?.frecency ?? 0,
         lastLoggedAt: s?.last ?? null,
         lastQuantity: s?.quantity ?? null,
         lastUnit: s?.unit ?? null,
       };
     })
-    .sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count;
-      if (a.lastLoggedAt && b.lastLoggedAt) return a.lastLoggedAt < b.lastLoggedAt ? 1 : -1;
-      if (a.lastLoggedAt) return -1;
-      if (b.lastLoggedAt) return 1;
-      return a.name.localeCompare(b.name);
-    });
+    .sort((a, b) => (b.frecency - a.frecency) || a.name.localeCompare(b.name));
 }
 
-/** Local substring search. Nothing here is worth a network call. */
+/**
+ * How well a food answers what you typed.
+ *
+ * A plain `includes()` scored "Rolled Oats" and "Chocolate Oatmeal Bar" the
+ * same for "oat", leaving history to break a tie that text should have won.
+ * These weights multiply frecency, so a staple beats a one-off within a tier
+ * while a weak text match can never win on history alone.
+ */
+const WEIGHT = { barcode: 100, exact: 100, prefix: 40, word: 20, substring: 8, brand: 4 };
+
+function matchWeight(food, q) {
+  // A scanned code you already own must beat anything the internet offers.
+  if (food.barcode && String(food.barcode) === q) return WEIGHT.barcode;
+
+  const name = (food.name ?? '').toLowerCase();
+  if (name === q) return WEIGHT.exact;
+  if (name.startsWith(q)) return WEIGHT.prefix;
+  if (name.split(/[\s\-(,/]+/).some((w) => w.startsWith(q))) return WEIGHT.word;
+  if (name.includes(q)) return WEIGHT.substring;
+
+  return (food.brand ?? '').toLowerCase().includes(q) ? WEIGHT.brand : 0;
+}
+
+/** Local search. Nothing here is worth a network call. */
 export function searchFoods(ranked, term) {
   const q = term.trim().toLowerCase();
   if (!q) return ranked;
-  return ranked.filter((f) =>
-    f.name.toLowerCase().includes(q) || (f.brand ?? '').toLowerCase().includes(q));
+
+  return ranked
+    .map((f) => ({ food: f, weight: matchWeight(f, q) }))
+    .filter((m) => m.weight > 0)
+    .map((m) => ({ ...m.food, score: m.weight * (1 + m.food.frecency) }))
+    .sort((a, b) => (b.score - a.score) || a.name.localeCompare(b.name));
+}
+
+/** Does this food already cover what a lookup returned? */
+export function matchesDraft(food, draft) {
+  if (draft.barcode && food.barcode && String(food.barcode) === String(draft.barcode)) return true;
+
+  const norm = (s) => (s ?? '').trim().toLowerCase();
+  return norm(food.name) === norm(draft.name) && norm(food.brand) === norm(draft.brand);
 }
 
 // ---- scaling ---------------------------------------------------------------

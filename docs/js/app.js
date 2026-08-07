@@ -521,10 +521,13 @@ function blankDraft(name = '') {
 
 Alpine.data('logPage', () => ({
   term: '',
-  filter: 'frequent',
+  filter: '',       // '' | 'recent' | 'mine'
   sheet: null,      // { food, quantity, unit }
   creating: false,
   draft: null,
+
+  _onlineTimer: null,
+  _onlineGen: 0,
 
   init() {
     // Today's camera button raises this flag; the panel it opens is where the
@@ -534,6 +537,10 @@ Alpine.data('logPage', () => ({
       Alpine.store('ui').scanRequested = false;
       this.openScanner();
     });
+
+    // One search box. Local results are already reactive off `term`; this runs
+    // the network half behind them.
+    this.$watch('term', () => this.queueOnlineSearch());
   },
 
   get email() { return Alpine.store('auth').email; },
@@ -641,63 +648,108 @@ Alpine.data('logPage', () => ({
   },
 
   // ---- online lookup -------------------------------------------------------
-  // The cold path, for foods you've never eaten. Barcodes go to Open Food Facts
-  // straight from the browser; names go to USDA through the Edge Function, which
-  // holds the key. Either way the result is a draft you review, never a silent
-  // write — OFF is crowd-sourced and USDA's name matching is loose.
+  // Not a separate search. Your own foods render instantly from IndexedDB; this
+  // runs behind them and appends what the internet knows, so one query covers
+  // both. Barcodes go to Open Food Facts straight from the browser; names go to
+  // USDA through the Edge Function, which holds the key. Either way the result
+  // is a draft you review, never a silent write — OFF is crowd-sourced and
+  // USDA's name matching is loose.
 
-  lookup: null,   // { status, results, error }
+  online: { status: 'idle', results: [], error: '', term: '' },
 
   get looksLikeBarcode() {
     return /^\d{8,14}$/.test(this.term.trim());
   },
 
-  async searchOnline() {
-    const term = this.term.trim();
-    if (!term) return;
-
-    this.lookup = { status: 'searching', results: [], error: '' };
-
-    try {
-      if (this.looksLikeBarcode) {
-        const r = await lookupBarcode(term);
-
-        if (r.status === 'found') {
-          this.lookup = {
-            status: 'done',
-            results: [{ draft: r.draft, missing: r.missing, source: 'Open Food Facts' }],
-            error: '',
-          };
-        } else {
-          this.lookup = {
-            status: 'done',
-            results: [],
-            error: {
-              not_found: 'No product with that barcode. Try the name, or add it by hand.',
-              offline: 'Offline — lookup needs a connection. You can still add it by hand.',
-            }[r.status] ?? r.message ?? 'Lookup failed.',
-          };
-        }
-      } else {
-        const { data, error } = await supabase.functions.invoke('lookup-usda', { body: { query: term } });
-        if (error) throw error;
-
-        this.lookup = {
-          status: 'done',
-          results: (data.results ?? []).map((r) => ({
-            draft: r.draft,
-            missing: r.missing ?? [],
-            source: r.dataType ?? 'USDA',
-          })),
-          error: data.error ?? '',
-        };
-      }
-    } catch (e) {
-      this.lookup = { status: 'done', results: [], error: e.message ?? String(e) };
-    }
+  /**
+   * Online results that your own foods don't already cover.
+   *
+   * Deduped against the local list rather than merged into it: a lookup hit for
+   * something you already have is noise, and scanning a food you eat weekly
+   * should never offer to create a second copy of it.
+   */
+  get onlineResults() {
+    if (this.online.term !== this.term.trim()) return [];
+    const mine = this.results;
+    return this.online.results.filter((r) => !mine.some((f) => food.matchesDraft(f, r.draft)));
   },
 
-  closeLookup() { this.lookup = null; },
+  get onlineBusy() {
+    return this.online.status === 'searching' && this.online.term === this.term.trim();
+  },
+
+  /**
+   * Debounced so a network call isn't fired per keystroke, and generation-
+   * guarded so a slow response for "ch" can't land on top of results for
+   * "chicken".
+   */
+  queueOnlineSearch() {
+    clearTimeout(this._onlineTimer);
+    const term = this.term.trim();
+
+    // Already asked, or asking. Covers retyping the same word and the scanner,
+    // which fires its own immediate lookup the instant it reads a code.
+    if (term && term === this.online.term && this.online.status !== 'idle') return;
+
+    // Two characters match half your foods; there is nothing useful to ask for.
+    if (term.length < 3 && !this.looksLikeBarcode) {
+      this._onlineGen = (this._onlineGen ?? 0) + 1;
+      this.online = { status: 'idle', results: [], error: '', term: '' };
+      return;
+    }
+
+    this._onlineTimer = setTimeout(() => this.runOnlineSearch(term), 350);
+  },
+
+  async runOnlineSearch(term) {
+    if (!navigator.onLine) {
+      this.online = { status: 'done', results: [], error: '', term };
+      return;
+    }
+
+    const mine = ++this._onlineGen;
+    this.online = { status: 'searching', results: [], error: '', term };
+
+    let next;
+    try {
+      next = /^\d{8,14}$/.test(term)
+        ? await this.lookupByBarcode(term)
+        : await this.lookupByName(term);
+    } catch (e) {
+      next = { results: [], error: e.message ?? String(e) };
+    }
+
+    if (mine !== this._onlineGen) return;      // a newer search already started
+    this.online = { status: 'done', ...next, term };
+  },
+
+  async lookupByBarcode(term) {
+    const r = await lookupBarcode(term);
+    if (r.status === 'found') {
+      return { results: [{ draft: r.draft, missing: r.missing, source: 'Open Food Facts' }], error: '' };
+    }
+    return {
+      results: [],
+      error: {
+        not_found: 'No product with that barcode. Add it by hand.',
+        offline: '',
+      }[r.status] ?? r.message ?? 'Lookup failed.',
+    };
+  },
+
+  async lookupByName(term) {
+    const { data, error } = await supabase.functions.invoke('lookup-usda', { body: { query: term } });
+    if (error) throw error;
+
+    return {
+      results: (data.results ?? []).map((r) => ({
+        draft: r.draft,
+        missing: r.missing ?? [],
+        source: r.dataType ?? 'USDA',
+      })),
+      error: data.error ?? '',
+    };
+  },
 
   // ---- scanner -------------------------------------------------------------
 
@@ -735,14 +787,14 @@ Alpine.data('logPage', () => ({
   },
 
   /** Shared by the live loop and the camera-app photo. */
-  async acceptCode(code) {
+  acceptCode(code) {
     if (navigator.vibrate) navigator.vibrate(40);
     this.closeScanner();
 
-    // Hand straight to the existing lookup path: same results sheet, same
-    // review form, same manual fallback.
+    // Just fill the search box. If you already own this barcode it ranks first
+    // locally and no lookup is needed; if you don't, the online group fills in.
     this.term = code;
-    await this.searchOnline();
+    this.runOnlineSearch(code);      // immediately — a scan is not a keystroke
   },
 
   /** A photo from the system camera app, which focuses properly. */
@@ -792,7 +844,6 @@ Alpine.data('logPage', () => ({
   acceptLookup(result) {
     this.draft = { ...blankDraft(''), ...result.draft };
     this.creating = true;
-    this.lookup = null;
   },
 
   cancelCreate() { this.creating = false; this.draft = null; },

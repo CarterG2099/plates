@@ -270,9 +270,10 @@
         </div>
 
         <div class="chips">
-          <button class="chip" :class="filter === 'frequent' && 'is-active'" @click="filter = 'frequent'">Frequent</button>
-          <button class="chip" :class="filter === 'recent'   && 'is-active'" @click="filter = 'recent'">Recent</button>
-          <button class="chip" :class="filter === 'mine'     && 'is-active'" @click="filter = 'mine'">My foods</button>
+          <button class="chip" :class="filter === 'recent' && 'is-active'"
+                  @click="filter = filter === 'recent' ? '' : 'recent'">Recent</button>
+          <button class="chip" :class="filter === 'mine' && 'is-active'"
+                  @click="filter = filter === 'mine' ? '' : 'mine'">My foods</button>
         </div>
 
         <div class="section-head">
@@ -299,17 +300,45 @@
           </template>
         </div>
 
-        <template x-if="!results.length">
-          <p class="empty">
-            <span x-show="term">No match for “<span x-text="term"></span>”.</span>
-            <span x-show="!term">No foods yet — add the first one.</span>
-          </p>
+        <template x-if="!results.length && !term">
+          <p class="empty">No foods yet — add the first one.</p>
         </template>
 
-        <button class="btn btn-block" x-show="term" @click="searchOnline()">
-          <span x-show="looksLikeBarcode">Look up barcode <span x-text="term"></span></span>
-          <span x-show="!looksLikeBarcode">Search online for “<span x-text="term"></span>”</span>
-        </button>
+        <!-- The same search, continued. Your own foods are above; these arrive a
+             beat later and never reorder them. -->
+        <template x-if="term && (onlineBusy || onlineResults.length || online.error)">
+          <div>
+            <div class="section-head">
+              <span x-show="looksLikeBarcode">Open Food Facts</span>
+              <span x-show="!looksLikeBarcode">USDA FoodData Central</span>
+              <span x-show="onlineBusy" class="spinner" style="width:12px;height:12px"></span>
+            </div>
+
+            <div class="notice notice-error" x-show="online.error" x-text="online.error"></div>
+
+            <div class="rows">
+              <template x-for="(r, i) in onlineResults" :key="i">
+                <button class="row" @click="acceptLookup(r)">
+                  <div class="row-text">
+                    <b x-text="r.draft.name"></b>
+                    <small>
+                      <span x-text="r.draft.brand || r.source"></span>
+                      · <span x-text="Math.round(r.draft.calories ?? 0)"></span> kcal
+                      / <span x-text="r.draft.serving_qty"></span><span x-text="r.draft.serving_unit"></span>
+                    </small>
+                  </div>
+                  <!-- Incomplete data is called out rather than hidden: OFF and
+                       USDA both return partial entries, and a silent null would
+                       become a silent zero in your day. -->
+                  <span class="pill" x-show="r.missing.length"
+                        :title="r.missing.join(', ')"
+                        x-text="`${r.missing.length} missing`"></span>
+                  <span class="tap">›</span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
 
         <button class="btn btn-block" @click="startCreate()">
           <span x-show="term">Add “<span x-text="term"></span>” by hand</span>
@@ -372,54 +401,6 @@
           </div>
         </template>
 
-        <!-- Online lookup results ------------------------------------------ -->
-        <template x-if="lookup">
-          <div class="sheet-backdrop" @click.self="closeLookup()">
-            <div class="sheet" x-init="$swipe($el, () =&gt; { closeLookup() })">
-              <div class="grabber"></div>
-              <div class="card-label">
-                <span x-show="looksLikeBarcode">Open Food Facts</span>
-                <span x-show="!looksLikeBarcode">USDA FoodData Central</span>
-              </div>
-
-              <div class="sync-line" x-show="lookup.status === 'searching'">
-                <span class="spinner" style="width:14px;height:14px"></span> Searching…
-              </div>
-
-              <div class="notice notice-error" x-show="lookup.error" x-text="lookup.error"></div>
-
-              <div class="rows" x-show="lookup.results.length">
-                <template x-for="(r, i) in lookup.results" :key="i">
-                  <button class="row" @click="acceptLookup(r)">
-                    <div class="row-text">
-                      <b x-text="r.draft.name"></b>
-                      <small>
-                        <span x-text="r.draft.brand || r.source"></span>
-                        · <span x-text="Math.round(r.draft.calories ?? 0)"></span> kcal/100<span x-text="r.draft.serving_unit"></span>
-                      </small>
-                    </div>
-                    <!-- Incomplete data is called out rather than hidden: OFF and
-                         USDA both return partial entries, and a silent null would
-                         become a silent zero in your day. -->
-                    <span class="pill" x-show="r.missing.length"
-                          :title="r.missing.join(', ')"
-                          x-text="`${r.missing.length} missing`"></span>
-                    <span class="tap">›</span>
-                  </button>
-                </template>
-              </div>
-
-              <p class="empty" x-show="lookup.status === 'done' && !lookup.results.length && !lookup.error">
-                Nothing found.
-              </p>
-
-              <button class="btn btn-ghost btn-block" @click="closeLookup(); startCreate()">
-                Add by hand instead
-              </button>
-              <button class="btn btn-ghost btn-block" @click="closeLookup()">Cancel</button>
-            </div>
-          </div>
-        </template>
 
         <!-- Quantity sheet ------------------------------------------------- -->
         <template x-if="sheet">
