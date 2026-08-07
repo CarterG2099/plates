@@ -140,12 +140,21 @@
   text-align: left;
 }
 
-.row-text b {
-  font-weight: 600;
-  font-size: var(--text-sm);
+/* max-width is what actually contains these. The parent is a flex column with
+   align-items: flex-start, so children size to their content and can exceed the
+   column's own width — `overflow: hidden` then clips at the child's width, not
+   the container's, and the text runs out over the buttons. */
+.row-text b,
+.row-text small {
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.row-text b {
+  font-weight: 600;
+  font-size: var(--text-sm);
 }
 
 .row-text small {
@@ -337,4 +346,39 @@
 
 @media (prefers-reduced-motion: reduce) {
   .mm [class^="mm-"], .mm-lit { animation: none; }
+}
+
+/* ---- swipe to remove ------------------------------------------------------ */
+
+.row-swipe {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Opaque, or the action behind it shows through the row it is meant to sit
+   under. Matches the surface the rows are painted on. */
+.row-swipe > .row {
+  position: relative;
+  background: var(--color-bg);
+  transition: transform var(--transition-fast);
+  will-change: transform;
+}
+
+.row-swipe.is-open > .row { transform: translateX(-96px); }
+
+.row-remove {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 96px;
+  border: 0;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.row-swipe:last-child > .row { border-bottom: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .row-swipe > .row { transition: none; }
 }

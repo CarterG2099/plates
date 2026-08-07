@@ -68,6 +68,78 @@ Alpine.magic('swipe', () => (sheet, close) => {
   sheet.addEventListener('touchcancel', release);
 });
 
+/**
+ * Swipe a row left to reveal its action.
+ *
+ * Direction is decided on the first move and then locked: if the finger goes
+ * more vertical than horizontal it is a scroll, and the row must not creep
+ * sideways while the list moves under it.
+ */
+Alpine.magic('swipeRow', () => (wrap) => {
+  if (!wrap || wrap.dataset.swipeRow) return;
+  wrap.dataset.swipeRow = '1';
+
+  const slide = wrap.querySelector('.row');
+  if (!slide) return;
+
+  const WIDTH = 96;             // matches .row-remove
+  const THRESHOLD = 40;
+
+  let startX = 0, startY = 0, dx = 0;
+  let dragging = false, locked = false;
+
+  const isOpen = () => wrap.classList.contains('is-open');
+
+  slide.addEventListener('touchstart', (e) => {
+    // One row open at a time; two revealed actions is a mis-tap waiting.
+    for (const other of document.querySelectorAll('.row-swipe.is-open')) {
+      if (other !== wrap) other.classList.remove('is-open');
+    }
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    dx = isOpen() ? -WIDTH : 0;
+    dragging = true;
+    locked = false;
+    slide.style.transition = 'none';
+  }, { passive: true });
+
+  slide.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+
+    const x = e.touches[0].clientX - startX;
+    const y = e.touches[0].clientY - startY;
+
+    if (!locked) {
+      if (Math.abs(y) > Math.abs(x)) { dragging = false; slide.style.transition = ''; return; }
+      if (Math.abs(x) < 6) return;                 // too small to call yet
+      locked = true;
+    }
+
+    dx = Math.min(0, Math.max(-WIDTH, (isOpen() ? -WIDTH : 0) + x));
+    slide.style.transform = `translateX(${dx}px)`;
+  }, { passive: true });
+
+  const release = () => {
+    if (!dragging) return;
+    dragging = false;
+    slide.style.transition = '';
+    slide.style.transform = '';        // the class drives it from here
+    wrap.classList.toggle('is-open', dx < -THRESHOLD);
+  };
+
+  slide.addEventListener('touchend', release);
+  slide.addEventListener('touchcancel', release);
+
+  // While open, a tap closes rather than logging. Capture phase, so it lands
+  // before the row's own click handlers.
+  slide.addEventListener('click', (e) => {
+    if (!isOpen()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    wrap.classList.remove('is-open');
+  }, true);
+});
+
 // ---- auth ------------------------------------------------------------------
 
 /**
@@ -674,6 +746,18 @@ Alpine.data('logPage', () => ({
     if (pending) { this.draft = null; this.term = ''; }
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash('Logged');
+  },
+
+  /**
+   * Take a food out of your list.
+   *
+   * Soft, and safe for history: every log entry snapshots its own macros, so
+   * removing the food leaves what you already ate untouched.
+   */
+  async removeFood(item) {
+    await food.deleteFood(item.id);
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`Removed ${item.name}`);
   },
 
   async logCombo(combo) {

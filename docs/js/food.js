@@ -388,6 +388,13 @@ export async function saveFood(fields, ownerEmail) {
   return food;
 }
 
+/** Soft delete. Logged entries keep their own macro snapshot, so history holds. */
+export async function deleteFood(id) {
+  const row = await local.remove('foods', id);
+  sync.nudge();
+  return row;
+}
+
 export async function deleteEntry(id) {
   const row = await local.remove('food_log', id);
   sync.nudge();

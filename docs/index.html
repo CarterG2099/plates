@@ -283,19 +283,25 @@
 
         <div class="rows">
           <template x-for="item in results" :key="item.id">
-            <div class="row">
-              <button class="row-text" @click="openSheet(item)">
-                <b x-text="item.name"></b>
-                <small>
-                  <span x-text="item.lastQuantity ?? item.serving_qty"></span><span x-text="item.serving_unit"></span>
-                  <span x-show="item.calories !== null"> · <span x-text="Math.round(item.calories)"></span> kcal</span>
-                </small>
-              </button>
-              <span class="freq" x-show="item.count" x-text="`${item.count}×`"></span>
-              <!-- Only appears once there's something to take back. -->
-              <button class="tap" x-show="loggedToday(item)" @click="undoLast(item)"
-                      :aria-label="`Remove last ${item.name}`">−</button>
-              <button class="tap tap-primary" @click="quickLog(item)" :aria-label="`Log ${item.name}`">+</button>
+            <div class="row-swipe" x-init="$swipeRow($el)">
+              <!-- Sits behind the row; a left swipe slides the row off it. -->
+              <button class="row-remove" @click="removeFood(item)"
+                      :aria-label="`Remove ${item.name} from my foods`">Remove</button>
+
+              <div class="row">
+                <button class="row-text" @click="openSheet(item)">
+                  <b x-text="item.name"></b>
+                  <small>
+                    <span x-text="item.lastQuantity ?? item.default_qty ?? item.serving_qty"></span><span x-text="item.serving_unit === 'serving' ? ' serving' : item.serving_unit"></span>
+                    <span x-show="item.calories !== null"> · <span x-text="Math.round(item.calories)"></span> kcal</span>
+                  </small>
+                </button>
+                <span class="freq" x-show="item.count" x-text="`${item.count}×`"></span>
+                <!-- Only appears once there's something to take back. -->
+                <button class="tap" x-show="loggedToday(item)" @click="undoLast(item)"
+                        :aria-label="`Remove last ${item.name}`">−</button>
+                <button class="tap tap-primary" @click="quickLog(item)" :aria-label="`Log ${item.name}`">+</button>
+              </div>
             </div>
           </template>
         </div>
