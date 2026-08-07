@@ -22,7 +22,8 @@
  * turns a multi-hundred-KB download into a couple of KB, which is the difference
  * between usable and not on a phone in a supermarket.
  */
-const FIELDS = 'code,product_name,generic_name,brands,nutriments';
+const FIELDS = 'code,product_name,generic_name,brands,nutriments'
+  + ',serving_size,serving_quantity,serving_quantity_unit';
 
 const ENDPOINTS = [
   (code) => `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`,
@@ -109,17 +110,13 @@ function toDraft(product, code) {
 }
 
 /**
- * Which numbers to read, and how to get them onto one serving.
+ * Which set of numbers to read. Nothing is converted or derived.
  *
- * Three tiers, because OFF is inconsistent about what it stores:
- *
- *  1. Per-serving nutriments exist — read them straight.
- *  2. Only per-100g, but the serving size is known in g or ml — scale. This is
- *     exact arithmetic, not an estimate, and it is the common case: most OFF
- *     entries carry `serving_size` but populate only the `_100g` keys. Gating on
- *     per-serving nutriments alone sent nearly everything to the 100g fallback,
- *     which is the bug this tier fixes.
- *  3. No usable serving size at all — per 100g, honestly labelled.
+ * If OFF published per-serving values, those are used with the serving size it
+ * published alongside them. If it didn't, the per-100g values are used as-is
+ * and the basis says so. No arithmetic happens in between — a figure shown here
+ * is a figure OFF returned, so a wrong number is theirs to fix, not a rounding
+ * artefact of ours.
  */
 function servingBasis(n, size) {
   const perServing = num(n['energy-kcal_serving']) ?? kjToKcal(n.energy_serving);
@@ -134,19 +131,6 @@ function servingBasis(n, size) {
     };
   }
 
-  // Scaling only holds for a mass or volume. A "1 biscuit" serving with no
-  // gram weight cannot be derived from a per-100g figure.
-  if (size && (size.unit === 'g' || size.unit === 'ml')) {
-    const factor = size.qty / 100;
-    return {
-      qty: size.qty,
-      unit: size.unit,
-      label: size.label,
-      raw: (key) => scale(n[`${key}_100g`], factor),
-      read: (key) => num(scale(n[`${key}_100g`], factor)),
-    };
-  }
-
   return {
     qty: 100,
     unit: 'g',
@@ -154,11 +138,6 @@ function servingBasis(n, size) {
     raw: (key) => n[`${key}_100g`],
     read: (key) => num(n[`${key}_100g`]),
   };
-}
-
-function scale(value, factor) {
-  const v = Number(value);
-  return Number.isFinite(v) ? v * factor : null;
 }
 
 /**
