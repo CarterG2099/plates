@@ -199,8 +199,8 @@ export function muscleFor(exercise, name = '') {
 
 // ---- rendering -------------------------------------------------------------
 
-const BODY_FILL = '#57504A';
-const MUSCLE_REST = '#6B645B';
+const BODY_FILL = '#4E5763';
+const MUSCLE_REST = '#616C7A';
 
 function figure(view, litKey) {
   const forLimb = (limb) => Object.entries(MUSCLES)
@@ -256,7 +256,7 @@ export function muscleMap(exercise, name = '', { both: pair = false } = {}) {
   // The labels are load-bearing: the silhouettes are near-identical, so a lit
   // upper arm means biceps on one figure and triceps on the other.
   const tag = (x, text) =>
-    `<text x="${x}" y="212" text-anchor="middle" fill="#8E8478" font-size="12"` +
+    `<text x="${x}" y="212" text-anchor="middle" fill="#78838F" font-size="12"` +
     ` font-family="ui-monospace, Menlo, monospace" letter-spacing="1.8">${text}</text>`;
 
   return `<svg class="${cls}" viewBox="0 0 250 220" role="img" aria-label="${label}" focusable="false">

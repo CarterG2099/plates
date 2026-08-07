@@ -479,7 +479,7 @@ export const PLATE_COLOURS = {
   25: '#2FA84F',   // green
   10: '#F2EDE4',   // white
   5:  '#E0362A',   // red
-  2.5: '#C6BCAE',
+  2.5: '#AEB8C6',
 };
 
 // ---- personal records ------------------------------------------------------

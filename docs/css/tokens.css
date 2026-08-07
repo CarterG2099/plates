@@ -2,6 +2,11 @@
  *
  * Deliberately not shared with recipes/budget.
  *
+ * The neutrals carry a slight blue bias toward the accent. A pure grey reads as
+ * unconsidered, and a warm one turned the whole app brown — biasing toward the
+ * accent makes the greys look chosen, and pushes the warm plate colours forward
+ * instead of letting them sink into the ground.
+ *
  * Colours are the official IWF competition plate colours, so the palette is the
  * app's namesake rather than a decoration: 25 kg red, 20 kg blue, 15 kg yellow,
  * 10 kg green, 5 kg white. Every colour means something; none is ornamental.
@@ -12,23 +17,23 @@
 :root {
   /* Ground — layered, not one flat plane. v1 kept everything within a few
      percent of the same value, which is why it read as flat. */
-  --color-ink:            #100F0E;
-  --color-bg:             #1A1816;
-  --color-surface:        #232120;
-  --color-surface-raised: #2C2926;
-  --color-border:         #3B3733;
-  --color-hover:          #333029;
+  --color-ink:            #0E1116;
+  --color-bg:             #14171C;
+  --color-surface:        #1D222A;
+  --color-surface-raised: #262C36;
+  --color-border:         #333B47;
+  --color-hover:          #2A313C;
 
   /* Text — lifted hard from v1, whose #9C948A secondary was simply too dim. */
-  --color-text:           #FFFCF6;
-  --color-text-muted:     #C6BCAE;
-  --color-text-dim:       #8E8478;
+  --color-text:           #F3F6FA;
+  --color-text-muted:     #AEB8C6;
+  --color-text-dim:       #78838F;
 
   /* Plate colours: identity and macro encoding in one system */
   --color-protein:        #2D68C4;   /* 20 kg blue */
   --color-carbs:          #F2C230;   /* 15 kg yellow */
   --color-fat:            #E0362A;   /* 25 kg red */
-  --color-plate-white:    #F2EDE4;   /*  5 kg white */
+  --color-plate-white:    #EDF1F6;   /*  5 kg white */
 
   --color-primary:        #2D68C4;
   --color-primary-hover:  #4B85DD;
