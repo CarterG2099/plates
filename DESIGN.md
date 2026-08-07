@@ -324,9 +324,23 @@ That is incompatible with this app in three places at once:
 Complying means storing `food_id` and re-fetching on render, so the Today screen
 would make a network call per logged item. That inverts the entire design.
 
-Second, independent blocker: OAuth 2.0 tokens "can only be requested from a
-finite number of IP addresses". Supabase Edge Functions provide no stable egress
-IP to allowlist.
+Second blocker, **confirmed against the OAuth 2.0 guide (2026-08-07)**: fatsecret
+"requires that OAuth 2.0 tokens be requested through a proxy server", so "tokens
+can only be requested from a finite number of IP addresses". Supabase Edge
+Functions provide no stable egress IP to allowlist.
+
+Two qualifications found on re-reading, both narrowing it:
+
+- The restriction covers the **token request only**, not calls made with the
+  token. Tokens last 24 hours (`expires_in: 86400`).
+- It is specific to OAuth 2.0. fatsecret still documents **OAuth 1.0**, whose
+  signed (2-legged) requests are HMAC-signed per call with the shared secret and
+  never hit a token endpoint — so there is nothing for the IP rule to apply to.
+  The docs do not state an exemption; this is inference from there being no token
+  request to restrict. Verify before relying on it.
+
+So the IP rule is avoidable. The Storable Data terms are the blocker that
+actually decides this, and they are still the reason to say no.
 
 The original notes below are kept for context.
 

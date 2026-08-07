@@ -237,6 +237,35 @@ function scoreAgainst(terms: string[], food: UsdaFood): number {
 /** Everything far below the best match is noise, however many slots are free. */
 const RELEVANCE_FLOOR = 0.28;
 
+type FetchResult = { foods: UsdaFood[] } | { error: string; status?: number };
+
+async function fetchFoods(
+  query: string,
+  apiKey: string,
+  requireAllWords: boolean,
+): Promise<FetchResult> {
+  const url = new URL(SEARCH_URL);
+  url.searchParams.set("api_key", apiKey);
+  url.searchParams.set("query", query);
+  url.searchParams.set("dataType", DATA_TYPES);
+  url.searchParams.set("pageSize", String(PAGE_SIZE));
+  if (requireAllWords) url.searchParams.set("requireAllWords", "true");
+
+  try {
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) {
+      // Surface the status rather than a generic failure: 403 means a bad or
+      // revoked key, 429 means the hourly quota is spent. Those need different
+      // responses from a human.
+      return { error: `USDA responded ${res.status}.`, status: res.status };
+    }
+    const payload = await res.json();
+    return { foods: Array.isArray(payload.foods) ? payload.foods : [] };
+  } catch (e) {
+    return { error: `Could not reach USDA: ${(e as Error).message}` };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -266,27 +295,35 @@ Deno.serve(async (req) => {
   }
   if (!query && !barcode) return json({ error: "Nothing to search for." }, 400);
 
-  const url = new URL(SEARCH_URL);
-  url.searchParams.set("api_key", apiKey);
-  url.searchParams.set("query", barcode || query);
-  url.searchParams.set("dataType", DATA_TYPES);
-  url.searchParams.set("pageSize", String(PAGE_SIZE));
+  const term = barcode || query;
+  const multiWord = !barcode && term.split(/\s+/).filter(Boolean).length > 1;
 
-  let payload: { foods?: UsdaFood[] };
-  try {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) {
-      // Surface the status rather than a generic failure: 403 means a bad or
-      // revoked key, 429 means the hourly quota is spent. Those need different
-      // responses from a human.
-      return json({ error: `USDA responded ${res.status}.`, status: res.status }, 502);
-    }
-    payload = await res.json();
-  } catch (e) {
-    return json({ error: `Could not reach USDA: ${(e as Error).message}` }, 502);
+  // Two passes, merged.
+  //
+  // The default OR-match returns anything containing ANY query word, so
+  // "2% milk great value" competes with every food carrying "value" or "milk" —
+  // and a specific store-brand product can fall outside the 200 rows we get
+  // back. No amount of re-ranking recovers an item that was never fetched.
+  //
+  // requireAllWords forces AND matching, which finds that exact product but
+  // returns nothing when a word lives in a field USDA doesn't match on. Running
+  // both and merging gets the strictness without the cliff.
+  const passes = [fetchFoods(term, apiKey, false)];
+  if (multiWord) passes.push(fetchFoods(term, apiKey, true));
+
+  const settled = await Promise.all(passes);
+  const failure = settled.find((r) => "error" in r);
+  if (failure && settled.every((r) => "error" in r)) {
+    return json(failure, 502);
   }
 
-  const foods = Array.isArray(payload.foods) ? payload.foods : [];
+  // Deduped by fdcId, strict pass first so its hits survive.
+  const byId = new Map<number | string, UsdaFood>();
+  for (const result of settled.slice().reverse()) {
+    if ("error" in result) continue;
+    for (const food of result.foods) byId.set(food.fdcId ?? food.description ?? "", food);
+  }
+  const foods = [...byId.values()];
 
   // A barcode is an exact identity, not a relevance problem. Filter to the
   // product that actually carries it rather than ranking near-misses — this is
