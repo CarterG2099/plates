@@ -313,7 +313,8 @@
 
               <div class="row">
                 <button class="row-text" @click="openSheet(item)">
-                  <b x-text="item.name"></b>
+                  <b><span x-text="item.name"></span><span
+                    class="brand" x-show="item.brand" x-text="` (${item.brand})`"></span></b>
                   <small>
                     <span x-text="item.lastQuantity ?? item.default_qty ?? item.serving_qty"></span><span x-text="item.serving_unit === 'serving' ? ' serving' : item.serving_unit"></span>
                     <span x-show="item.calories !== null"> · <span x-text="Math.round(item.calories)"></span> kcal</span>
@@ -350,7 +351,7 @@
                   <div class="row-text">
                     <b x-text="r.draft.name"></b>
                     <small>
-                      <span x-text="r.draft.brand || r.source"></span>
+                      <span x-text="r.draft.brand ? `(${r.draft.brand})` : r.source"></span>
                       · <span x-text="Math.round(r.draft.calories ?? 0)"></span> kcal
                       <span x-show="r.draft.serving_unit === 'serving'">per serving</span>
                       <span x-show="r.draft.serving_unit !== 'serving'">/ <span x-text="r.draft.serving_qty"></span><span x-text="r.draft.serving_unit"></span></span>
@@ -463,7 +464,8 @@
                     <template x-for="choice in mealChoices" :key="choice.id">
                       <button class="row" @click="addIngredient(choice)">
                         <div class="row-text">
-                          <b x-text="choice.name"></b>
+                          <b><span x-text="choice.name"></span><span
+                            class="brand" x-show="choice.brand" x-text="` (${choice.brand})`"></span></b>
                           <small>
                             <span x-text="choice.default_qty ?? choice.serving_qty"></span><span
                               x-text="choice.serving_unit === 'serving' ? ' serving' : choice.serving_unit"></span>
@@ -488,7 +490,7 @@
                             <div class="row-text">
                               <b x-text="r.draft.name"></b>
                               <small>
-                                <span x-text="r.draft.brand || r.source"></span>
+                                <span x-text="r.draft.brand ? `(${r.draft.brand})` : r.source"></span>
                                 · <span x-text="Math.round(r.draft.calories ?? 0)"></span> kcal
                               </small>
                             </div>
@@ -569,8 +571,11 @@
               <div class="grabber"></div>
 
               <div>
-                <div style="font-weight: 600;" x-text="sheet.food.name"></div>
-                <div class="card-label" x-text="sheet.food.brand || sheet.food.source || 'my foods'"></div>
+                <div style="font-weight: 600;">
+                  <span x-text="sheet.food.name"></span><span
+                    class="brand" x-show="sheet.food.brand"
+                    x-text="` (${sheet.food.brand})`"></span>
+                </div>
               </div>
 
               <div class="qty">

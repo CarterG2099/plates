@@ -404,3 +404,11 @@
 @media (prefers-reduced-motion: reduce) {
   .row-swipe > .row { transition: none; }
 }
+
+/* The brand, beside the name it belongs to. Lighter and unshouted: it is
+   which one, not what it is. */
+.brand {
+  font-weight: 400;
+  color: var(--color-text-muted);
+  text-transform: none;
+}

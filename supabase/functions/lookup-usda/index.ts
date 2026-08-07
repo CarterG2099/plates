@@ -190,12 +190,18 @@ function scoreAgainst(terms: string[], food: UsdaFood): number {
 
   const words = desc.split(/[^a-z0-9%.]+/).filter(Boolean);
   const head = words[0] ?? "";
+  const tail = words[words.length - 1] ?? "";
 
+  // A term found in the brand is a brand term even when the description repeats
+  // it. Otherwise "Great Value Black Tea" earns description credit for "great
+  // value" while "2% Reduced Fat Milk" earns only brand credit, and a search for
+  // the brand ranks by whether the maker restated it in the product name — which
+  // is how searching "great value" returned black tea instead of milk.
   let inDesc = 0;
   let inBrand = 0;
   for (const term of terms) {
-    if (desc.includes(term)) inDesc += 1;
-    else if (brand.includes(term)) inBrand += 1;
+    if (brand && brand.includes(term)) inBrand += 1;
+    else if (desc.includes(term)) inDesc += 1;
   }
 
   const matched = inDesc + inBrand;
@@ -203,11 +209,18 @@ function scoreAgainst(terms: string[], food: UsdaFood): number {
 
   let score = inDesc * 12 + inBrand * 5;
 
-  // Brand words are barred from earning the head bonus. Branded descriptions
-  // often lead with the brand, so "great" would hand it to "Great Value
-  // Sandwich Cookies, Peanut Butter" over the actual peanut butter.
-  const headable = terms.filter((t) => !brand.includes(t));
-  if (headable.some((t) => head.startsWith(t) || (t.length > 3 && t.startsWith(head)))) {
+  // Where the head noun sits depends on who wrote the name. Branded names are
+  // natural English and put it last ("Great Value Whole Milk"); USDA's own
+  // descriptions invert it ("Milk, reduced fat"). Only branded rows get the tail
+  // checked — on an SR description the last word is a qualifier, and "Puddings,
+  // chocolate, dry mix, prepared with 2% milk" ends in "milk".
+  const branded = Boolean(brand) || food.dataType === "Branded";
+  const heads = branded ? [head, tail] : [head];
+
+  // Brand words cannot earn the bonus: branded descriptions often lead with the
+  // brand, so "great" would hand it to "Great Value Sandwich Cookies".
+  const headable = terms.filter((t) => !(brand && brand.includes(t)));
+  if (headable.some((t) => heads.some((h) => h && (h.startsWith(t) || (t.length > 3 && t.startsWith(h)))))) {
     score += 45;
   }
 
