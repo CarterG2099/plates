@@ -583,6 +583,9 @@ function isStaleGramFood(f) {
   return f.source === 'off' && f.serving_unit !== 'serving';
 }
 
+/** Digits only, and the length of a real UPC or EAN. */
+const isBarcode = (term) => /^\d{8,14}$/.test(term);
+
 /** One shape for the food form, whether typed by hand or filled from a lookup. */
 function blankDraft(name = '') {
   return {
@@ -612,13 +615,12 @@ Alpine.data('logPage', () => ({
 
   servingSize: '',      // review-form converter, see applyServingSize()
   meal: null,           // { id, name, items: [{food_id, name, quantity, unit}] }
-  mealPicker: false,
   mealTerm: '',
   mealOnline: { status: 'idle', results: [], error: '', term: '' },
-  _mealTimer: null,
-  _mealGen: 0,
-  _onlineTimer: null,
-  _onlineGen: 0,
+  // Keyed by state slot, so both searches share the machinery without sharing
+  // results. See queueSearch().
+  _timers: {},
+  _gens: {},
 
   init() {
     // Today's camera button raises this flag; the panel it opens is where the
@@ -631,11 +633,11 @@ Alpine.data('logPage', () => ({
 
     // One search box. Local results are already reactive off `term`; this runs
     // the network half behind them.
-    this.$watch('term', () => this.queueOnlineSearch());
+    this.$watch('term', () => this.queueSearch('online', this.term));
 
     // The ingredient picker searches the internet too. An ingredient you have
     // never logged is exactly as likely as a food you have never logged.
-    this.$watch('mealTerm', () => this.queueMealSearch());
+    this.$watch('mealTerm', () => this.queueSearch('mealOnline', this.mealTerm));
   },
 
   get email() { return Alpine.store('auth').email; },
@@ -799,7 +801,6 @@ Alpine.data('logPage', () => ({
 
   startMeal() {
     this.meal = { id: null, name: this.term.trim(), items: [] };
-    this.mealPicker = false;
     this.mealTerm = '';
   },
 
@@ -809,52 +810,16 @@ Alpine.data('logPage', () => ({
       name: combo.name,
       items: (combo.items ?? []).map((i) => ({ ...i })),
     };
-    this.mealPicker = false;
     this.mealTerm = '';
   },
 
   closeMeal() {
     this.meal = null;
-    this.mealPicker = false;
     this.mealTerm = '';
-    this._mealGen += 1;                    // strand any in-flight lookup
+    this._gens.mealOnline = (this._gens.mealOnline ?? 0) + 1;   // strand any in-flight lookup
     this.mealOnline = { status: 'idle', results: [], error: '', term: '' };
   },
 
-  queueMealSearch() {
-    clearTimeout(this._mealTimer);
-    const term = this.mealTerm.trim();
-
-    if (term && term === this.mealOnline.term && this.mealOnline.status !== 'idle') return;
-
-    if (term.length < 3) {
-      this._mealGen += 1;
-      this.mealOnline = { status: 'idle', results: [], error: '', term: '' };
-      return;
-    }
-
-    this._mealTimer = setTimeout(async () => {
-      if (!navigator.onLine) {
-        this.mealOnline = { status: 'done', results: [], error: '', term };
-        return;
-      }
-
-      const mine = ++this._mealGen;
-      this.mealOnline = { status: 'searching', results: [], error: '', term };
-
-      let next;
-      try {
-        next = /^\d{8,14}$/.test(term)
-          ? await this.lookupByBarcode(term)
-          : await this.lookupByName(term);
-      } catch (e) {
-        next = { results: [], error: e.message ?? String(e) };
-      }
-
-      if (mine !== this._mealGen) return;
-      this.mealOnline = { status: 'done', ...next, term };
-    }, 350);
-  },
 
   get mealOnlineResults() {
     if (this.mealOnline.term !== this.mealTerm.trim()) return [];
@@ -890,7 +855,6 @@ Alpine.data('logPage', () => ({
       quantity: item.lastQuantity ?? item.default_qty ?? item.serving_qty ?? 1,
       unit: item.serving_unit ?? 'g',
     });
-    this.mealPicker = false;
     this.mealTerm = '';
   },
 
@@ -961,7 +925,7 @@ Alpine.data('logPage', () => ({
   online: { status: 'idle', results: [], error: '', term: '', unmatched: [] },
 
   get looksLikeBarcode() {
-    return /^\d{8,14}$/.test(this.term.trim());
+    return isBarcode(this.term.trim());
   },
 
   /**
@@ -1001,48 +965,56 @@ Alpine.data('logPage', () => ({
   },
 
   /**
+   * The one online search, used by the main field and the ingredient picker.
+   *
+   * Those had separate copies of the debounce, the generation guard and the
+   * offline check. Two implementations of the same thing is how the picker ends
+   * up behaving differently from the search above it, so `slot` names the state
+   * property to write into and everything else is shared.
+   *
    * Debounced so a network call isn't fired per keystroke, and generation-
    * guarded so a slow response for "ch" can't land on top of results for
    * "chicken".
    */
-  queueOnlineSearch() {
-    clearTimeout(this._onlineTimer);
-    const term = this.term.trim();
+  queueSearch(slot, raw) {
+    clearTimeout(this._timers[slot]);
+    const term = raw.trim();
+    const state = this[slot];
 
     // Already asked, or asking. Covers retyping the same word and the scanner,
     // which fires its own immediate lookup the instant it reads a code.
-    if (term && term === this.online.term && this.online.status !== 'idle') return;
+    if (term && term === state.term && state.status !== 'idle') return;
 
     // Two characters match half your foods; there is nothing useful to ask for.
-    if (term.length < 3 && !this.looksLikeBarcode) {
-      this._onlineGen = (this._onlineGen ?? 0) + 1;
-      this.online = { status: 'idle', results: [], error: '', term: '', unmatched: [] };
+    if (term.length < 3 && !isBarcode(term)) {
+      this._gens[slot] = (this._gens[slot] ?? 0) + 1;
+      this[slot] = { status: 'idle', results: [], error: '', term: '', unmatched: [] };
       return;
     }
 
-    this._onlineTimer = setTimeout(() => this.runOnlineSearch(term), 350);
+    this._timers[slot] = setTimeout(() => this.runSearch(slot, term), 350);
   },
 
-  async runOnlineSearch(term) {
+  async runSearch(slot, term) {
     if (!navigator.onLine) {
-      this.online = { status: 'done', results: [], error: '', term };
+      this[slot] = { status: 'done', results: [], error: '', term, unmatched: [] };
       return;
     }
 
-    const mine = ++this._onlineGen;
-    this.online = { status: 'searching', results: [], error: '', term };
+    const mine = (this._gens[slot] = (this._gens[slot] ?? 0) + 1);
+    this[slot] = { status: 'searching', results: [], error: '', term, unmatched: [] };
 
     let next;
     try {
-      next = /^\d{8,14}$/.test(term)
+      next = isBarcode(term)
         ? await this.lookupByBarcode(term)
         : await this.lookupByName(term);
     } catch (e) {
       next = { results: [], error: e.message ?? String(e) };
     }
 
-    if (mine !== this._onlineGen) return;      // a newer search already started
-    this.online = { status: 'done', ...next, term };
+    if (mine !== this._gens[slot]) return;      // a newer search already started
+    this[slot] = { status: 'done', ...next, term };
   },
 
   async lookupByBarcode(term) {
@@ -1191,20 +1163,11 @@ Alpine.data('logPage', () => ({
       return;
     }
 
-    this.online = { status: 'searching', results: [], error: '', term: code };
-    const gen = ++this._onlineGen;
+    // Immediately, not debounced: a scan is not a keystroke.
+    await this.runSearch('online', code);
+    if (this.online.term !== code) return;      // superseded while we waited
 
-    let found;
-    try {
-      found = await this.lookupByBarcode(code);
-    } catch (e) {
-      found = { results: [], error: e.message ?? String(e) };
-    }
-    if (gen !== this._onlineGen) return;
-
-    this.online = { status: 'done', ...found, term: code };
-
-    const hit = found.results[0];
+    const hit = this.online.results[0];
 
     // Nothing found, or found but with no serving to log it in. Either way the
     // review form is the honest answer — it must NOT silently save a 100 g

@@ -456,13 +456,15 @@
                 </div>
               </div>
 
-              <template x-if="mealPicker">
-                <div>
-                  <div class="search">
-                    <span aria-hidden="true">⌕</span>
-                    <input type="search" placeholder="Which food?" x-model="mealTerm"
-                           autocomplete="off">
-                  </div>
+              <!-- Always open. Adding ingredients is what this sheet is for, so
+                   hiding the search behind a button was a step for its own sake. -->
+              <div class="search">
+                <span aria-hidden="true">⌕</span>
+                <input type="search" placeholder="Add an ingredient…" x-model="mealTerm"
+                       autocomplete="off" enterkeyhint="search">
+              </div>
+
+              <div>
                   <div class="rows">
                     <template x-for="choice in mealChoices" :key="choice.id">
                       <button class="row" @click="addIngredient(choice)">
@@ -503,15 +505,7 @@
                       </div>
                     </div>
                   </template>
-                </div>
-              </template>
-
-              <button class="btn btn-block" x-show="!mealPicker" @click="mealPicker = true">
-                Add ingredient
-              </button>
-              <button class="btn btn-block" x-show="mealPicker" @click="mealPicker = false">
-                Done adding
-              </button>
+              </div>
 
               <div class="btn-row">
                 <button class="btn btn-ghost" @click="closeMeal()">Cancel</button>
