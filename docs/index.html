@@ -473,6 +473,31 @@
                       </button>
                     </template>
                   </div>
+
+                  <!-- Same lookup as the main search. Picking one writes the
+                       food, because an item points at a food_id. -->
+                  <template x-if="mealTerm && (mealOnlineBusy || mealOnlineResults.length)">
+                    <div>
+                      <div class="section-head">
+                        <span>From the internet</span>
+                        <span x-show="mealOnlineBusy" class="spinner" style="width:12px;height:12px"></span>
+                      </div>
+                      <div class="rows">
+                        <template x-for="(r, i) in mealOnlineResults" :key="i">
+                          <button class="row" @click="addOnlineIngredient(r)">
+                            <div class="row-text">
+                              <b x-text="r.draft.name"></b>
+                              <small>
+                                <span x-text="r.draft.brand || r.source"></span>
+                                · <span x-text="Math.round(r.draft.calories ?? 0)"></span> kcal
+                              </small>
+                            </div>
+                            <span class="tap">+</span>
+                          </button>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
                 </div>
               </template>
 
@@ -483,14 +508,12 @@
                 Done adding
               </button>
 
-              <button class="btn btn-primary btn-block" :disabled="!canSaveMeal"
-                      @click="saveMeal({ andLog: true })">
-                Log <span x-text="Math.round(mealTotals.calories)"></span> kcal
-              </button>
-              <button class="btn btn-block" :disabled="!canSaveMeal" @click="saveMeal()">
-                Save without logging
-              </button>
-              <button class="btn btn-ghost btn-block" @click="closeMeal()">Cancel</button>
+              <div class="btn-row">
+                <button class="btn btn-ghost" @click="closeMeal()">Cancel</button>
+                <button class="btn btn-primary" :disabled="!canSaveMeal" @click="saveMeal()">
+                  Save meal
+                </button>
+              </div>
             </div>
           </div>
         </template>

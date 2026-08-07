@@ -614,6 +614,9 @@ Alpine.data('logPage', () => ({
   meal: null,           // { id, name, items: [{food_id, name, quantity, unit}] }
   mealPicker: false,
   mealTerm: '',
+  mealOnline: { status: 'idle', results: [], error: '', term: '' },
+  _mealTimer: null,
+  _mealGen: 0,
   _onlineTimer: null,
   _onlineGen: 0,
 
@@ -629,6 +632,10 @@ Alpine.data('logPage', () => ({
     // One search box. Local results are already reactive off `term`; this runs
     // the network half behind them.
     this.$watch('term', () => this.queueOnlineSearch());
+
+    // The ingredient picker searches the internet too. An ingredient you have
+    // never logged is exactly as likely as a food you have never logged.
+    this.$watch('mealTerm', () => this.queueMealSearch());
   },
 
   get email() { return Alpine.store('auth').email; },
@@ -806,7 +813,70 @@ Alpine.data('logPage', () => ({
     this.mealTerm = '';
   },
 
-  closeMeal() { this.meal = null; this.mealPicker = false; this.mealTerm = ''; },
+  closeMeal() {
+    this.meal = null;
+    this.mealPicker = false;
+    this.mealTerm = '';
+    this._mealGen += 1;                    // strand any in-flight lookup
+    this.mealOnline = { status: 'idle', results: [], error: '', term: '' };
+  },
+
+  queueMealSearch() {
+    clearTimeout(this._mealTimer);
+    const term = this.mealTerm.trim();
+
+    if (term && term === this.mealOnline.term && this.mealOnline.status !== 'idle') return;
+
+    if (term.length < 3) {
+      this._mealGen += 1;
+      this.mealOnline = { status: 'idle', results: [], error: '', term: '' };
+      return;
+    }
+
+    this._mealTimer = setTimeout(async () => {
+      if (!navigator.onLine) {
+        this.mealOnline = { status: 'done', results: [], error: '', term };
+        return;
+      }
+
+      const mine = ++this._mealGen;
+      this.mealOnline = { status: 'searching', results: [], error: '', term };
+
+      let next;
+      try {
+        next = /^\d{8,14}$/.test(term)
+          ? await this.lookupByBarcode(term)
+          : await this.lookupByName(term);
+      } catch (e) {
+        next = { results: [], error: e.message ?? String(e) };
+      }
+
+      if (mine !== this._mealGen) return;
+      this.mealOnline = { status: 'done', ...next, term };
+    }, 350);
+  },
+
+  get mealOnlineResults() {
+    if (this.mealOnline.term !== this.mealTerm.trim()) return [];
+    const local = this.mealChoices;
+    return this.mealOnline.results.filter((r) => !local.some((f) => food.matchesDraft(f, r.draft)));
+  },
+
+  get mealOnlineBusy() {
+    return this.mealOnline.status === 'searching' && this.mealOnline.term === this.mealTerm.trim();
+  },
+
+  /**
+   * Add a food the app has never seen as an ingredient.
+   *
+   * Unlike logging, this has to write the food first: a meal's items reference
+   * food_id, so there is nothing to point at until the row exists.
+   */
+  async addOnlineIngredient(result) {
+    const saved = await this.persistDraft({ ...blankDraft(''), ...result.draft });
+    await Alpine.store('data').refresh();
+    this.addIngredient(saved);
+  },
 
   /** Foods to pick from, ranked exactly as the main list is. */
   get mealChoices() {
@@ -841,18 +911,18 @@ Alpine.data('logPage', () => ({
     return Boolean(this.meal?.name?.trim()) && this.meal.items.length > 0;
   },
 
-  async saveMeal({ andLog = false } = {}) {
+  /**
+   * Saving is all this sheet does. Logging happens from the meal's row, which
+   * is where every other one-tap log in the app lives — a Log button here made
+   * building a meal and eating one the same gesture, which they are not.
+   */
+  async saveMeal() {
     if (!this.canSaveMeal) return;
 
     const saved = await food.saveCombo(this.meal, this.email);
     this.closeMeal();
     this.term = '';
     await Alpine.store('data').refresh();
-
-    if (andLog) {
-      await this.logCombo(saved);
-      return;
-    }
     Alpine.store('ui').flash(`Saved “${saved.name}”`);
   },
 
