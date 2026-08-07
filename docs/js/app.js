@@ -612,9 +612,28 @@ Alpine.data('logPage', () => ({
     Alpine.store('ui').flash(`Removed ${item.name}`);
   },
 
+  /**
+   * The amount sheet for a food that hasn't been written yet.
+   *
+   * There is no "save the food" step, because that was never something anyone
+   * wanted to do — you save a food *because* you are logging it. The write
+   * happens on Log, as a consequence of logging, and backing out writes nothing.
+   */
+  openDraftSheet(draft) {
+    this.creating = false;
+    this.sheet = {
+      food: { ...draft },
+      pending: { ...draft },
+      quantity: draft.default_qty ?? draft.serving_qty ?? 1,
+      unit: draft.serving_unit ?? 'g',
+      prefilled: false,
+    };
+  },
+
   openSheet(item) {
     this.sheet = {
       food: item,
+      pending: null,
       // What you ate last wins; then the label's serving; then the basis the
       // macros are stored against, which is only a sensible amount by accident.
       quantity: item.lastQuantity ?? item.default_qty ?? item.serving_qty ?? 1,
@@ -644,9 +663,15 @@ Alpine.data('logPage', () => ({
   },
 
   async confirmSheet() {
-    const { food: item, quantity, unit } = this.sheet;
+    const { pending, quantity, unit } = this.sheet;
+
+    // A food from a lookup is written here, on the way to logging it, rather
+    // than in a step of its own beforehand.
+    const item = pending ? await this.persistDraft(pending) : this.sheet.food;
+
     await food.logFood({ food: item, quantity, unit, ownerEmail: this.email, date: this.date });
     this.closeSheet();
+    if (pending) { this.draft = null; this.term = ''; }
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash('Logged');
   },
@@ -864,15 +889,9 @@ Alpine.data('logPage', () => ({
       return;
     }
 
-    if (hit.missing.length || hit.draft.serving_unit !== 'serving') {
-      this.acceptLookup({ ...hit, existingId: mine?.id });
-      return;
-    }
-
-    const saved = await this.persistDraft({ ...blankDraft(''), ...hit.draft, id: mine?.id });
-    this.term = '';
-    await Alpine.store('data').refresh();
-    this.openSheet({ ...saved, lastQuantity: null, lastUnit: null });
+    // Same rule as tapping a search result, so a scan and a search behave
+    // identically from here on.
+    this.chooseOnline({ ...hit, existingId: mine?.id });
   },
 
   /** A photo from the system camera app, which focuses properly. */
@@ -955,6 +974,22 @@ Alpine.data('logPage', () => ({
   },
 
   /** Pull a looked-up result into the same review form manual entry uses. */
+  /**
+   * Complete results go straight to the amount sheet. The review form is for
+   * results that actually need reviewing — missing macros, or no serving to
+   * express the food in.
+   */
+  chooseOnline(result) {
+    const draft = { ...blankDraft(''), ...result.draft, id: result.existingId ?? null };
+    if (result.missing.length || draft.serving_unit !== 'serving') {
+      this.draft = draft;
+      this.creating = true;
+      return;
+    }
+    this.openDraftSheet(draft);
+  },
+
+  /** Force the review form, whatever the data looks like. */
   acceptLookup(result) {
     this.draft = { ...blankDraft(''), ...result.draft, id: result.existingId ?? null };
     this.creating = true;
@@ -996,15 +1031,10 @@ Alpine.data('logPage', () => ({
     return this.draft?.name?.trim() && Number(this.draft.serving_qty) > 0;
   },
 
-  async saveDraft() {
-    const saved = await this.persistDraft(this.draft);
-
-    this.cancelCreate();
-    this.term = '';
-    await Alpine.store('data').refresh();
-
-    // Straight into the quantity sheet — you added it because you're eating it.
-    this.openSheet({ ...saved, lastQuantity: null, lastUnit: null });
+  /** Review done — carry the draft to the amount sheet, which does the write. */
+  addDraft() {
+    if (!this.canSaveDraft) return;
+    this.openDraftSheet(this.draft);
   },
 
   /** The write itself, shared with the scan path which skips the review form. */

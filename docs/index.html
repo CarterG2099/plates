@@ -318,7 +318,7 @@
 
             <div class="rows">
               <template x-for="(r, i) in onlineResults" :key="i">
-                <button class="row" @click="acceptLookup(r)">
+                <button class="row" @click="chooseOnline(r)">
                   <div class="row-text">
                     <b x-text="r.draft.name"></b>
                     <small>
@@ -461,6 +461,7 @@
                 New food ·
                 <span x-text="draft.basis ? `one serving = ${draft.basis}` : 'per serving'"></span>
               </div>
+              <p class="servingraw" x-show="draft.servingRaw" x-text="draft.servingRaw"></p>
 
               <div class="field">
                 <label for="f-name">Name</label>
@@ -527,8 +528,8 @@
                 </div>
               </div>
 
-              <button class="btn btn-primary btn-block" :disabled="!canSaveDraft" @click="saveDraft()">
-                Save food
+              <button class="btn btn-primary btn-block" :disabled="!canSaveDraft" @click="addDraft()">
+                Next
               </button>
               <button class="btn btn-ghost btn-block" @click="cancelCreate()">Cancel</button>
             </div>

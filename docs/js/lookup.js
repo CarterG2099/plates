@@ -107,6 +107,13 @@ function toDraft(product, code) {
     fiber_g: basis.read('fiber'),
     sodium_mg: sodiumMg(basis),
     basis: basis.label,
+    // Exactly what OFF sent for the serving fields. Shown in the review form
+    // because three attempts at this have been made against assumed response
+    // shapes rather than an observed one.
+    servingRaw: `serving_size: ${JSON.stringify(product.serving_size ?? null)}`
+      + ` · serving_quantity: ${JSON.stringify(product.serving_quantity ?? null)}`
+      + ` · unit: ${JSON.stringify(product.serving_quantity_unit ?? null)}`
+      + ` · kcal_serving: ${JSON.stringify(n['energy-kcal_serving'] ?? null)}`,
     source: 'off',
   };
 }

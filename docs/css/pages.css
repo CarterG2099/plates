@@ -1004,3 +1004,13 @@
 
 .serving-fix .field { flex: 1; margin: 0; }
 .serving-fix .btn   { flex: none; }
+
+/* What the source actually returned for its serving fields. Diagnostic. */
+.servingraw {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+  word-break: break-word;
+  margin: 0;
+}
