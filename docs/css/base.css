@@ -146,3 +146,32 @@ button {
   background: var(--color-text-dim);
   background-clip: padding-box;
 }
+
+/* ---- boot screen ----------------------------------------------------------- */
+/* Shown by the parser, removed by app.js once Alpine has mounted. Its only job
+   is that the first frame isn't blank. */
+
+#boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--color-bg);
+  z-index: 50;
+}
+
+.boot-mark {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: -.03em;
+  color: var(--color-text);
+  opacity: .9;
+}
+
+/* Fade rather than cut, so a fast boot doesn't flash. */
+#boot.is-done {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}

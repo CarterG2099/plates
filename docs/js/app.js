@@ -70,6 +70,28 @@ Alpine.magic('swipe', () => (sheet, close) => {
 
 // ---- auth ------------------------------------------------------------------
 
+/**
+ * Membership, cached where it can be read synchronously.
+ *
+ * Deciding whether to show the app required a Supabase round trip, so a
+ * local-first app sat on a spinner waiting for the network to confirm something
+ * it already knew. The cache paints immediately; the real check runs behind it
+ * and corrects if access was revoked.
+ */
+const MEMBERSHIP_KEY = 'plates:membership';
+
+const readMembership = () => {
+  try { return JSON.parse(localStorage.getItem(MEMBERSHIP_KEY) || 'null'); }
+  catch { return null; }
+};
+
+const writeMembership = (value) => {
+  try {
+    if (value) localStorage.setItem(MEMBERSHIP_KEY, JSON.stringify(value));
+    else localStorage.removeItem(MEMBERSHIP_KEY);
+  } catch { /* private mode; we just lose the fast path */ }
+};
+
 Alpine.store('auth', {
   ready: false,
   session: null,
@@ -87,9 +109,44 @@ Alpine.store('auth', {
 
   async init() {
     const { data } = await supabase.auth.getSession();
-    await this.apply(data.session ?? null);
-    supabase.auth.onAuthStateChange((_event, session) => this.apply(session ?? null));
-    this.ready = true;
+    const session = data.session ?? null;
+    this.session = session;
+
+    const cached = readMembership();
+    const trusted = session && cached && cached.email === session.user?.email;
+
+    if (trusted) {
+      // Paint from what we already know. Nothing here touches the network.
+      this.members = cached.members ?? [];
+      this.isMember = true;
+      this.isAdmin = Boolean(cached.isAdmin);
+      this.ready = true;
+
+      await Alpine.store('data').refreshCore();
+      sync.start();
+      Alpine.store('data').refreshTraining();
+      this.verify();                       // deliberately not awaited
+    } else {
+      await this.apply(session);
+      this.ready = true;
+    }
+
+    supabase.auth.onAuthStateChange((_event, next) => this.apply(next ?? null));
+  },
+
+  /** Confirm the cached membership against the server, after the app is usable. */
+  async verify() {
+    const { isMember, members, error } = await loadMembership();
+    if (error) return;                     // offline, or the schema is unreachable
+
+    if (!isMember) {
+      writeMembership(null);
+      this.isMember = false;
+      this.members = [];
+      return;
+    }
+    this.members = members;
+    writeMembership({ email: this.email, members, isAdmin: this.isAdmin });
   },
 
   async apply(session) {
@@ -119,16 +176,21 @@ Alpine.store('auth', {
     );
 
     if (isMember) {
+      writeMembership({ email: this.email, members, isAdmin: this.isAdmin });
+
       // Paint Today, then fill in training in the background.
       await Alpine.store('data').refreshCore();
       sync.start();
       Alpine.store('data').refreshTraining();
+    } else {
+      writeMembership(null);
     }
   },
 
   signIn() { return signIn().catch((e) => { this.error = e.message; }); },
 
   async signOut() {
+    writeMembership(null);
     await local.wipe();
     await signOut();
   },
@@ -1404,6 +1466,14 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
     });
   });
 }
+
+// Hand off from the static boot screen once the real shell is mounted.
+document.addEventListener('alpine:initialized', () => {
+  const boot = document.getElementById('boot');
+  if (!boot) return;
+  boot.classList.add('is-done');
+  setTimeout(() => boot.remove(), 200);
+});
 
 window.Alpine = Alpine;
 

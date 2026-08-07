@@ -22,9 +22,15 @@
   <link rel="stylesheet" href="/css/components.css">
   <link rel="stylesheet" href="/css/pages.css">
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.107.0/dist/umd/supabase.js" integrity="sha384-CQbEv3UOeYwlaBLdPF5KqEagCP39Q1KpvJC6Gwa3UGjZAwMvpA+0TFxSSnrgb4MX" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.107.0/dist/umd/supabase.js" integrity="sha384-CQbEv3UOeYwlaBLdPF5KqEagCP39Q1KpvJC6Gwa3UGjZAwMvpA+0TFxSSnrgb4MX" crossorigin="anonymous" defer></script>
 </head>
 <body>
+
+<!-- Painted by the HTML parser, before Alpine exists. Without this the page is
+     blank until a 100 KB framework has downloaded, parsed and walked the DOM. -->
+<div id="boot">
+  <div class="boot-mark">Plates</div>
+</div>
 
 <!-- Bare x-data roots the Alpine component tree. Without it Alpine never walks
      these templates and the page renders empty. -->
