@@ -296,7 +296,6 @@
                     <span x-show="item.calories !== null"> · <span x-text="Math.round(item.calories)"></span> kcal</span>
                   </small>
                 </button>
-                <span class="freq" x-show="item.count" x-text="`${item.count}×`"></span>
                 <!-- Only appears once there's something to take back. -->
                 <button class="tap" x-show="loggedToday(item)" @click="undoLast(item)"
                         :aria-label="`Remove last ${item.name}`">−</button>

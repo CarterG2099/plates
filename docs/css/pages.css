@@ -302,17 +302,6 @@
   color: var(--color-text);
 }
 
-.freq {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: .06em;
-  color: var(--color-text-dim);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 2px 8px;
-  flex: none;
-}
-
 /* The two-tap target. Large enough to hit without looking. */
 .tap {
   width: 40px;
