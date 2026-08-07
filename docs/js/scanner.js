@@ -1,11 +1,13 @@
 /**
  * scanner.js — barcode capture.
  *
- * Capture-to-decode, not a continuous decode loop: you frame the barcode and
- * tap, and exactly one frame is decoded. That avoids the one genuinely untested
- * thing in this stack (sustained decoding in an installed iOS PWA), doesn't
- * drain the battery while you hunt for the barcode, and is steadier in bad
- * pantry light because you can hold the shot.
+ * Decodes continuously: point the camera and it reads, no tap. The earlier
+ * capture-to-decode design put a button between you and the thing you came to
+ * do, which is the wrong trade in an app whose entire premise is speed.
+ *
+ * The cost that design was avoiding is real, so it is paid for explicitly here
+ * instead — a throttled loop rather than every frame, one reused canvas, a
+ * smaller frame on the CPU decode path, and no work at all while backgrounded.
  *
  * Native BarcodeDetector is used where it exists (Chromium). Everywhere else a
  * ZXing build is fetched on demand — the pure-JS port, not the WASM one, so the
@@ -19,6 +21,9 @@ const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'];
 let stream = null;
 let detector = null;
 let zxingReader = null;
+let scanTimer = null;
+let scanning = false;
+let generation = 0;
 
 export function isSupported() {
   return Boolean(window.isSecureContext && navigator.mediaDevices?.getUserMedia);
@@ -62,6 +67,7 @@ export async function start(video) {
 }
 
 export function stop(video) {
+  stopDecoding();
   if (stream) {
     for (const track of stream.getTracks()) track.stop();
     stream = null;
@@ -144,19 +150,31 @@ async function prepareDecoder() {
   return 'zxing';
 }
 
+// One canvas for the whole session. At ~8 decodes a second, allocating a
+// 1920×1080 canvas per frame is pure garbage-collector pressure.
+let frameCanvas = null;
+
+function frameOf(video, maxWidth = Infinity) {
+  if (!video?.videoWidth) return null;
+
+  const scale = Math.min(1, maxWidth / video.videoWidth);
+  frameCanvas ??= document.createElement('canvas');
+  frameCanvas.width = Math.round(video.videoWidth * scale);
+  frameCanvas.height = Math.round(video.videoHeight * scale);
+
+  frameCanvas.getContext('2d')
+    .drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+  return frameCanvas;
+}
+
 /**
  * Decode the current frame.
  * @returns {Promise<string|null>} the barcode, or null if this frame had none
  */
 export async function capture(video) {
-  if (!video?.videoWidth) return null;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video, 0, 0);
-
   if (detector) {
+    const canvas = frameOf(video);
+    if (!canvas) return null;
     try {
       const codes = await detector.detect(canvas);
       return codes?.[0]?.rawValue ?? null;
@@ -164,19 +182,94 @@ export async function capture(video) {
       return null;
     }
   }
-  return decodeWithZxing(canvas);
+
+  // ZXing decodes on the CPU, so the loop pays for every pixel. 1280 across a
+  // filled frame is still far more than a barcode needs.
+  const canvas = frameOf(video, 1280);
+  return canvas ? decodeWithZxing(canvas, { allowSlowFallback: false }) : null;
 }
 
-async function decodeWithZxing(canvas) {
+/**
+ * Read continuously until a barcode is found.
+ *
+ * Two matching consecutive reads are required before accepting. EAN and UPC
+ * carry a check digit, but Code 39 and 128 do not — one bad frame there would
+ * otherwise look up a barcode that was never on the packet.
+ *
+ * @returns {() => void} stop
+ */
+export function startDecoding(video, { onResult, onError } = {}) {
+  stopDecoding();
+
+  // A decode is async, so a tick can still be mid-flight when the sheet closes.
+  // Without a generation to check, reopening the scanner sets the shared
+  // `scanning` flag back to true and that orphaned tick resumes into the new
+  // session — still holding the old session's callbacks.
+  const mine = ++generation;
+  const alive = () => scanning && generation === mine;
+  scanning = true;
+
+  const interval = detector ? 120 : 450;
+  let lastCode = null;
+  let agreed = 0;
+
+  const tick = async () => {
+    if (!alive()) return;
+
+    // Nothing to read while backgrounded, and decoding there just burns battery.
+    if (document.visibilityState !== 'visible') return schedule();
+
+    let code = null;
+    try {
+      code = await capture(video);
+    } catch (error) {
+      if (!alive()) return;
+      scanning = false;
+      onError?.(error);
+      return;
+    }
+    if (!alive()) return;          // closed while that frame was decoding
+
+    if (code) {
+      agreed = code === lastCode ? agreed + 1 : 1;
+      lastCode = code;
+      if (agreed >= 2) {
+        scanning = false;
+        onResult?.(code);
+        return;
+      }
+    }
+    schedule();
+  };
+
+  const schedule = () => {
+    if (!alive()) return;
+    scanTimer = setTimeout(tick, interval);
+  };
+  schedule();
+
+  return stopDecoding;
+}
+
+export function stopDecoding() {
+  scanning = false;
+  generation++;
+  clearTimeout(scanTimer);
+  scanTimer = null;
+}
+
+async function decodeWithZxing(canvas, { allowSlowFallback = true } = {}) {
   const ZXing = await loadZXing();
   zxingReader ??= new ZXing.BrowserMultiFormatReader();
 
   // The decode entry point has moved between releases, so try what exists
-  // rather than pinning to one name that may not be there.
-  const attempts = [
-    () => zxingReader.decodeFromCanvas(canvas),
-    () => zxingReader.decodeFromImageUrl(canvas.toDataURL('image/png')),
-  ];
+  // rather than pinning to one name that may not be there. The data-URL route
+  // re-encodes the whole frame as PNG — fine once for a photo, far too slow to
+  // run every tick, so the loop opts out of it.
+  const attempts = [() => zxingReader.decodeFromCanvas(canvas)];
+  if (allowSlowFallback) {
+    attempts.push(() => zxingReader.decodeFromImageUrl(canvas.toDataURL('image/png')));
+  }
 
   for (const attempt of attempts) {
     try {

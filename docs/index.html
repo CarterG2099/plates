@@ -350,13 +350,13 @@
               <div class="sync-line" x-show="scan.status === 'starting'">
                 <span class="spinner" style="width:14px;height:14px"></span> Starting camera…
               </div>
-
-              <button class="btn btn-primary btn-block"
-                      :disabled="scan.status !== 'ready'"
-                      @click="captureBarcode()">
-                <span x-show="scan.status === 'reading'">Reading…</span>
-                <span x-show="scan.status !== 'reading'">Capture</span>
-              </button>
+              <div class="sync-line" x-show="scan.status === 'ready'">
+                <span class="spinner" style="width:14px;height:14px"></span>
+                Point at the barcode — it reads on its own.
+              </div>
+              <div class="sync-line" x-show="scan.status === 'reading'">
+                <span class="spinner" style="width:14px;height:14px"></span> Reading photo…
+              </div>
 
               <label class="btn btn-block" style="cursor:pointer">
                 Use camera app

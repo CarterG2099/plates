@@ -713,17 +713,36 @@ Alpine.data('logPage', () => ({
     const video = this.$refs.video;
 
     const result = await scanner.start(video);
-    this.scan = result.ok
-      ? {
-          status: 'ready',
-          decoder: result.decoder,
-          // Say so rather than letting it look broken: on iOS there is no focus
-          // control, and the camera app is the answer.
-          message: result.focus === 'unavailable'
-            ? 'This browser can’t control focus — use the camera app if it won’t read.'
-            : '',
-        }
-      : { status: 'error', message: result.reason, decoder: '' };
+    if (!result.ok) {
+      this.scan = { status: 'error', message: result.reason, decoder: '' };
+      return;
+    }
+
+    this.scan = {
+      status: 'ready',
+      decoder: result.decoder,
+      // Say so rather than letting it look broken: on iOS there is no focus
+      // control, and the camera app is the answer.
+      message: result.focus === 'unavailable'
+        ? 'This browser can’t control focus — use the camera app if it won’t read.'
+        : '',
+    };
+
+    scanner.startDecoding(video, {
+      onResult: (code) => this.acceptCode(code),
+      onError: (error) => { this.scan = { status: 'error', message: error.message, decoder: '' }; },
+    });
+  },
+
+  /** Shared by the live loop and the camera-app photo. */
+  async acceptCode(code) {
+    if (navigator.vibrate) navigator.vibrate(40);
+    this.closeScanner();
+
+    // Hand straight to the existing lookup path: same results sheet, same
+    // review form, same manual fallback.
+    this.term = code;
+    await this.searchOnline();
   },
 
   /** A photo from the system camera app, which focuses properly. */
@@ -732,6 +751,9 @@ Alpine.data('logPage', () => ({
     event.target.value = '';
     if (!file) return;
 
+    // The live loop would otherwise keep reading underneath and could resolve
+    // first, closing the sheet out from under this decode.
+    scanner.stopDecoding();
     this.scan = { ...(this.scan ?? {}), status: 'reading', message: '' };
 
     let code = null;
@@ -745,46 +767,25 @@ Alpine.data('logPage', () => ({
     if (!code) {
       this.scan = { ...(this.scan ?? {}), status: 'ready',
                     message: 'No barcode in that photo — fill the frame and try again.' };
+      this.resumeDecoding();
       return;
     }
 
-    if (navigator.vibrate) navigator.vibrate(40);
-    this.closeScanner();
-    this.term = code;
-    await this.searchOnline();
+    await this.acceptCode(code);
+  },
+
+  /** Put the live loop back after a photo attempt that didn't resolve. */
+  resumeDecoding() {
+    if (this.scan?.status !== 'ready') return;
+    scanner.startDecoding(this.$refs.video, {
+      onResult: (code) => this.acceptCode(code),
+      onError: (error) => { this.scan = { status: 'error', message: error.message, decoder: '' }; },
+    });
   },
 
   closeScanner() {
     scanner.stop(this.$refs.video);
     this.scan = null;
-  },
-
-  /** One tap, one frame. A miss says so and lets you try again. */
-  async captureBarcode() {
-    if (this.scan?.status !== 'ready') return;
-    this.scan.status = 'reading';
-
-    let code = null;
-    try {
-      code = await scanner.capture(this.$refs.video);
-    } catch (e) {
-      this.scan = { status: 'error', message: e.message, decoder: '' };
-      return;
-    }
-
-    if (!code) {
-      this.scan.status = 'ready';
-      this.scan.message = 'No barcode in that shot — fill the frame and try again.';
-      return;
-    }
-
-    if (navigator.vibrate) navigator.vibrate(40);
-    this.closeScanner();
-
-    // Hand straight to the existing lookup path: same results sheet, same
-    // review form, same manual fallback.
-    this.term = code;
-    await this.searchOnline();
   },
 
   /** Pull a looked-up result into the same review form manual entry uses. */
