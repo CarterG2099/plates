@@ -62,6 +62,13 @@ interface UsdaFood {
   gtinUpc?: string;
   dataType?: string;
   foodNutrients?: UsdaNutrient[];
+  // Branded foods carry the label serving directly.
+  servingSize?: number;
+  servingSizeUnit?: string;
+  householdServingFullText?: string;
+  // Foundation and SR Legacy carry household measures instead — this is where
+  // "1 fruit" for a clementine lives.
+  foodMeasures?: { gramWeight?: number; disseminationText?: string }[];
 }
 
 function pick(nutrients: UsdaNutrient[], key: string): number | null {
@@ -74,27 +81,70 @@ function pick(nutrients: UsdaNutrient[], key: string): number | null {
 }
 
 /**
- * Search results report per 100 g, so drafts are normalised to a 100 g serving —
- * identical to the Open Food Facts mapping, which keeps one scaling rule in the
- * client rather than one per source.
+ * One serving, wherever USDA gives us one.
+ *
+ * Search results always report nutrients per 100 g, but that is a measurement
+ * basis, not a portion. You search for a clementine to log a clementine, so the
+ * per-100g figures are scaled onto whatever serving USDA recorded and the food
+ * is stored as `1 serving` — matching the Open Food Facts mapping exactly, so
+ * one scaling rule serves both sources.
+ *
+ * Per 100 g remains the fallback for foods with no recorded portion, because
+ * there is then nothing to express a serving in.
  */
+function servingOf(food: UsdaFood): { grams: number; label: string } | null {
+  // Branded: the label serving, but only as a mass or volume. A "1 bar" serving
+  // with no weight cannot be scaled from a per-100g figure.
+  const size = Number(food.servingSize);
+  const unit = (food.servingSizeUnit ?? "").trim().toLowerCase();
+  if (Number.isFinite(size) && size > 0 && (unit === "g" || unit === "ml")) {
+    return {
+      grams: size,
+      label: (food.householdServingFullText ?? "").trim() || `${size} ${unit}`,
+    };
+  }
+
+  // Foundation / SR Legacy: the first household measure, which is the one USDA
+  // treats as the primary portion ("1 fruit", "1 cup, sections").
+  for (const measure of food.foodMeasures ?? []) {
+    const grams = Number(measure.gramWeight);
+    if (Number.isFinite(grams) && grams > 0) {
+      return {
+        grams,
+        label: (measure.disseminationText ?? "").trim() || `${grams} g`,
+      };
+    }
+  }
+
+  return null;
+}
+
 function toDraft(food: UsdaFood) {
   const nutrients = food.foodNutrients ?? [];
   const brand = (food.brandName || food.brandOwner || "").trim() || null;
+  const serving = servingOf(food);
+
+  // Nutrients are per 100 g; a serving is `grams` of that.
+  const factor = serving ? serving.grams / 100 : 1;
+  const per = (key: string): number | null => {
+    const value = pick(nutrients, key);
+    return value == null ? null : Math.round(value * factor * 10) / 10;
+  };
 
   const draft = {
     external_id: food.fdcId ? String(food.fdcId) : null,
     barcode: food.gtinUpc?.trim() || null,
     name: (food.description ?? "").trim() || "Unnamed food",
     brand,
-    serving_qty: 100,
-    serving_unit: "g",
-    calories: pick(nutrients, "calories") ?? kjToKcal(pick(nutrients, "energy_kj")),
-    protein_g: pick(nutrients, "protein_g"),
-    carbs_g: pick(nutrients, "carbs_g"),
-    fat_g: pick(nutrients, "fat_g"),
-    fiber_g: pick(nutrients, "fiber_g"),
-    sodium_mg: pick(nutrients, "sodium_mg"),
+    serving_qty: serving ? 1 : 100,
+    serving_unit: serving ? "serving" : "g",
+    basis: serving ? serving.label : "per 100 g",
+    calories: per("calories") ?? kjToKcal(per("energy_kj")),
+    protein_g: per("protein_g"),
+    carbs_g: per("carbs_g"),
+    fat_g: per("fat_g"),
+    fiber_g: per("fiber_g"),
+    sodium_mg: per("sodium_mg"),
     source: "usda",
   };
 
