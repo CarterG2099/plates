@@ -18,7 +18,7 @@ const DATA_TYPES = "Branded,SR Legacy,Foundation";
 // fetch its maximum page and re-rank locally. At 40 the actual Great Value
 // peanut butter was not even in the fetched set.
 const PAGE_SIZE = 200;
-const RETURN_LIMIT = 15;
+const RETURN_LIMIT = 10;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -163,27 +163,66 @@ function kjToKcal(kj: number | null): number | null {
 }
 
 /**
- * Rank by how many of the query's words the entry actually accounts for.
+ * Rank by how well an entry answers the query, not by how many of its words
+ * appear somewhere in the text.
  *
- * USDA matches words against the description only, so "great value peanut
- * butter" either OR-matches into noise (Reese's cups, lemonade) or, with
- * requireAllWords, returns nothing at all — because "great" and "value" live in
- * the brand fields, not the description. Scoring across description *and* brand
- * degrades gracefully instead of failing at either extreme.
+ * Counting term hits scored "Milk, reduced fat, 2% milkfat" and "Puddings,
+ * chocolate, dry mix, prepared with 2% milk" identically — both contain "milk"
+ * and "2%" — and ties fell through to USDA's own order, which is the category
+ * noise this function exists to undo. A search for milk returned pudding.
+ *
+ * Four signals, in rough order of weight:
+ *
+ *  - The head noun. USDA descriptions name the food first and qualify it after,
+ *    so the first word is what the food IS. Milk is milk; pudding *made with*
+ *    milk is pudding. This is what separates them.
+ *  - Coverage, as a multiplier rather than a bonus. A short description
+ *    answering half the query was otherwise beating a long one answering all of
+ *    it, which surfaced "Milk Chocolate Candy Bar" for "milk 2%".
+ *  - Where the match landed. Description beats brand: "great value" is a brand,
+ *    "peanut butter" is the food.
+ *  - Padding. Every word not answering the query costs a little, so a tight
+ *    description wins over one carrying the terms incidentally.
  */
 function scoreAgainst(terms: string[], food: UsdaFood): number {
-  const haystack = [food.description, food.brandName, food.brandOwner]
-    .filter(Boolean).join(" ").toLowerCase();
+  const desc = (food.description ?? "").toLowerCase();
+  const brand = [food.brandName, food.brandOwner].filter(Boolean).join(" ").toLowerCase();
 
-  let score = 0;
-  for (const term of terms) if (haystack.includes(term)) score += 1;
-  return score;
+  const words = desc.split(/[^a-z0-9%.]+/).filter(Boolean);
+  const head = words[0] ?? "";
+
+  let inDesc = 0;
+  let inBrand = 0;
+  for (const term of terms) {
+    if (desc.includes(term)) inDesc += 1;
+    else if (brand.includes(term)) inBrand += 1;
+  }
+
+  const matched = inDesc + inBrand;
+  if (!matched) return 0;
+
+  let score = inDesc * 12 + inBrand * 5;
+
+  // Brand words are barred from earning the head bonus. Branded descriptions
+  // often lead with the brand, so "great" would hand it to "Great Value
+  // Sandwich Cookies, Peanut Butter" over the actual peanut butter.
+  const headable = terms.filter((t) => !brand.includes(t));
+  if (headable.some((t) => head.startsWith(t) || (t.length > 3 && t.startsWith(head)))) {
+    score += 45;
+  }
+
+  score -= Math.min(Math.max(words.length - matched, 0), 14) * 2;
+
+  return Math.max(score, 0) * (matched / terms.length) ** 1.5;
 }
 
 // Deliberately no bonus for Branded entries. It was tried and it put Great Value
 // Lemonade at the top of a peanut butter search: brand words and food words score
 // identically, so any thumb on the scale for brand matches promotes the wrong
-// product. Ties fall back to USDA's own order.
+// product.
+
+/** Everything far below the best match is noise, however many slots are free. */
+const RELEVANCE_FLOOR = 0.28;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -251,9 +290,14 @@ Deno.serve(async (req) => {
   }
 
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const ranked = foods
+  const scored = foods
     .map((food) => ({ food, score: scoreAgainst(terms, food) }))
-    .sort((a, b) => b.score - a.score)
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const best = scored[0]?.score ?? 0;
+  const ranked = scored
+    .filter((r) => r.score >= best * RELEVANCE_FLOOR)
     .slice(0, RETURN_LIMIT);
 
   return json({

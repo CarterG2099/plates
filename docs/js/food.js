@@ -209,10 +209,8 @@ export function rankFoods(foods, log, ownerEmail) {
  */
 const WEIGHT = { barcode: 100, exact: 100, prefix: 40, word: 20, substring: 8, brand: 4 };
 
-function matchWeight(food, q) {
-  // A scanned code you already own must beat anything the internet offers.
-  if (food.barcode && String(food.barcode) === q) return WEIGHT.barcode;
-
+/** One phrase against one food. */
+function phraseWeight(food, q) {
   const name = (food.name ?? '').toLowerCase();
   if (name === q) return WEIGHT.exact;
   if (name.startsWith(q)) return WEIGHT.prefix;
@@ -220,6 +218,37 @@ function matchWeight(food, q) {
   if (name.includes(q)) return WEIGHT.substring;
 
   return (food.brand ?? '').toLowerCase().includes(q) ? WEIGHT.brand : 0;
+}
+
+/**
+ * How well a food answers what you typed.
+ *
+ * The whole query used to be matched as one substring, so "milk 2%" could only
+ * find a food whose name literally contained "milk 2%" — not "2% Milk", not
+ * "Milk, 2% reduced fat". Multi-word searches found almost nothing.
+ *
+ * Now every word has to appear somewhere, and the score is the average of what
+ * each word scored. An exact phrase still wins outright, because typing the
+ * whole name is the least ambiguous thing you can do.
+ */
+function matchWeight(food, q) {
+  // A scanned code you already own must beat anything the internet offers.
+  if (food.barcode && String(food.barcode) === q) return WEIGHT.barcode;
+
+  const whole = phraseWeight(food, q);
+  if (whole >= WEIGHT.prefix) return whole;
+
+  const terms = q.split(/\s+/).filter(Boolean);
+  if (terms.length < 2) return whole;
+
+  let total = 0;
+  for (const term of terms) {
+    const weight = phraseWeight(food, term);
+    if (!weight) return 0;                 // every word must land somewhere
+    total += weight;
+  }
+  // Averaged, not summed: a two-word match must not out-score an exact name.
+  return Math.max(whole, total / terms.length);
 }
 
 /** Local search. Nothing here is worth a network call. */
