@@ -483,6 +483,23 @@
                 </div>
               </div>
 
+              <!-- Only when OFF gave no serving size. One number off the
+                   label converts the whole draft. -->
+              <template x-if="draft.serving_unit !== 'serving'">
+                <div class="notice">
+                  These numbers are per <span x-text="draft.serving_qty"></span><span x-text="draft.serving_unit"></span>.
+                  If the label gives a serving, set it and the macros follow.
+                  <div class="serving-fix">
+                    <label class="field">
+                      <span>One serving is</span>
+                      <input type="number" inputmode="decimal" step="any" min="0"
+                             x-model="servingSize" :placeholder="draft.serving_unit">
+                    </label>
+                    <button class="btn" @click="applyServingSize()" :disabled="!(Number(servingSize) > 0)">Use it</button>
+                  </div>
+                </div>
+              </template>
+
               <div class="field-grid">
                 <div class="field">
                   <label for="f-kcal">Calories</label>

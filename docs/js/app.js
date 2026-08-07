@@ -501,9 +501,20 @@ Alpine.data('todayPage', () => ({
 
 // ---- log -------------------------------------------------------------------
 
+/**
+ * A food saved before scanned foods were stored as servings.
+ *
+ * Only OFF rows qualify: a hand-entered food measured in grams is measured in
+ * grams on purpose, and rescanning must not overwrite that.
+ */
+function isStaleGramFood(f) {
+  return f.source === 'off' && f.serving_unit !== 'serving';
+}
+
 /** One shape for the food form, whether typed by hand or filled from a lookup. */
 function blankDraft(name = '') {
   return {
+    id: null,
     name,
     brand: '',
     barcode: null,
@@ -527,6 +538,7 @@ Alpine.data('logPage', () => ({
   creating: false,
   draft: null,
 
+  servingSize: '',      // review-form converter, see applyServingSize()
   _onlineTimer: null,
   _onlineGen: 0,
 
@@ -815,10 +827,15 @@ Alpine.data('logPage', () => ({
     this.term = code;
 
     // Already yours: no lookup, no write, straight to the amount.
+    //
+    // Unless it was saved on the old per-100g basis. That shortcut made every
+    // badly-stored food permanently badly-stored — rescanning found the local
+    // copy and never asked Open Food Facts again, so the thing you rescanned it
+    // to fix was exactly the thing it skipped.
     const mine = this.data.foods.find(
       (f) => !f.deleted_at && f.barcode && String(f.barcode) === code,
     );
-    if (mine) {
+    if (mine && !isStaleGramFood(mine)) {
       const ranked = this.ranked.find((f) => f.id === mine.id) ?? mine;
       this.openSheet(ranked);
       return;
@@ -838,14 +855,21 @@ Alpine.data('logPage', () => ({
     this.online = { status: 'done', ...found, term: code };
 
     const hit = found.results[0];
-    if (!hit) return;                       // nothing found; the row area explains
 
-    if (hit.missing.length) {
-      this.acceptLookup(hit);               // gaps to fill — review it
+    // Nothing found, or found but with no serving to log it in. Either way the
+    // review form is the honest answer — it must NOT silently save a 100 g
+    // basis for a can of drink and call that done.
+    if (!hit) {
+      if (mine) this.openSheet(this.ranked.find((f) => f.id === mine.id) ?? mine);
       return;
     }
 
-    const saved = await this.persistDraft({ ...blankDraft(''), ...hit.draft });
+    if (hit.missing.length || hit.draft.serving_unit !== 'serving') {
+      this.acceptLookup({ ...hit, existingId: mine?.id });
+      return;
+    }
+
+    const saved = await this.persistDraft({ ...blankDraft(''), ...hit.draft, id: mine?.id });
     this.term = '';
     await Alpine.store('data').refresh();
     this.openSheet({ ...saved, lastQuantity: null, lastUnit: null });
@@ -932,11 +956,41 @@ Alpine.data('logPage', () => ({
 
   /** Pull a looked-up result into the same review form manual entry uses. */
   acceptLookup(result) {
-    this.draft = { ...blankDraft(''), ...result.draft };
+    this.draft = { ...blankDraft(''), ...result.draft, id: result.existingId ?? null };
     this.creating = true;
   },
 
-  cancelCreate() { this.creating = false; this.draft = null; },
+  cancelCreate() { this.creating = false; this.draft = null; this.servingSize = ''; },
+
+  /**
+   * Turn a per-100g draft into a per-serving one.
+   *
+   * Open Food Facts does not always record a serving size, and when it doesn't
+   * there is nothing to derive one from — a can of drink comes back measured in
+   * 100 ml, which is not how anyone drinks it. Rather than guess (a 355 ml can
+   * and a 2 l bottle are both just `quantity` to OFF), this takes the number off
+   * the label once and converts the macros to match. After this the food is
+   * stored as 1 serving like any other scan.
+   */
+  applyServingSize() {
+    const size = Number(this.servingSize);
+    const basis = Number(this.draft.serving_qty);
+    if (!(size > 0) || !(basis > 0)) return;
+
+    const unit = this.draft.serving_unit || 'g';
+    const factor = size / basis;
+
+    for (const key of ['calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg']) {
+      const value = this.draft[key];
+      if (value === '' || value == null) continue;
+      this.draft[key] = Math.round(Number(value) * factor * 10) / 10;
+    }
+
+    this.draft.serving_qty = 1;
+    this.draft.serving_unit = 'serving';
+    this.draft.basis = `${size} ${unit}`;
+    this.servingSize = '';
+  },
 
   get canSaveDraft() {
     return this.draft?.name?.trim() && Number(this.draft.serving_qty) > 0;
@@ -958,6 +1012,9 @@ Alpine.data('logPage', () => ({
     const numeric = (v) => (v === '' || v == null ? null : Number(v));
 
     return food.saveFood({
+      // Present when rescanning a food you already have: updates that row rather
+      // than leaving a stale duplicate behind, so the log keeps pointing at it.
+      ...(d.id ? { id: d.id } : {}),
       name: d.name.trim(),
       brand: (d.brand ?? '').trim() || null,
       // No external_id here: plates.foods has no such column. The barcode is the
