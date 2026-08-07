@@ -12,7 +12,7 @@ import { supabase, signIn, signOut, loadMembership, describeError } from './supa
 import * as local from './local.js';
 import * as sync from './sync.js';
 import * as food from './food.js';
-import { lookupBarcode, searchByName as lookupByNameOff } from './lookup.js';
+import { lookupBarcode, draftsFromProducts } from './lookup.js';
 import * as scanner from './scanner.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
@@ -1071,51 +1071,53 @@ Alpine.data('logPage', () => ({
    * one source failing still returns the other's results.
    */
   async lookupByName(term) {
-    const [usda, off] = await Promise.all([
-      supabase.functions.invoke('lookup-usda', { body: { query: term } })
-        .then(({ data, error }) => {
-          if (error) throw error;
-          return {
-            results: (data.results ?? []).map((r) => ({
-              draft: r.draft,
-              missing: r.missing ?? [],
-              source: r.dataType ?? 'USDA',
-            })),
-            // Words that matched nothing at all. Almost always a typo, and
-            // without saying so the results look confident rather than wrong.
-            unmatched: data.unmatched ?? [],
-            error: data.error ?? '',
-          };
-        })
-        .catch((e) => ({ results: [], unmatched: [], error: e.message ?? String(e) })),
+    let data;
+    try {
+      const res = await supabase.functions.invoke('lookup-usda', { body: { query: term } });
+      if (res.error) throw res.error;
+      data = res.data;
+    } catch (e) {
+      return {
+        results: [],
+        unmatched: [],
+        sources: { usda: 0, usdaError: e.message ?? String(e), off: 0, offFetched: 0, offError: 'not reached' },
+        error: e.message ?? String(e),
+      };
+    }
 
-      lookupByNameOff(term).catch((e) => ({ results: [], error: e.message ?? String(e), fetched: 0 })),
-    ]);
+    const usda = (data.results ?? []).map((r) => ({
+      draft: r.draft,
+      missing: r.missing ?? [],
+      source: r.dataType ?? 'USDA',
+    }));
+
+    // Mapped here with the same code the barcode path uses, so serving basis and
+    // sodium conversion cannot drift between the two.
+    const offProducts = data.off ?? [];
+    const off = draftsFromProducts(offProducts);
 
     // USDA first on a collision: its values are lab-measured or label-verified,
     // where OFF is whatever the last person to scan it typed in.
-    const results = food.mergeDrafts([usda.results, off.results], term);
+    const results = food.mergeDrafts([usda, off], term);
 
     return {
       results,
-      // Only trust the typo hint when USDA actually answered, and only when the
-      // word is missing from OFF's results too.
-      unmatched: usda.error ? [] : (usda.unmatched ?? []).filter(
-        (t) => !off.results.some((r) => `${r.draft.name} ${r.draft.brand ?? ''}`.toLowerCase().includes(t)),
+      // Only trust the typo hint when the word is missing from both sources.
+      unmatched: (data.unmatched ?? []).filter(
+        (t) => !off.some((r) => `${r.draft.name} ${r.draft.brand ?? ''}`.toLowerCase().includes(t)),
       ),
       // Which source produced what. Both failure modes are silent by design —
       // one source going down must not take the other with it — so without this
       // there is no way to tell a source that returned nothing from one that
       // never answered.
       sources: {
-        usda: usda.results.length,
-        usdaError: usda.error || '',
-        off: off.results.length,
-        offFetched: off.fetched ?? 0,
-        offError: off.error || '',
+        usda: usda.length,
+        usdaError: data.error ?? '',
+        off: off.length,
+        offFetched: offProducts.length,
+        offError: data.offError ?? '',
       },
-      // Only an error if it left us with nothing to show.
-      error: results.length ? '' : usda.error,
+      error: results.length ? '' : (data.error ?? ''),
     };
   },
 

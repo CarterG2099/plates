@@ -1,15 +1,30 @@
-// lookup-usda — searches USDA FoodData Central and returns unsaved drafts for
-// the food form to pre-fill. It never writes to the database; the human reviews
-// and saves, the same convention as import-photo.
+// lookup-usda — food name search. Despite the name it now queries USDA
+// FoodData Central *and* Open Food Facts, and returns unsaved drafts for the
+// food form to pre-fill. It never writes to the database; the human reviews and
+// saves, the same convention as import-photo.
 //
-// This exists as a function rather than a browser fetch for one reason: USDA
-// passes its key as a query parameter, and this repo is public. A key committed
-// to docs/ would be scraped. It lives in the USDA_API_KEY function secret.
+// Two reasons this is a function rather than a browser fetch:
+//   - USDA passes its key as a query parameter, and this repo is public. A key
+//     committed to docs/ would be scraped. It lives in the USDA_API_KEY secret.
+//   - OFF's search endpoint sends no CORS header and 503s a browser User-Agent.
+//     Its *barcode* endpoint does neither, which is why that one still runs in
+//     the page.
 //
 // Members only: we check plates.is_member() with the caller's JWT.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
+
+// Open Food Facts, searched here rather than from the page. Its search endpoint
+// sends no CORS header and 503s a browser User-Agent, so the browser cannot call
+// it at all — the barcode endpoint can, and still does.
+const OFF_SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl";
+const OFF_FIELDS = "code,product_name,generic_name,brands,nutriments"
+  + ",serving_size,serving_quantity,serving_quantity_unit";
+const OFF_PAGE_SIZE = 12;
+// OFF asks for a descriptive agent and throttles anything that omits one.
+const OFF_AGENT = "Plates/1.0 (https://plates.cartergividen.com)";
+const OFF_TIMEOUT_MS = 9000;
 
 // Branded first — that is the US store-brand coverage Open Food Facts is weakest
 // on, which is the whole reason this fallback exists.
@@ -288,6 +303,38 @@ async function fetchFoods(
   }
 }
 
+/**
+ * Raw OFF products, unmapped.
+ *
+ * Deliberately not converted to drafts here: the mapping — serving basis,
+ * kJ fallback, sodium in grams — already exists in the client's lookup.js and
+ * must stay in one place, or the barcode path and the search path will drift.
+ */
+async function fetchOff(query: string): Promise<{ products: unknown[]; error: string }> {
+  const url = `${OFF_SEARCH_URL}?search_terms=${encodeURIComponent(query)}`
+    + `&search_simple=1&action=process&json=1`
+    + `&page_size=${OFF_PAGE_SIZE}&fields=${OFF_FIELDS}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OFF_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": OFF_AGENT },
+      signal: controller.signal,
+    });
+    if (!res.ok) return { products: [], error: `${res.status}` };
+
+    const payload = await res.json();
+    return { products: Array.isArray(payload?.products) ? payload.products : [], error: "" };
+  } catch (e) {
+    const err = e as Error;
+    return { products: [], error: err.name === "AbortError" ? "timed out" : (err.message ?? "failed") };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -333,10 +380,20 @@ Deno.serve(async (req) => {
   const passes = [fetchFoods(term, apiKey, false)];
   if (multiWord) passes.push(fetchFoods(term, apiKey, true));
 
-  const settled = await Promise.all(passes);
-  const failure = settled.find((r) => "error" in r);
-  if (failure && settled.every((r) => "error" in r)) {
-    return json(failure, 502);
+  // Open Food Facts runs alongside, not after. It covers the store brands USDA's
+  // manufacturer-submitted set misses, and neither source waits on the other.
+  const offPromise = barcode
+    ? Promise.resolve({ products: [] as unknown[], error: "" })
+    : fetchOff(term);
+
+  const [settled, off] = await Promise.all([Promise.all(passes), offPromise]);
+
+  // A USDA outage must not discard OFF's results — that is the entire reason
+  // for asking two sources. Only fail outright when nothing at all came back.
+  const usdaDown = settled.every((r) => "error" in r);
+  const usdaError = usdaDown ? (settled[0] as { error: string }).error : "";
+  if (usdaDown && !off.products.length) {
+    return json({ error: usdaError, offError: off.error }, 502);
   }
 
   // Deduped by fdcId, strict pass first so its hits survive.
@@ -386,7 +443,11 @@ Deno.serve(async (req) => {
     count: ranked.length,
     fetched: foods.length,
     unmatched,
+    error: usdaError,
     results: ranked.map(({ food, score }) => ({ ...toDraft(food), score })),
+    // Raw, for the client to map with the same code the barcode path uses.
+    off: off.products,
+    offError: off.error,
   });
 });
 
