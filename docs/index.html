@@ -301,9 +301,6 @@
                 <button class="tap" x-show="loggedToday(item)" @click="undoLast(item)"
                         :aria-label="`Remove last ${item.name}`">−</button>
                 <button class="tap tap-primary" @click="quickLog(item)" :aria-label="`Log ${item.name}`">+</button>
-                <!-- Pointer-only; touch reaches the same action by swiping. -->
-                <button class="tap row-kill" @click="toggleRowAction($event)"
-                        :aria-label="`Show remove for ${item.name}`">×</button>
               </div>
             </div>
           </template>

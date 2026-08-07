@@ -749,23 +749,6 @@ Alpine.data('logPage', () => ({
   },
 
   /**
-   * The pointer equivalent of the swipe.
-   *
-   * It reveals the same Remove action rather than deleting outright, so both
-   * input methods take two deliberate steps. A hover-revealed button that
-   * deletes on a single click is one stray click from losing a food.
-   */
-  toggleRowAction(event) {
-    const wrap = event.currentTarget.closest('.row-swipe');
-    if (!wrap) return;
-
-    for (const other of document.querySelectorAll('.row-swipe.is-open')) {
-      if (other !== wrap) other.classList.remove('is-open');
-    }
-    wrap.classList.toggle('is-open');
-  },
-
-  /**
    * Take a food out of your list.
    *
    * Soft, and safe for history: every log entry snapshots its own macros, so

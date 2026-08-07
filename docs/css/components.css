@@ -382,29 +382,3 @@
 @media (prefers-reduced-motion: reduce) {
   .row-swipe > .row { transition: none; }
 }
-
-/* The pointer route to the remove action. Touch devices swipe instead, so this
-   is hidden from them entirely rather than crowding a row that has no room. */
-.row-kill { display: none; }
-
-@media (hover: hover) and (pointer: fine) {
-  .row-kill {
-    display: grid;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--transition-fast);
-  }
-
-  /* focus-within keeps it reachable by keyboard, where there is no hover. */
-  .row-swipe:hover .row-kill,
-  .row-swipe:focus-within .row-kill,
-  .row-swipe.is-open .row-kill {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .row-kill:hover {
-    border-color: var(--color-danger);
-    color: var(--color-danger);
-  }
-}
