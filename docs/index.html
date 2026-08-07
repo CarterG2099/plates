@@ -865,6 +865,44 @@
 
       <main class="app-main" x-data="statsPage" x-show="$store.ui.view === 'stats'">
 
+        <!-- Targets ---------------------------------------------------------- -->
+        <div class="card">
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Targets</div>
+              <div class="stat-hero" x-show="goal">
+                <span x-text="goal && (goal.calorie_target || '—')"></span><small>kcal</small>
+              </div>
+              <div class="stat-sub" x-show="goal">
+                <span x-text="goal && (goal.phase || 'no phase set')"></span>
+                <span x-show="goal && goal.target_weight_lb">
+                  · target <span x-text="goal && goal.target_weight_lb"></span> lb
+                </span>
+              </div>
+            </div>
+            <button class="btn" @click="editGoal()" x-text="goal ? 'Edit' : 'Set'"></button>
+          </div>
+
+          <div class="macros" x-show="goal && goal.protein_target_g">
+            <template x-for="m in [
+              { k: 'protein_target_g', n: 'Protein', c: 'var(--color-protein)' },
+              { k: 'carbs_target_g',   n: 'Carbs',   c: 'var(--color-carbs)' },
+              { k: 'fat_target_g',     n: 'Fat',     c: 'var(--color-fat)' }
+            ]" :key="m.k">
+              <div class="macro">
+                <span class="dot" :style="`background: ${m.c}`"></span>
+                <span class="macro-name" x-text="m.n"></span>
+                <span class="macro-val" style="margin-left:auto"
+                      x-text="goal && ((goal[m.k] ?? '—') + ' g')"></span>
+              </div>
+            </template>
+          </div>
+
+          <p class="empty" style="padding:var(--space-3) 0" x-show="!goal">
+            No targets yet. Set them and the Today screen starts showing progress.
+          </p>
+        </div>
+
         <!-- Body weight ------------------------------------------------------ -->
         <div class="card">
           <div class="readout-head">
@@ -979,6 +1017,85 @@
         <p class="empty" x-show="!lifts.length && !calorieSummary && weight.length < 2">
           Log a workout, a meal or your weight and this fills in.
         </p>
+
+        <!-- Edit targets ----------------------------------------------------- -->
+        <template x-if="editing">
+          <div class="sheet-backdrop" @click.self="editing = false">
+            <div class="sheet" x-init="$swipe($el, () => { editing = false })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2>Targets</h2>
+                <button class="tap" @click="editing = false" aria-label="Close">×</button>
+              </div>
+
+              <div class="field">
+                <label>Phase</label>
+                <div class="chips">
+                  <template x-for="p in ['cut', 'maintain', 'bulk']" :key="p">
+                    <button class="chip" :class="draft.phase === p && 'is-active'"
+                            @click="draft.phase = p" x-text="p"></button>
+                  </template>
+                </div>
+              </div>
+
+              <div class="field-grid">
+                <div class="field">
+                  <label for="g-kcal">Calories</label>
+                  <input id="g-kcal" type="number" inputmode="numeric" x-model="draft.calorie_target">
+                </div>
+                <div class="field">
+                  <label for="g-weight">Target weight lb</label>
+                  <input id="g-weight" type="number" inputmode="decimal" step="0.1" x-model="draft.target_weight_lb">
+                </div>
+                <div class="field">
+                  <label for="g-p">Protein g</label>
+                  <input id="g-p" type="number" inputmode="numeric" x-model="draft.protein_target_g">
+                </div>
+                <div class="field">
+                  <label for="g-c">Carbs g</label>
+                  <input id="g-c" type="number" inputmode="numeric" x-model="draft.carbs_target_g">
+                </div>
+                <div class="field">
+                  <label for="g-f">Fat g</label>
+                  <input id="g-f" type="number" inputmode="numeric" x-model="draft.fat_target_g">
+                </div>
+              </div>
+
+              <!-- The macros either add up to the calorie target or they don't. -->
+              <p class="infood" x-show="draftMacroKcal">
+                Macros add up to <span x-text="draftMacroKcal"></span> kcal<span
+                  x-show="draftMismatch"> · <span
+                  x-text="Math.abs(draftMismatch)"></span> <span
+                  x-text="draftMismatch > 0 ? 'over' : 'under'"></span> your target</span>
+              </p>
+
+              <button class="btn btn-primary btn-block" @click="saveGoal()">Update current targets</button>
+              <button class="btn btn-block" @click="saveNewPhase()">
+                Start a new <span x-text="draft.phase"></span> from today
+              </button>
+
+              <p class="stat-sub">
+                Updating changes the phase you're in. Starting a new one closes it
+                yesterday, so what you were aiming for before stays on record.
+              </p>
+
+              <div x-show="phases.length > 1">
+                <div class="card-label" style="padding-top:var(--space-2)">Previous phases</div>
+                <div class="rows">
+                  <template x-for="p in phases.slice(1)" :key="p.id">
+                    <div class="row">
+                      <div class="row-text">
+                        <b x-text="p.phase || 'phase'"></b>
+                        <small><span x-text="p.starts_on"></span> → <span x-text="p.ends_on || 'open'"></span></small>
+                      </div>
+                      <span class="row-num" x-text="(p.calorie_target || '—') + ' kcal'"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
 
         <!-- Log weight ------------------------------------------------------- -->
         <template x-if="weighing">

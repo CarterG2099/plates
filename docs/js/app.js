@@ -1298,6 +1298,50 @@ Alpine.data('statsPage', () => ({
 
   round(n) { return Math.round(Number(n) || 0); },
   thousands(n) { return `${(Number(n) / 1000).toFixed(1)}k`; },
+
+  // ---- targets -------------------------------------------------------------
+
+  editing: false,
+  draft: null,
+
+  get phases() { return food.goalHistory(this.data.goals, this.email); },
+
+  editGoal() {
+    const g = this.goal;
+    this.draft = {
+      phase: g?.phase ?? 'maintain',
+      calorie_target: g?.calorie_target ?? '',
+      protein_target_g: g?.protein_target_g ?? '',
+      carbs_target_g: g?.carbs_target_g ?? '',
+      fat_target_g: g?.fat_target_g ?? '',
+      target_weight_lb: g?.target_weight_lb ?? '',
+    };
+    this.editing = true;
+  },
+
+  /** Calories the macro split actually adds up to — a cheap sanity check. */
+  get draftMacroKcal() { return this.draft ? food.caloriesFromMacros(this.draft) : null; },
+
+  get draftMismatch() {
+    const target = Number(this.draft?.calorie_target);
+    const implied = this.draftMacroKcal;
+    if (!target || !implied) return null;
+    return Math.abs(implied - target) > 60 ? implied - target : null;
+  },
+
+  async saveGoal() {
+    await food.updateGoal(this.goal ?? {}, this.draft, this.email);
+    this.editing = false;
+    await this.data.refresh();
+    Alpine.store('ui').flash('Targets updated');
+  },
+
+  async saveNewPhase() {
+    await food.startPhase(this.draft, this.goal, this.email);
+    this.editing = false;
+    await this.data.refresh();
+    Alpine.store('ui').flash(`Started ${this.draft.phase}`);
+  },
 }));
 
 // The offline shell. Registered after the app is up so it never delays first

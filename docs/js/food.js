@@ -379,3 +379,69 @@ export function remainingAsFoods(remainingKcal, rankedFoods, limit = 2) {
       label: x.servings === 1 ? `1 ${x.food.name}` : `${x.servings} × ${x.food.name}`,
     }));
 }
+
+// ---- goals -----------------------------------------------------------------
+
+const numeric = (v) => (v === '' || v == null ? null : Number(v));
+
+/** Calories implied by a macro split, for sanity-checking against the target. */
+export function caloriesFromMacros({ protein_target_g, carbs_target_g, fat_target_g }) {
+  const p = Number(protein_target_g) || 0;
+  const c = Number(carbs_target_g) || 0;
+  const f = Number(fat_target_g) || 0;
+  if (!p && !c && !f) return null;
+  return Math.round(p * 4 + c * 4 + f * 9);
+}
+
+/** Adjust the goal you're already in — same phase, corrected numbers. */
+export async function updateGoal(goal, fields, ownerEmail) {
+  const row = await local.save('goals', {
+    ...goal,
+    phase: fields.phase || null,
+    calorie_target: numeric(fields.calorie_target),
+    protein_target_g: numeric(fields.protein_target_g),
+    carbs_target_g: numeric(fields.carbs_target_g),
+    fat_target_g: numeric(fields.fat_target_g),
+    target_weight_lb: numeric(fields.target_weight_lb),
+  }, ownerEmail);
+
+  sync.nudge();
+  return row;
+}
+
+/**
+ * Begin a new phase from today, closing the previous one yesterday.
+ *
+ * This is why goals are a dated table rather than columns on members: switching
+ * from a cut to a bulk should leave the cut's targets intact, so "what was I
+ * aiming for in March" stays answerable.
+ */
+export async function startPhase(fields, current, ownerEmail) {
+  if (current) {
+    await local.save('goals', {
+      ...current,
+      ends_on: toDateOnly(addDays(new Date(), -1)),
+    }, ownerEmail);
+  }
+
+  const row = await local.save('goals', {
+    phase: fields.phase || null,
+    starts_on: toDateOnly(new Date()),
+    ends_on: null,
+    calorie_target: numeric(fields.calorie_target),
+    protein_target_g: numeric(fields.protein_target_g),
+    carbs_target_g: numeric(fields.carbs_target_g),
+    fat_target_g: numeric(fields.fat_target_g),
+    target_weight_lb: numeric(fields.target_weight_lb),
+  }, ownerEmail);
+
+  sync.nudge();
+  return row;
+}
+
+/** Every phase you've been through, newest first. */
+export function goalHistory(goals, ownerEmail) {
+  return goals
+    .filter((g) => g.owner_email === ownerEmail && !g.deleted_at)
+    .sort((a, b) => (a.starts_on < b.starts_on ? 1 : -1));
+}
