@@ -611,6 +611,9 @@ Alpine.data('logPage', () => ({
   draft: null,
 
   servingSize: '',      // review-form converter, see applyServingSize()
+  meal: null,           // { id, name, items: [{food_id, name, quantity, unit}] }
+  mealPicker: false,
+  mealTerm: '',
   _onlineTimer: null,
   _onlineGen: 0,
 
@@ -646,7 +649,30 @@ Alpine.data('logPage', () => ({
     return list.slice(0, 60);
   },
 
-  get combos() { return this.data.combos; },
+  /** Yours and undeleted — the raw table carries both, and the other person's. */
+  get combos() { return food.ownedCombos(this.data.combos, this.email); },
+
+  /**
+   * Meals matching the search, shown above ingredients.
+   *
+   * A meal is the more specific intent: typing "shake" when you have a meal
+   * called Protein Shake means the meal, not every food with "shake" in it.
+   */
+  get comboResults() {
+    return this.term ? food.searchCombos(this.combos, this.term) : [];
+  },
+
+  get foodsById() {
+    // Includes soft-deleted rows on purpose: a meal whose ingredient was
+    // removed should still log, since the log snapshots macros anyway.
+    return new Map(this.data.foods.map((f) => [f.id, f]));
+  },
+
+  comboSummary(combo) {
+    const totals = food.comboTotals(combo, this.foodsById);
+    const n = (combo.items ?? []).length;
+    return `${n} item${n === 1 ? '' : 's'} · ${Math.round(totals.calories)} kcal`;
+  },
 
   get date() { return Alpine.store('ui').date; },
   get mealSlot() { return food.inferMealSlot(); },
@@ -760,9 +786,87 @@ Alpine.data('logPage', () => ({
     Alpine.store('ui').flash(`Removed ${item.name}`);
   },
 
+  // ---- meals ---------------------------------------------------------------
+  // A meal is several foods logged together under one name. Stored as a recipe
+  // of references, not a snapshot — see saveCombo().
+
+  startMeal() {
+    this.meal = { id: null, name: this.term.trim(), items: [] };
+    this.mealPicker = false;
+    this.mealTerm = '';
+  },
+
+  editMeal(combo) {
+    this.meal = {
+      id: combo.id,
+      name: combo.name,
+      items: (combo.items ?? []).map((i) => ({ ...i })),
+    };
+    this.mealPicker = false;
+    this.mealTerm = '';
+  },
+
+  closeMeal() { this.meal = null; this.mealPicker = false; this.mealTerm = ''; },
+
+  /** Foods to pick from, ranked exactly as the main list is. */
+  get mealChoices() {
+    return food.searchFoods(this.ranked, this.mealTerm).slice(0, 30);
+  },
+
+  addIngredient(item) {
+    this.meal.items.push({
+      food_id: item.id,
+      name: item.name,
+      quantity: item.lastQuantity ?? item.default_qty ?? item.serving_qty ?? 1,
+      unit: item.serving_unit ?? 'g',
+    });
+    this.mealPicker = false;
+    this.mealTerm = '';
+  },
+
+  removeIngredient(index) { this.meal.items.splice(index, 1); },
+
+  stepIngredient(index, direction) {
+    const item = this.meal.items[index];
+    const size = item.unit === 'serving' ? 0.5 : 10;
+    item.quantity = Math.max(0, Math.round((Number(item.quantity) + Math.sign(direction) * size) * 10) / 10);
+  },
+
+  get mealTotals() {
+    if (!this.meal) return food.emptyTotals();
+    return food.comboTotals(this.meal, this.foodsById);
+  },
+
+  get canSaveMeal() {
+    return Boolean(this.meal?.name?.trim()) && this.meal.items.length > 0;
+  },
+
+  async saveMeal({ andLog = false } = {}) {
+    if (!this.canSaveMeal) return;
+
+    const saved = await food.saveCombo(this.meal, this.email);
+    this.closeMeal();
+    this.term = '';
+    await Alpine.store('data').refresh();
+
+    if (andLog) {
+      await this.logCombo(saved);
+      return;
+    }
+    Alpine.store('ui').flash(`Saved “${saved.name}”`);
+  },
+
+  async removeMeal(combo) {
+    await food.deleteCombo(combo.id);
+    this.closeMeal();
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`Removed ${combo.name}`);
+  },
+
   async logCombo(combo) {
-    const byId = new Map(this.data.foods.map((f) => [f.id, f]));
-    const rows = await food.logCombo({ combo, foodsById: byId, ownerEmail: this.email, date: this.date });
+    const rows = await food.logCombo({
+      combo, foodsById: this.foodsById, ownerEmail: this.email, date: this.date,
+    });
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash(`${combo.name} · ${rows.length} items`);
   },

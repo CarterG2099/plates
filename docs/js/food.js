@@ -293,6 +293,78 @@ export async function logFood({ food, quantity, unit, mealSlot, ownerEmail, date
   return entry;
 }
 
+/**
+ * A saved meal: several foods logged together under one name.
+ *
+ * Items reference food_id rather than snapshotting macros, unlike the log
+ * itself. That is deliberate and the opposite trade: a meal is a *recipe you
+ * intend to repeat*, so correcting a food's macros should correct every future
+ * logging of the meal. The snapshot still happens — at log time, in logFood —
+ * so history stays frozen either way.
+ *
+ * The name is carried alongside food_id purely so a meal still reads correctly
+ * if the food behind it is removed.
+ */
+export async function saveCombo({ id, name, items }, ownerEmail) {
+  const row = await local.save('meal_combos', {
+    ...(id ? { id } : {}),
+    name: name.trim(),
+    items: items.map((i) => ({
+      food_id: i.food_id,
+      name: i.name ?? null,
+      quantity: Number(i.quantity),
+      unit: i.unit,
+    })),
+  }, ownerEmail);
+
+  sync.nudge();
+  return row;
+}
+
+export async function deleteCombo(id) {
+  const row = await local.remove('meal_combos', id);
+  sync.nudge();
+  return row;
+}
+
+/** Yours, still alive, newest first. */
+export function ownedCombos(combos, ownerEmail) {
+  return combos
+    .filter((c) => c.owner_email === ownerEmail && !c.deleted_at)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * What a meal adds up to right now.
+ *
+ * Computed rather than stored, so editing an ingredient's macros is reflected
+ * without having to rewrite every meal that uses it.
+ */
+export function comboTotals(combo, foodsById) {
+  const totals = emptyTotals();
+
+  for (const item of combo.items ?? []) {
+    const food = foodsById.get(item.food_id);
+    if (!food) continue;
+    const scaled = scaleMacros(food, item.quantity);
+    for (const m of MACROS) totals[m] += Number(scaled[m]) || 0;
+  }
+  for (const m of MACROS) totals[m] = round(totals[m], 1);
+  return totals;
+}
+
+/** Meals matching what you typed, best match first. */
+export function searchCombos(combos, term) {
+  const q = term.trim().toLowerCase();
+  if (!q) return combos;
+
+  return combos
+    .map((c) => ({ combo: c, weight: matchWeight({ name: c.name }, q) }))
+    .filter((m) => m.weight > 0)
+    .sort((a, b) => b.weight - a.weight || a.combo.name.localeCompare(b.combo.name))
+    .map((m) => m.combo);
+}
+
 /** Log every item of a saved combo in one go. */
 export async function logCombo({ combo, foodsById, mealSlot, ownerEmail, date }) {
   const slot = mealSlot ?? inferMealSlot();

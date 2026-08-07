@@ -281,6 +281,29 @@
           <span x-text="`${results.length} shown`"></span>
         </div>
 
+        <!-- Meals first: typing "shake" when you have a meal called Protein
+             Shake means the meal, not every food with "shake" in it. -->
+        <template x-if="comboResults.length">
+          <div class="rows">
+            <template x-for="combo in comboResults" :key="combo.id">
+              <div class="row-swipe" x-init="$swipeRow($el)">
+                <button class="row-remove" @click="removeMeal(combo)"
+                        :aria-label="`Remove ${combo.name}`">Remove</button>
+
+                <div class="row">
+                  <button class="row-text" @click="editMeal(combo)">
+                    <b x-text="combo.name"></b>
+                    <small x-text="comboSummary(combo)"></small>
+                  </button>
+                  <span class="pill">meal</span>
+                  <button class="tap tap-primary" @click="logCombo(combo)"
+                          :aria-label="`Log ${combo.name}`">+</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
         <div class="rows">
           <template x-for="item in results" :key="item.id">
             <div class="row-swipe" x-init="$swipeRow($el)">
@@ -346,24 +369,128 @@
           </div>
         </template>
 
+        <button class="btn btn-block" @click="startMeal()">
+          <span x-show="term">Build “<span x-text="term"></span>” as a meal</span>
+          <span x-show="!term">New meal</span>
+        </button>
+
         <button class="btn btn-block" @click="startCreate()">
           <span x-show="term">Add “<span x-text="term"></span>” by hand</span>
           <span x-show="!term">Add a food</span>
         </button>
 
-        <template x-if="combos.length">
+        <template x-if="combos.length && !term">
           <div>
-            <div class="section-head"><span>Saved combos</span></div>
+            <div class="section-head"><span>My meals</span></div>
             <div class="rows">
               <template x-for="combo in combos" :key="combo.id">
-                <div class="row">
-                  <div class="row-text">
-                    <b x-text="combo.name"></b>
-                    <small x-text="`${(combo.items || []).length} items`"></small>
+                <div class="row-swipe" x-init="$swipeRow($el)">
+                  <button class="row-remove" @click="removeMeal(combo)"
+                          :aria-label="`Remove ${combo.name}`">Remove</button>
+
+                  <div class="row">
+                    <button class="row-text" @click="editMeal(combo)">
+                      <b x-text="combo.name"></b>
+                      <small x-text="comboSummary(combo)"></small>
+                    </button>
+                    <button class="tap tap-primary" @click="logCombo(combo)"
+                            :aria-label="`Log ${combo.name}`">+</button>
                   </div>
-                  <button class="tap tap-primary" @click="logCombo(combo)" :aria-label="`Log ${combo.name}`">+</button>
                 </div>
               </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Meal builder ---------------------------------------------------- -->
+        <template x-if="meal">
+          <div class="sheet-backdrop" @click.self="closeMeal()">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeMeal() })">
+              <div class="grabber"></div>
+              <div class="card-label" x-text="meal.id ? 'Edit meal' : 'New meal'"></div>
+
+              <div class="field">
+                <label for="m-name">Name</label>
+                <input id="m-name" type="text" x-model="meal.name" autocomplete="off"
+                       placeholder="Protein shake">
+              </div>
+
+              <template x-if="!meal.items.length">
+                <p class="empty">No ingredients yet.</p>
+              </template>
+
+              <div class="rows">
+                <template x-for="(item, i) in meal.items" :key="i">
+                  <div class="row">
+                    <div class="row-text">
+                      <b x-text="item.name || 'Removed food'"></b>
+                      <small>
+                        <span x-text="item.quantity"></span><span
+                          x-text="item.unit === 'serving' ? ' serving' : item.unit"></span>
+                      </small>
+                    </div>
+                    <button class="tap" @click="stepIngredient(i, -1)"
+                            :aria-label="`Less ${item.name}`">−</button>
+                    <button class="tap" @click="stepIngredient(i, 1)"
+                            :aria-label="`More ${item.name}`">+</button>
+                    <button class="tap" @click="removeIngredient(i)"
+                            :aria-label="`Remove ${item.name}`">×</button>
+                  </div>
+                </template>
+              </div>
+
+              <!-- What the meal comes to, recomputed as you build it. -->
+              <div class="macros" x-show="meal.items.length">
+                <div class="macro">
+                  <span class="macro-name">Total</span>
+                  <span class="macro-val" style="margin-left: auto;">
+                    <span x-text="Math.round(mealTotals.calories)"></span> kcal ·
+                    P<span x-text="Math.round(mealTotals.protein_g)"></span>
+                    C<span x-text="Math.round(mealTotals.carbs_g)"></span>
+                    F<span x-text="Math.round(mealTotals.fat_g)"></span>
+                  </span>
+                </div>
+              </div>
+
+              <template x-if="mealPicker">
+                <div>
+                  <div class="search">
+                    <span aria-hidden="true">⌕</span>
+                    <input type="search" placeholder="Which food?" x-model="mealTerm"
+                           autocomplete="off">
+                  </div>
+                  <div class="rows">
+                    <template x-for="choice in mealChoices" :key="choice.id">
+                      <button class="row" @click="addIngredient(choice)">
+                        <div class="row-text">
+                          <b x-text="choice.name"></b>
+                          <small>
+                            <span x-text="choice.default_qty ?? choice.serving_qty"></span><span
+                              x-text="choice.serving_unit === 'serving' ? ' serving' : choice.serving_unit"></span>
+                          </small>
+                        </div>
+                        <span class="tap">+</span>
+                      </button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <button class="btn btn-block" x-show="!mealPicker" @click="mealPicker = true">
+                Add ingredient
+              </button>
+              <button class="btn btn-block" x-show="mealPicker" @click="mealPicker = false">
+                Done adding
+              </button>
+
+              <button class="btn btn-primary btn-block" :disabled="!canSaveMeal"
+                      @click="saveMeal({ andLog: true })">
+                Log <span x-text="Math.round(mealTotals.calories)"></span> kcal
+              </button>
+              <button class="btn btn-block" :disabled="!canSaveMeal" @click="saveMeal()">
+                Save without logging
+              </button>
+              <button class="btn btn-ghost btn-block" @click="closeMeal()">Cancel</button>
             </div>
           </div>
         </template>
