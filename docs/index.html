@@ -241,6 +241,11 @@
       <main class="app-main log-panel" x-data="logPage" x-show="$store.ui.logOpen" x-cloak>
 
         <div class="app-bar" style="padding-left: 0; padding-right: 0;">
+          <button class="tap" @click="$store.ui.closeLog()" aria-label="Close">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          </button>
           <h1>Add food</h1>
           <button class="chip" @click="$store.ui.closeLog()">
             <span x-text="$store.ui.dayLabel"></span> · Done
@@ -466,7 +471,10 @@
           <div class="sheet-backdrop" @click.self="cancelCreate()">
             <div class="sheet" x-init="$swipe($el, () =&gt; { cancelCreate() })">
               <div class="grabber"></div>
-              <div class="card-label">New food · per serving</div>
+              <div class="card-label">
+                New food ·
+                <span x-text="draft.basis ? `label basis: ${draft.basis}` : 'per serving'"></span>
+              </div>
 
               <div class="field">
                 <label for="f-name">Name</label>

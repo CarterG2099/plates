@@ -80,6 +80,12 @@ button {
   letter-spacing: -.02em;
 }
 
+/* A bar carrying a back button aligns on the box, not the baseline — an icon
+   button has no text baseline to sit on and drops below the title otherwise. */
+.app-bar:has(> .tap) {
+  align-items: center;
+}
+
 .app-bar .app-bar-meta {
   font-family: var(--font-mono);
   font-size: var(--text-xs);

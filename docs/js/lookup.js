@@ -79,26 +79,73 @@ async function fetchJson(url) {
 /**
  * Map an OFF product onto the shape `plates.foods` expects.
  *
- * Everything is normalised to per-100g because that is the one basis OFF
- * populates consistently; its `serving_size` is a free-text string like
- * "2 biscuits (30 g)" and is not reliably parseable.
+ * Serving basis is preferred over per-100g. You scan a tub of yoghurt to log
+ * the serving on its label, not to do arithmetic — forcing everything to 100g
+ * rewrites the label into numbers that appear nowhere on the packaging.
+ *
+ * Per-100g remains the fallback because it is the one basis OFF always
+ * populates; plenty of products carry no serving size at all.
  */
 function toDraft(product, code) {
   const n = product.nutriments ?? {};
+  const serving = servingBasis(product, n);
+  const per = serving ? '_serving' : '_100g';
 
   return {
     barcode: code,
     name: (product.product_name || product.generic_name || '').trim() || `Barcode ${code}`,
     brand: firstBrand(product.brands),
-    serving_qty: 100,
-    serving_unit: 'g',
-    calories: num(n['energy-kcal_100g']) ?? kjToKcal(n.energy_100g),
-    protein_g: num(n.proteins_100g),
-    carbs_g: num(n.carbohydrates_100g),
-    fat_g: num(n.fat_100g),
-    fiber_g: num(n.fiber_100g),
-    sodium_mg: sodiumMg(n),
+    serving_qty: serving ? serving.qty : 100,
+    serving_unit: serving ? serving.unit : 'g',
+    calories: num(n[`energy-kcal${per}`]) ?? kjToKcal(n[`energy${per}`]),
+    protein_g: num(n[`proteins${per}`]),
+    carbs_g: num(n[`carbohydrates${per}`]),
+    fat_g: num(n[`fat${per}`]),
+    fiber_g: num(n[`fiber${per}`]),
+    sodium_mg: sodiumMg(n, per),
+    basis: serving ? serving.label : 'per 100 g',
     source: 'off',
+  };
+}
+
+/**
+ * The serving OFF recorded, or null to fall back to per-100g.
+ *
+ * Requires both a parseable size and per-serving calories — a serving size with
+ * no serving nutriments would otherwise pair the label's quantity with 100g
+ * macros, which is worse than either basis on its own.
+ */
+function servingBasis(product, n) {
+  const kcal = num(n['energy-kcal_serving']) ?? kjToKcal(n.energy_serving);
+  if (kcal == null) return null;
+
+  const size = parseServing(product);
+  return size && size.qty > 0 ? size : null;
+}
+
+/**
+ * `serving_quantity` is OFF's own numeric parse of the free-text `serving_size`
+ * ("3/4 cup (170 g)" → 170) and is what the per-serving nutriments are keyed to,
+ * so it is trusted ahead of anything scraped out of the string.
+ */
+function parseServing(product) {
+  const text = String(product.serving_size ?? '').trim();
+  const qty = num(product.serving_quantity);
+
+  if (qty != null && qty > 0) {
+    const unit = String(product.serving_quantity_unit ?? '').trim().toLowerCase()
+      || (/\bml\b/i.test(text) ? 'ml' : 'g');
+    return { qty, unit, label: text || `${qty} ${unit}` };
+  }
+
+  // No numeric parse from OFF; take the first number-and-unit in the string.
+  const match = text.match(/([\d.]+)\s*(g|ml|oz)\b/i);
+  if (!match) return null;
+
+  return {
+    qty: Number(match[1]),
+    unit: match[2].toLowerCase(),
+    label: text,
   };
 }
 
@@ -118,11 +165,18 @@ function kjToKcal(kj) {
  * is 43 mg — displaying the raw gram figure rounds it to zero, which is why this
  * conversion happens at the mapping layer rather than in the view.
  */
-function sodiumMg(n) {
-  const sodium = num(n.sodium_100g);
+function sodiumMg(n, per = '_100g') {
+  // Deliberately not num(): its 1-decimal rounding happens in grams, where it
+  // is catastrophic. Nutella's 0.0428 g would round to 0.0 and report 0 mg.
+  const raw = (key) => {
+    const v = Number(n[key]);
+    return Number.isFinite(v) ? v : null;
+  };
+
+  const sodium = raw(`sodium${per}`);
   if (sodium != null) return Math.round(sodium * 1000);
 
-  const salt = num(n.salt_100g);
+  const salt = raw(`salt${per}`);
   return salt == null ? null : Math.round((salt / 2.5) * 1000);
 }
 
