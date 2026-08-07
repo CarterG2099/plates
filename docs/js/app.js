@@ -269,33 +269,46 @@ Alpine.store('data', {
   sessions: [],
   sessionSets: [],
 
-  async refresh() {
-    const [goals, foods, log, combos, templates, weightLog,
-           exercises, routines, routineExercises, sessions, sessionSets] = await Promise.all([
+  /** What Today needs: small, and read first so the app paints immediately. */
+  async refreshCore() {
+    const [goals, foods, log, combos, templates, weightLog] = await Promise.all([
       local.all('goals'),
       local.all('foods'),
       local.all('food_log'),
       local.all('meal_combos'),
       local.all('day_templates'),
       local.all('weight_log'),
+    ]);
+
+    Object.assign(raw, { goals, foods, log, combos, templates, weightLog });
+    this.ready = true;
+    this.version++;
+  },
+
+  /**
+   * The training tables, which are the big ones and which Today never reads.
+   * With two years imported, session_sets alone is thousands of rows.
+   */
+  async refreshTraining() {
+    const [exercises, routines, routineExercises, sessions, sessionSets] = await Promise.all([
       local.all('exercises'),
       local.all('routines'),
       local.all('routine_exercises'),
       local.all('sessions'),
       local.all('session_sets'),
     ]);
-    Object.assign(raw, {
-      goals, foods, log, combos, templates, weightLog,
-      exercises, routines, routineExercises, sessions, sessionSets,
-    });
 
-    // Built once per refresh rather than per render — this is the whole fix.
-    const email = Alpine.store('auth').email;
-    raw.index = workout.buildIndex(sessionSets, sessions, email);
+    Object.assign(raw, { exercises, routines, routineExercises, sessions, sessionSets });
+
+    // Indexed once per refresh rather than per render.
+    raw.index = workout.buildIndex(sessionSets, sessions, Alpine.store('auth').email);
     raw.prior = workout.priorForm(raw.index, null);
-
-    this.ready = true;
     this.version++;
+  },
+
+  async refresh() {
+    await this.refreshCore();
+    await this.refreshTraining();
   },
 });
 
