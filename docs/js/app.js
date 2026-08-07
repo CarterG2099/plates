@@ -945,19 +945,6 @@ Alpine.data('logPage', () => ({
     return this.online.status === 'searching' && this.online.term === this.term.trim();
   },
 
-  /** Per-source counts, so a silent failure is visible rather than inferred. */
-  get onlineSources() {
-    if (this.online.term !== this.term.trim()) return null;
-    const s = this.online.sources;
-    if (!s) return null;
-
-    const parts = [
-      s.usdaError ? `USDA ${s.usdaError}` : `USDA ${s.usda}`,
-      s.offError ? `OFF ${s.offError}` : `OFF ${s.off}/${s.offFetched}`,
-    ];
-    return parts.join(' · ');
-  },
-
   /** A word nothing matched. Reads as "did you mean", without guessing at one. */
   get onlineUnmatched() {
     if (this.online.term !== this.term.trim()) return [];
