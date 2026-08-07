@@ -613,8 +613,13 @@ Alpine.data('logPage', () => ({
 
   closeSheet() { this.sheet = null; },
 
-  step(delta) {
-    const next = Number(this.sheet.quantity) + delta;
+  /**
+   * The step follows the unit. Ten grams is a sensible nudge; ten servings is
+   * ten cans of Fresca. `delta` is a direction, not an amount.
+   */
+  step(direction) {
+    const size = this.sheet.unit === 'serving' ? 0.5 : 10;
+    const next = Number(this.sheet.quantity) + Math.sign(direction) * size;
     this.sheet.quantity = Math.max(0, Math.round(next * 10) / 10);
   },
 

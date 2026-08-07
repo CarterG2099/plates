@@ -98,10 +98,8 @@ function toDraft(product, code) {
     brand: firstBrand(product.brands),
     serving_qty: basis.qty,
     serving_unit: basis.unit,
-    // What the label calls a serving. Separate from serving_qty because the
-    // macros above are measured against that basis and must stay consistent
-    // with it — this is only the amount to prefill when you log the food.
-    default_qty: size && size.unit === basis.unit ? size.qty : null,
+    // Nothing to override: one serving is already the amount you want.
+    default_qty: null,
     calories: basis.read('energy-kcal') ?? kjToKcal(basis.raw('energy')),
     protein_g: basis.read('proteins'),
     carbs_g: basis.read('carbohydrates'),
@@ -114,24 +112,41 @@ function toDraft(product, code) {
 }
 
 /**
- * Which set of numbers to read. Nothing is converted or derived.
+ * One serving is the unit. You scan a can of Fresca to log a can of Fresca —
+ * how many grams that is doesn't come into it.
  *
- * If OFF published per-serving values, those are used with the serving size it
- * published alongside them. If it didn't, the per-100g values are used as-is
- * and the basis says so. No arithmetic happens in between — a figure shown here
- * is a figure OFF returned, so a wrong number is theirs to fix, not a rounding
- * artefact of ours.
+ * So a scanned food is stored as `1 serving`, and the macros are the macros of
+ * one serving. Grams appear only in the human-readable basis label, and only
+ * because it is worth being able to see what the serving actually was.
+ *
+ *  1. OFF published per-serving nutriments — use them directly.
+ *  2. Only per-100g, but the serving is a known mass or volume — one serving is
+ *     that much of it, so the numbers are scaled onto it. Exact arithmetic on a
+ *     figure OFF gave us, not an estimate.
+ *  3. Nothing about servings at all — per 100 g, because there is no serving to
+ *     express it in. Rare, and the review form can fix it.
  */
 function servingBasis(n, size) {
   const perServing = num(n['energy-kcal_serving']) ?? kjToKcal(n.energy_serving);
 
-  if (size && perServing != null) {
+  if (perServing != null) {
     return {
-      qty: size.qty,
-      unit: size.unit,
-      label: size.label,
+      qty: 1,
+      unit: 'serving',
+      label: size?.label || 'one serving',
       raw: (key) => n[`${key}_serving`],
       read: (key) => num(n[`${key}_serving`]),
+    };
+  }
+
+  if (size && (size.unit === 'g' || size.unit === 'ml')) {
+    const factor = size.qty / 100;
+    return {
+      qty: 1,
+      unit: 'serving',
+      label: size.label,
+      raw: (key) => scale(n[`${key}_100g`], factor),
+      read: (key) => num(scale(n[`${key}_100g`], factor)),
     };
   }
 
@@ -142,6 +157,11 @@ function servingBasis(n, size) {
     raw: (key) => n[`${key}_100g`],
     read: (key) => num(n[`${key}_100g`]),
   };
+}
+
+function scale(value, factor) {
+  const v = Number(value);
+  return Number.isFinite(v) ? v * factor : null;
 }
 
 /**
