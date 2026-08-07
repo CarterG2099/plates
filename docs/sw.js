@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v3';
+const CACHE_VERSION = 'plates-v4';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -55,6 +55,7 @@ const SHELL = [
   '/js/workout.js',
   '/js/muscle-map.js',
   '/js/import-hevy.js',
+  '/js/stats.js',
   '/js/vendor/alpine.esm.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',

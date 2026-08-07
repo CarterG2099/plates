@@ -8,7 +8,7 @@
 
 import * as local from './local.js';
 import * as sync from './sync.js';
-import { volume, setsForSession, estimate1RM, exerciseHistory } from './workout.js';
+import { estimate1RM, historyOf } from './workout.js';
 import { dayBounds, addDays, toDateOnly, entriesForDay, sumTotals, currentGoal } from './food.js';
 
 const DAY = 86_400_000;
@@ -60,7 +60,7 @@ function weekStart(date) {
   return addDays(d, -shift);
 }
 
-export function weeklyTraining(sessions, sets, ownerEmail, weeks = 12) {
+export function weeklyTraining(index, weeks = 12) {
   const buckets = new Map();
   const firstWeek = weekStart(addDays(new Date(), -(weeks - 1) * 7));
 
@@ -69,14 +69,13 @@ export function weeklyTraining(sessions, sets, ownerEmail, weeks = 12) {
     buckets.set(toDateOnly(start), { start, volume: 0, sessions: 0 });
   }
 
-  for (const session of sessions) {
-    if (session.owner_email !== ownerEmail || session.deleted_at || !session.ended_at) continue;
-    const key = toDateOnly(weekStart(new Date(session.started_at)));
-    const bucket = buckets.get(key);
+  for (const session of index.owned) {
+    if (!session.ended_at) continue;
+    const bucket = buckets.get(toDateOnly(weekStart(new Date(session.started_at))));
     if (!bucket) continue;
 
     bucket.sessions += 1;
-    bucket.volume += volume(setsForSession(sets, session.id));
+    bucket.volume += index.volumeBySession.get(session.id) ?? 0;
   }
 
   return [...buckets.values()].map((b) => ({ ...b, volume: Math.round(b.volume) }));
@@ -88,22 +87,19 @@ export function weeklyTraining(sessions, sets, ownerEmail, weeks = 12) {
  * Ranked by how much you actually do the lift, not by how heavy it is — the
  * exercises you care about are the ones you keep coming back to.
  */
-export function topLifts(sets, sessions, ownerEmail, limit = 6) {
+export function topLifts(index, limit = 6) {
   const counts = new Map();
-  for (const s of sets) {
-    if (s.deleted_at || !s.completed_at || s.is_warmup) continue;
-    const key = s.exercise_id ?? s.exercise_name;
-    if (!key) continue;
-    const entry = counts.get(key) ?? { key, id: s.exercise_id, name: s.exercise_name, n: 0 };
-    entry.n += 1;
-    counts.set(key, entry);
+  for (const [key, sets] of index.byExercise) {
+    const working = sets.filter((s) => s.completed_at && !s.is_warmup);
+    if (!working.length) continue;
+    counts.set(key, { id: working[0].exercise_id, name: working[0].exercise_name, n: working.length });
   }
 
   return [...counts.values()]
     .sort((a, b) => b.n - a.n)
     .slice(0, limit)
     .map(({ id, name }) => {
-      const history = exerciseHistory(sets, sessions, ownerEmail, id, name, 1000);
+      const history = historyOf(index, id, name, 1000);
       const rms = history.map((h) => h.oneRm).filter(Boolean);
       if (!rms.length) return null;
 
@@ -199,4 +195,32 @@ export function linePoints(values, { width = 100, height = 50, pad = 4 } = {}) {
     points: coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' '),
     last: coords[coords.length - 1],
   };
+}
+
+
+// ---- chart markup ----------------------------------------------------------
+//
+// Returned as strings rather than driven by x-for, for two reasons: a <template>
+// inside an <svg> is parsed as an SVG element with no `.content`, so Alpine
+// cannot clone it — and building 26 bars as reactive bindings costs more than
+// generating the markup once.
+
+const esc = (s) => String(s).replace(/[<>&"]/g, (c) => (
+  { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+
+export function barChart(bars, { fill, emphasiseLast = false, dimUnlogged = false } = {}) {
+  return bars.map((bar, i) => {
+    const last = emphasiseLast && i === bars.length - 1;
+    const opacity = dimUnlogged ? (bar.logged ? 0.9 : 0.25) : (last ? 1 : 0.55);
+    return `<rect x="${bar.x.toFixed(2)}" y="${bar.y.toFixed(2)}"`
+      + ` width="${bar.width.toFixed(2)}" height="${bar.height.toFixed(2)}"`
+      + ` rx="1.2" fill="${fill}" opacity="${opacity}">`
+      + `<title>${esc(bar.tip ?? '')}</title></rect>`;
+  }).join('');
+}
+
+export function lineChart(points, { stroke }) {
+  if (!points) return '';
+  return `<polyline points="${points}" fill="none" stroke="${stroke}" stroke-width="2"`
+    + ' stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
 }

@@ -168,8 +168,31 @@ Alpine.store('sync', {
 
 // ---- local snapshot --------------------------------------------------------
 
+/**
+ * Raw rows, deliberately OUTSIDE Alpine's reactive store.
+ *
+ * With two years of history this holds ~6,000 sets. Proxying them meant every
+ * property read in a template went through a proxy trap, and every reactive tick
+ * re-ran getters that scanned the whole log — a single Train render was doing
+ * millions of row comparisons. Templates depend on `version` instead, which is a
+ * single reactive integer.
+ */
+const raw = {
+  goals: [], foods: [], log: [], combos: [], templates: [], weightLog: [],
+  exercises: [], routines: [], routineExercises: [], sessions: [], sessionSets: [],
+  index: workout.buildIndex([], [], ''),
+  prior: new Map(),
+};
+
+/** Read raw data while still re-rendering when it changes. */
+function snapshot() {
+  Alpine.store('data').version;   // registers the dependency
+  return raw;
+}
+
 Alpine.store('data', {
   ready: false,
+  version: 0,
   goals: [],
   foods: [],
   log: [],
@@ -197,18 +220,18 @@ Alpine.store('data', {
       local.all('sessions'),
       local.all('session_sets'),
     ]);
-    this.goals = goals;
-    this.foods = foods;
-    this.log = log;
-    this.combos = combos;
-    this.templates = templates;
-    this.weightLog = weightLog;
-    this.exercises = exercises;
-    this.routines = routines;
-    this.routineExercises = routineExercises;
-    this.sessions = sessions;
-    this.sessionSets = sessionSets;
+    Object.assign(raw, {
+      goals, foods, log, combos, templates, weightLog,
+      exercises, routines, routineExercises, sessions, sessionSets,
+    });
+
+    // Built once per refresh rather than per render — this is the whole fix.
+    const email = Alpine.store('auth').email;
+    raw.index = workout.buildIndex(sessionSets, sessions, email);
+    raw.prior = workout.priorForm(raw.index, null);
+
     this.ready = true;
+    this.version++;
   },
 });
 
@@ -261,13 +284,14 @@ Alpine.store('ui', {
 Alpine.data('todayPage', () => ({
   get email() { return Alpine.store('auth').email; },
   get date() { return Alpine.store('ui').date; },
+  get data() { return snapshot(); },
 
   get goal() {
-    return food.currentGoal(Alpine.store('data').goals, this.email, this.date);
+    return food.currentGoal(this.data.goals, this.email, this.date);
   },
 
   get entries() {
-    return food.entriesForDay(Alpine.store('data').log, this.email, this.date);
+    return food.entriesForDay(this.data.log, this.email, this.date);
   },
 
   get totals() { return food.sumTotals(this.entries); },
@@ -322,9 +346,7 @@ Alpine.data('todayPage', () => ({
   },
 
   get remainingInFood() {
-    const ranked = food.rankFoods(
-      Alpine.store('data').foods, Alpine.store('data').log, this.email,
-    );
+    const ranked = food.rankFoods(this.data.foods, this.data.log, this.email);
     return food.remainingAsFoods(this.remaining, ranked)
       .map((x) => x.label)
       .join(', or ');
@@ -348,13 +370,13 @@ Alpine.data('todayPage', () => ({
   },
   closePrep() { this.prep = null; },
 
-  get templates() { return Alpine.store('data').templates; },
+  get templates() { return this.data.templates; },
 
   /** Cook once, eat for the next N days. */
   async copyForward() {
     const targets = Array.from({ length: this.copyCount }, (_, i) => food.addDays(this.date, i + 1));
     const rows = await food.copyDay({
-      log: Alpine.store('data').log,
+      log: this.data.log,
       ownerEmail: this.email,
       from: this.date,
       targets,
@@ -371,7 +393,7 @@ Alpine.data('todayPage', () => ({
 
     await food.saveDayTemplate({
       name,
-      log: Alpine.store('data').log,
+      log: this.data.log,
       ownerEmail: this.email,
       date: this.date,
     });
@@ -438,9 +460,10 @@ Alpine.data('logPage', () => ({
   },
 
   get email() { return Alpine.store('auth').email; },
+  get data() { return snapshot(); },
 
   get ranked() {
-    return food.rankFoods(Alpine.store('data').foods, Alpine.store('data').log, this.email);
+    return food.rankFoods(this.data.foods, this.data.log, this.email);
   },
 
   get results() {
@@ -454,7 +477,7 @@ Alpine.data('logPage', () => ({
     return list.slice(0, 60);
   },
 
-  get combos() { return Alpine.store('data').combos; },
+  get combos() { return this.data.combos; },
 
   get date() { return Alpine.store('ui').date; },
   get mealSlot() { return food.inferMealSlot(); },
@@ -475,7 +498,7 @@ Alpine.data('logPage', () => ({
 
   /** Times logged today. The undo button only exists when there's something to undo. */
   loggedToday(item) {
-    return food.countLoggedToday(Alpine.store('data').log, this.email, item.id, this.date);
+    return food.countLoggedToday(this.data.log, this.email, item.id, this.date);
   },
 
   /**
@@ -484,7 +507,7 @@ Alpine.data('logPage', () => ({
    * and hunting for the row.
    */
   async undoLast(item) {
-    const entry = food.lastEntryForFood(Alpine.store('data').log, this.email, item.id, this.date);
+    const entry = food.lastEntryForFood(this.data.log, this.email, item.id, this.date);
     if (!entry) return;
 
     await food.deleteEntry(entry.id);
@@ -525,7 +548,7 @@ Alpine.data('logPage', () => ({
   },
 
   async logCombo(combo) {
-    const byId = new Map(Alpine.store('data').foods.map((f) => [f.id, f]));
+    const byId = new Map(this.data.foods.map((f) => [f.id, f]));
     const rows = await food.logCombo({ combo, foodsById: byId, ownerEmail: this.email, date: this.date });
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash(`${combo.name} · ${rows.length} items`);
@@ -740,10 +763,10 @@ Alpine.data('trainPage', () => ({
   },
 
   get email() { return Alpine.store('auth').email; },
-  get data() { return Alpine.store('data'); },
+  get data() { return snapshot(); },
 
   get session() { return workout.activeSession(this.data.sessions, this.email); },
-  get sets() { return this.session ? workout.setsForSession(this.data.sessionSets, this.session.id) : []; },
+  get sets() { return this.session ? workout.setsOf(this.data.index, this.session.id) : []; },
   get groups() { return workout.groupByExercise(this.sets); },
   get routines() { return workout.routinesFor(this.data.routines, this.email); },
   get history() { return workout.recentSessions(this.data.sessions, this.email); },
@@ -886,22 +909,17 @@ Alpine.data('trainPage', () => ({
   },
 
   previous(group) {
-    const p = workout.lastPerformance(
-      this.data.sessionSets, this.data.sessions, this.email,
-      group.exerciseId, group.name, this.session?.id,
-    );
-    if (!p?.best) return null;
-    return `${p.best.weight_lb ?? '—'} lb × ${p.best.reps ?? '—'}`;
+    const best = this.data.prior.get(group.exerciseId ?? group.name)?.best;
+    if (!best) return null;
+    return `${best.weight_lb ?? '—'} lb × ${best.reps ?? '—'}`;
   },
 
   oneRm(set) { return workout.estimate1RM(set.weight_lb, set.reps); },
 
   /** Best estimated 1RM before this session — the bar a set has to clear. */
+  /** Precomputed once per refresh; this used to rescan the whole log per set row. */
   bestBefore(group) {
-    return workout.bestBefore(
-      this.data.sessionSets, this.data.sessions, this.email,
-      group.exerciseId, group.name, this.session?.id,
-    );
+    return this.data.prior.get(group.exerciseId ?? group.name)?.bestRm ?? null;
   },
 
   isRecord(set, group) { return workout.isRecord(set, this.bestBefore(group)); },
@@ -944,7 +962,7 @@ Alpine.data('trainPage', () => ({
   },
 
   sessionSummary(session) {
-    const sets = workout.setsForSession(this.data.sessionSets, session.id);
+    const sets = workout.setsOf(this.data.index, session.id);
     const groups = workout.groupByExercise(sets);
     return `${groups.length} exercises · ${Math.round(workout.volume(sets)).toLocaleString()} lb`;
   },
@@ -971,10 +989,7 @@ Alpine.data('trainPage', () => ({
 
   get detailHistory() {
     if (!this.detail) return [];
-    return workout.exerciseHistory(
-      this.data.sessionSets, this.data.sessions, this.email,
-      this.detail.exerciseId, this.detail.name,
-    );
+    return workout.historyOf(this.data.index, this.detail.exerciseId, this.detail.name);
   },
 
   get detailBests() { return workout.personalBests(this.detailHistory); },
@@ -1025,9 +1040,7 @@ Alpine.data('trainPage', () => ({
 
   /** Everything a routine card shows, all derived from history. */
   routineCard(routine) {
-    const stats = workout.routineStats(
-      routine, this.data.sessions, this.data.sessionSets, this.email,
-    );
+    const stats = workout.routineStats(routine, this.data.index);
     return {
       ...workout.coverage(routine, this.data.routineExercises, this.data.exercises),
       ...stats,
@@ -1230,17 +1243,18 @@ Alpine.data('statsPage', () => ({
   newWeight: '',
 
   get email() { return Alpine.store('auth').email; },
-  get data() { return Alpine.store('data'); },
+  get data() { return snapshot(); },
 
   // ---- body weight ---------------------------------------------------------
 
   get goal() { return food.currentGoal(this.data.goals, this.email); },
 
-  get weight() { return stats.weightSeries(this.data.weightLog ?? [], this.email); },
+  get weight() { return stats.weightSeries(this.data.weightLog, this.email); },
   get weightSummary() { return stats.weightSummary(this.weight, this.goal); },
 
-  get weightLine() {
-    return stats.linePoints(this.weight.map((w) => w.lb), { width: 100, height: 46 });
+  get weightChart() {
+    const line = stats.linePoints(this.weight.map((w) => w.lb), { width: 100, height: 46 });
+    return stats.lineChart(line.points, { stroke: 'var(--color-protein)' });
   },
 
   async saveWeight() {
@@ -1256,36 +1270,35 @@ Alpine.data('statsPage', () => ({
 
   // ---- training ------------------------------------------------------------
 
-  get weeks() {
-    return stats.weeklyTraining(this.data.sessions, this.data.sessionSets, this.email);
-  },
+  get weeks() { return stats.weeklyTraining(this.data.index); },
 
-  get weekBars() {
-    return stats.barGeometry(this.weeks.map((w) => w.volume)).map((bar, i) => ({
+  get weekChart() {
+    const weeks = this.weeks;
+    const bars = stats.barGeometry(weeks.map((w) => w.volume)).map((bar, i) => ({
       ...bar,
-      label: this.weeks[i].start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-      sessions: this.weeks[i].sessions,
+      tip: `${weeks[i].start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}: `
+         + `${Math.round(bar.value).toLocaleString()} lb · ${weeks[i].sessions} sessions`,
     }));
+    return stats.barChart(bars, { fill: 'var(--color-protein)', emphasiseLast: true });
   },
 
   get thisWeek() { return this.weeks[this.weeks.length - 1] ?? { volume: 0, sessions: 0 }; },
 
-  get lifts() {
-    return stats.topLifts(this.data.sessionSets, this.data.sessions, this.email);
-  },
+  get lifts() { return stats.topLifts(this.data.index); },
 
   // ---- nutrition -----------------------------------------------------------
 
   get days() { return stats.calorieDays(this.data.log, this.data.goals, this.email); },
   get calorieSummary() { return stats.calorieSummary(this.days); },
 
-  get dayBars() {
-    return stats.barGeometry(this.days.map((d) => d.kcal)).map((bar, i) => ({
+  get dayChart() {
+    const days = this.days;
+    const bars = stats.barGeometry(days.map((d) => d.kcal)).map((bar, i) => ({
       ...bar,
-      label: this.days[i].label,
-      over: this.days[i].target ? this.days[i].kcal > this.days[i].target : false,
-      logged: this.days[i].logged,
+      logged: days[i].logged,
+      tip: `${bar.value.toLocaleString()} kcal`,
     }));
+    return stats.barChart(bars, { fill: 'var(--color-carbs)', dimUnlogged: true });
   },
 
   /** Where the target sits on the same scale as the bars. */

@@ -550,21 +550,16 @@ export function coverage(routine, allRoutineExercises, exercises) {
   return { bars, label: FAMILY_LABEL[bars[0].family] };
 }
 
-/** Sessions belonging to a routine — by id, or by name for imported history. */
-function sessionsOf(routine, sessions, ownerEmail) {
-  return sessions.filter((s) =>
-    s.owner_email === ownerEmail && !s.deleted_at && s.ended_at
-    && (s.routine_id === routine.id || s.name === routine.name));
-}
-
 /** Times done, when it was last done, and what it typically costs. */
-export function routineStats(routine, sessions, sets, ownerEmail) {
-  const mine = sessionsOf(routine, sessions, ownerEmail);
+export function routineStats(routine, index) {
+  // index.owned is pre-filtered and pre-sorted; volumes are precomputed.
+  const mine = index.owned.filter((s) =>
+    s.ended_at && (s.routine_id === routine.id || s.name === routine.name));
   if (!mine.length) return { count: 0, last: null, avgVolume: null, avgMinutes: null };
 
-  const last = mine.reduce((a, b) => (a.started_at > b.started_at ? a : b)).started_at;
+  const last = mine[0].started_at;   // owned is newest-first
 
-  const volumes = mine.map((s) => volume(setsForSession(sets, s.id))).filter((v) => v > 0);
+  const volumes = mine.map((s) => index.volumeBySession.get(s.id) ?? 0).filter((v) => v > 0);
   const minutes = mine
     .map((s) => (new Date(s.ended_at) - new Date(s.started_at)) / 60000)
     .filter((m) => m > 0 && m < 300);   // ignore sessions left running overnight
@@ -590,4 +585,109 @@ export function relativeDay(iso, now = new Date()) {
   if (days < 7) return `last ${new Date(iso).toLocaleDateString(undefined, { weekday: 'short' })}`;
   if (days < 14) return 'last week';
   return `${days} days ago`;
+}
+
+// ---- indexing --------------------------------------------------------------
+
+/**
+ * Group the log once, instead of scanning it per lookup.
+ *
+ * With two years imported, `sets` is thousands of rows. Filtering it inside a
+ * template getter meant a single render of the Train tab did millions of row
+ * comparisons — and Alpine re-runs getters on every reactive change, so every
+ * tap paid it again. This is built once per data refresh; lookups are O(1).
+ */
+export function buildIndex(sets, sessions, ownerEmail) {
+  const bySession = new Map();
+  const byExercise = new Map();
+
+  for (const s of sets) {
+    if (s.deleted_at) continue;
+
+    let bucket = bySession.get(s.session_id);
+    if (!bucket) bySession.set(s.session_id, bucket = []);
+    bucket.push(s);
+
+    const key = s.exercise_id ?? s.exercise_name;
+    if (!key) continue;
+    let ex = byExercise.get(key);
+    if (!ex) byExercise.set(key, ex = []);
+    ex.push(s);
+  }
+
+  for (const bucket of bySession.values()) bucket.sort((a, b) => a.set_index - b.set_index);
+
+  const sessionById = new Map();
+  const owned = [];
+  for (const session of sessions) {
+    if (session.deleted_at || session.owner_email !== ownerEmail) continue;
+    sessionById.set(session.id, session);
+    owned.push(session);
+  }
+  owned.sort((a, b) => (a.started_at < b.started_at ? 1 : -1));
+
+  // Volume per session, computed once — the routine cards and the weekly chart
+  // both want it, and both used to recompute it from scratch.
+  const volumeBySession = new Map();
+  for (const [id, bucket] of bySession) volumeBySession.set(id, volume(bucket));
+
+  return { bySession, byExercise, sessionById, owned, volumeBySession };
+}
+
+export const setsOf = (index, sessionId) => index.bySession.get(sessionId) ?? [];
+
+/** Sessions containing an exercise, newest first — the history screen's source. */
+export function historyOf(index, exerciseId, exerciseName, limit = 40) {
+  const matches = index.byExercise.get(exerciseId ?? exerciseName) ?? [];
+
+  const grouped = new Map();
+  for (const set of matches) {
+    if (!index.sessionById.has(set.session_id)) continue;
+    let bucket = grouped.get(set.session_id);
+    if (!bucket) grouped.set(set.session_id, bucket = []);
+    bucket.push(set);
+  }
+
+  return [...grouped.entries()]
+    .map(([sessionId, entrySets]) => {
+      const ordered = entrySets.slice().sort((a, b) => a.set_index - b.set_index);
+      const working = ordered.filter((s) => !s.is_warmup);
+      const best = working.reduce((b, s) => (!b || (s.weight_lb ?? 0) > (b.weight_lb ?? 0) ? s : b), null);
+
+      return {
+        session: index.sessionById.get(sessionId),
+        date: index.sessionById.get(sessionId).started_at,
+        sets: ordered,
+        best,
+        volume: volume(ordered),
+        oneRm: best ? estimate1RM(best.weight_lb, best.reps) : null,
+      };
+    })
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, limit);
+}
+
+/** Best previous set and best prior 1RM per exercise, precomputed for the session screen. */
+export function priorForm(index, excludeSessionId) {
+  const out = new Map();
+
+  for (const [key, sets] of index.byExercise) {
+    let best = null;
+    let bestRm = null;
+    let latest = null;
+
+    for (const set of sets) {
+      if (set.session_id === excludeSessionId) continue;
+      const session = index.sessionById.get(set.session_id);
+      if (!session || set.is_warmup || !set.completed_at) continue;
+
+      const rm = estimate1RM(set.weight_lb, set.reps);
+      if (rm && (bestRm == null || rm > bestRm)) bestRm = rm;
+
+      if (!latest || session.started_at > latest) { latest = session.started_at; best = set; }
+      else if (latest === session.started_at && (set.weight_lb ?? 0) > (best?.weight_lb ?? 0)) best = set;
+    }
+    out.set(key, { best, bestRm });
+  }
+  return out;
 }
