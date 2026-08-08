@@ -14,6 +14,7 @@ import * as sync from './sync.js';
 import * as food from './food.js';
 import { lookupBarcode, draftsFromProducts } from './lookup.js';
 import * as scanner from './scanner.js';
+import * as photo from './photo.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
 import { muscleMap } from './muscle-map.js';
@@ -614,6 +615,9 @@ Alpine.data('logPage', () => ({
   draft: null,
 
   servingSize: '',      // review-form converter, see applyServingSize()
+  photoBusy: '',        // '' | 'label' | 'meal'
+  photoError: '',
+  estimate: null,       // { items, confidence, note }
   meal: null,           // { id, name, items: [{food_id, name, quantity, unit}] }
   mealTerm: '',
   mealOnline: { status: 'idle', results: [], error: '', term: '' },
@@ -793,6 +797,107 @@ Alpine.data('logPage', () => ({
     await food.deleteFood(item.id);
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash(`Removed ${item.name}`);
+  },
+
+  // ---- photos --------------------------------------------------------------
+  // A label is transcription; a meal is estimation. They are different kinds of
+  // claim and the UI keeps them apart on purpose.
+
+  /** A Nutrition Facts panel becomes a draft, reviewed like any lookup hit. */
+  async readLabel(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    this.photoBusy = 'label';
+    this.photoError = '';
+    try {
+      const result = await photo.readLabel(file);
+      // Straight to the review form, never saved on the model's say-so: this is
+      // OCR of small print at an angle, and a misread digit is a wrong food.
+      this.acceptLookup(result);
+    } catch (e) {
+      this.photoError = e.message ?? String(e);
+    } finally {
+      this.photoBusy = '';
+    }
+  },
+
+  /** A plate becomes a set of estimates, shown as estimates. */
+  async readMeal(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    this.photoBusy = 'meal';
+    this.photoError = '';
+    try {
+      this.estimate = await photo.estimateMeal(file);
+    } catch (e) {
+      this.photoError = e.message ?? String(e);
+    } finally {
+      this.photoBusy = '';
+    }
+  },
+
+  closeEstimate() { this.estimate = null; },
+
+  removeEstimateItem(index) {
+    this.estimate.items.splice(index, 1);
+    if (!this.estimate.items.length) this.estimate = null;
+  },
+
+  get estimateTotals() {
+    return photo.mealTotals(this.estimate?.items ?? []);
+  },
+
+  get confidenceLabel() {
+    return {
+      high: 'Rough estimate',
+      medium: 'Rough estimate — portion size is a guess',
+      low: 'Very rough — portion size and hidden fat are guesses',
+    }[this.estimate?.confidence] ?? 'Rough estimate';
+  },
+
+  /**
+   * Log the estimate.
+   *
+   * Each item logs as its own entry with its own macros and no food_id: these
+   * are one-off guesses about one plate, not foods worth keeping. Putting them
+   * in your food list would poison the search you rely on.
+   */
+  async logEstimate() {
+    const slot = food.inferMealSlot();
+    let logged = 0;
+
+    for (const item of this.estimate.items) {
+      await food.logFood({
+        food: {
+          id: null,
+          name: item.portion ? `${item.name} (${item.portion})` : item.name,
+          brand: null,
+          serving_qty: 1,
+          serving_unit: 'serving',
+          calories: item.calories,
+          protein_g: item.protein_g,
+          carbs_g: item.carbs_g,
+          fat_g: item.fat_g,
+          fiber_g: null,
+          sodium_mg: null,
+        },
+        quantity: 1,
+        unit: 'serving',
+        mealSlot: slot,
+        ownerEmail: this.email,
+        date: this.date,
+      });
+      logged += 1;
+    }
+
+    const kcal = this.estimateTotals.calories;
+    this.closeEstimate();
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`Logged ${logged} items · ~${kcal} kcal`);
   },
 
   // ---- meals ---------------------------------------------------------------

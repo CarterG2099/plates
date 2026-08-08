@@ -372,6 +372,24 @@
           </div>
         </template>
 
+        <!-- Photo paths. A label is read; a plate is estimated. -->
+        <div class="btn-row">
+          <label class="btn" :class="photoBusy === 'label' && 'is-busy'">
+            <span x-show="photoBusy !== 'label'">Scan a label</span>
+            <span x-show="photoBusy === 'label'">Reading…</span>
+            <input type="file" accept="image/*" capture="environment"
+                   @change="readLabel($event)" hidden>
+          </label>
+          <label class="btn" :class="photoBusy === 'meal' && 'is-busy'">
+            <span x-show="photoBusy !== 'meal'">Estimate a meal</span>
+            <span x-show="photoBusy === 'meal'">Estimating…</span>
+            <input type="file" accept="image/*" capture="environment"
+                   @change="readMeal($event)" hidden>
+          </label>
+        </div>
+
+        <div class="notice notice-error" x-show="photoError" x-text="photoError"></div>
+
         <button class="btn btn-block" @click="startMeal()">
           <span x-show="term">Build “<span x-text="term"></span>” as a meal</span>
           <span x-show="!term">New meal</span>
@@ -510,6 +528,63 @@
                 <button class="btn btn-ghost" @click="closeMeal()">Cancel</button>
                 <button class="btn btn-primary" :disabled="!canSaveMeal" @click="saveMeal()">
                   Save meal
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Meal estimate ----------------------------------------------------- -->
+        <template x-if="estimate">
+          <div class="sheet-backdrop" @click.self="closeEstimate()">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeEstimate() })">
+              <div class="grabber"></div>
+              <div class="card-label">From the photo</div>
+
+              <!-- Stated before the number, not after it. A calorie total with
+                   no caveat reads as a measurement, and this is a guess. -->
+              <p class="estimate-caveat" x-text="confidenceLabel"></p>
+
+              <div class="readout-head">
+                <div>
+                  <div class="readout-total">≈ <span x-text="estimateTotals.calories"></span></div>
+                  <div class="readout-of">kcal estimated</div>
+                </div>
+              </div>
+
+              <div class="rows">
+                <template x-for="(item, i) in estimate.items" :key="i">
+                  <div class="row">
+                    <div class="row-text">
+                      <b x-text="item.name"></b>
+                      <small>
+                        <span x-show="item.portion" x-text="item.portion"></span>
+                        <span x-show="item.portion"> · </span>≈<span x-text="Math.round(item.calories)"></span> kcal
+                      </small>
+                    </div>
+                    <button class="tap" @click="removeEstimateItem(i)"
+                            :aria-label="`Remove ${item.name}`">×</button>
+                  </div>
+                </template>
+              </div>
+
+              <p class="estimate-note" x-show="estimate.note" x-text="estimate.note"></p>
+
+              <div class="macros">
+                <div class="macro">
+                  <span class="macro-name">Macros</span>
+                  <span class="macro-val" style="margin-left: auto;">
+                    P<span x-text="estimateTotals.protein_g"></span>
+                    C<span x-text="estimateTotals.carbs_g"></span>
+                    F<span x-text="estimateTotals.fat_g"></span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="btn-row">
+                <button class="btn btn-ghost" @click="closeEstimate()">Cancel</button>
+                <button class="btn btn-primary" @click="logEstimate()">
+                  Log ≈<span x-text="estimateTotals.calories"></span> kcal
                 </button>
               </div>
             </div>

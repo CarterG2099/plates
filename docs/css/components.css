@@ -412,3 +412,22 @@
   color: var(--color-text-muted);
   text-transform: none;
 }
+
+/* The estimate is a guess and has to keep saying so. Warning-coloured rather
+   than neutral: this number did not come off a label. */
+.estimate-caveat {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-warning);
+  margin: 0;
+}
+
+.estimate-note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.btn.is-busy { opacity: .6; }
