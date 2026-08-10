@@ -247,20 +247,30 @@ Alpine.magic('dragCard', () => (handle, cards, onDrop) => {
       });
     };
 
-    const end = () => {
+    /**
+     * `commit` is what separates letting go from being interrupted. A
+     * pointercancel is the system taking the gesture away — a notification, a
+     * call, the browser deciding it was a scroll — and reordering somebody's
+     * workout off the back of that is not something they asked for. Lifting a
+     * finger commits; anything else puts the card back.
+     */
+    const finish = (commit) => {
       handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', end);
-      handle.removeEventListener('pointercancel', end);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', cancel);
 
       card.classList.remove('is-dragging');
       for (const el of list) el.style.transform = '';
 
-      if (to !== from) onDrop(to, card.dataset.key);
+      if (commit && to !== from) onDrop(to, card.dataset.key);
     };
 
+    const up = () => finish(true);
+    const cancel = () => finish(false);
+
     handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', cancel);
   });
 });
 
