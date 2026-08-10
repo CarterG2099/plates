@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v35';
+const CACHE_VERSION = 'plates-v36';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
