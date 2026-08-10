@@ -135,6 +135,7 @@ async function pullTable(table) {
 
   let newest = cursor;
   let from = 0;
+  let applied = 0;
 
   // One read of local timestamps up front, rather than a transaction per row.
   // The first pull of the ~800-exercise library would otherwise crawl.
@@ -163,12 +164,14 @@ async function pullTable(table) {
       if (remote.updated_at > newest) newest = remote.updated_at;
     }
     await local.putManyLocal(table, winners);
+    applied += winners.length;
 
     if (data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
   }
 
   if (newest !== cursor) await local.setMeta(cursorKey, newest);
+  return applied;
 }
 
 // ---- the loop --------------------------------------------------------------
@@ -199,7 +202,13 @@ export async function sync() {
     const failed = settled.find((r) => r.status === 'rejected');
     if (failed) throw failed.reason;
 
-    emit({ status: 'idle', lastSyncedAt: new Date().toISOString(), error: null });
+    // Whether the pull actually brought anything down. A sync that changes
+    // nothing used to re-render the whole app anyway, and that re-render is
+    // what produced a 0.15 layout shift a second after load — the screen
+    // rebuilding itself to show exactly what it was already showing.
+    const changed = settled.reduce((n, r) => n + (r.value ?? 0), 0);
+
+    emit({ status: 'idle', lastSyncedAt: new Date().toISOString(), error: null, changed });
   } catch (error) {
     // Queued writes are still on disk, so this is a retry-later, not data loss.
     emit({ status: 'error', error: error.message ?? String(error) });

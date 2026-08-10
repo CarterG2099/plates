@@ -415,8 +415,11 @@ Alpine.store('sync', {
     sync.subscribe((s) => {
       const wasSyncing = this.status === 'syncing';
       Object.assign(this, s);
-      // A completed pull may have brought in the other person's rows.
-      if (wasSyncing && s.status === 'idle') Alpine.store('data').refresh();
+      // A completed pull may have brought in the other person's rows — but only
+      // re-read if it actually brought something. Refreshing unconditionally
+      // rebuilt the screen to show what it was already showing, and that was
+      // the 0.15 layout shift a second after every load.
+      if (wasSyncing && s.status === 'idle' && s.changed) Alpine.store('data').refresh();
     });
   },
 
