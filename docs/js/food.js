@@ -209,15 +209,29 @@ export function rankFoods(foods, log, ownerEmail) {
  */
 const WEIGHT = { barcode: 100, exact: 100, prefix: 40, word: 20, substring: 8, brand: 4 };
 
+/**
+ * Lowercase, with accents folded off.
+ *
+ * Without this, "creme" cannot find "Crème Brûlée" and "jalapeno" cannot find
+ * "Jalapeño" — the letters differ, so every match test fails. Nobody types the
+ * diacritic when searching, and Open Food Facts is full of names that carry it.
+ */
+function fold(text) {
+  return (text ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+}
+
 /** One phrase against one food. */
 function phraseWeight(food, q) {
-  const name = (food.name ?? '').toLowerCase();
+  const name = fold(food.name);
   if (name === q) return WEIGHT.exact;
   if (name.startsWith(q)) return WEIGHT.prefix;
   if (name.split(/[\s\-(,/]+/).some((w) => w.startsWith(q))) return WEIGHT.word;
   if (name.includes(q)) return WEIGHT.substring;
 
-  return (food.brand ?? '').toLowerCase().includes(q) ? WEIGHT.brand : 0;
+  return fold(food.brand).includes(q) ? WEIGHT.brand : 0;
 }
 
 /**
@@ -253,7 +267,7 @@ function matchWeight(food, q) {
 
 /** Local search. Nothing here is worth a network call. */
 export function searchFoods(ranked, term) {
-  const q = term.trim().toLowerCase();
+  const q = fold(term.trim());
   if (!q) return ranked;
 
   return ranked
@@ -273,8 +287,8 @@ export function searchFoods(ranked, term) {
  * what makes that list coherent rather than two sorted lists stapled together.
  */
 export function scoreDraft(terms, draft) {
-  const name = (draft.name ?? '').toLowerCase();
-  const brand = (draft.brand ?? '').toLowerCase();
+  const name = fold(draft.name);
+  const brand = fold(draft.brand);
 
   const words = name.split(/[^a-z0-9%.]+/).filter(Boolean);
   const head = words[0] ?? '';
@@ -355,7 +369,7 @@ export function matchesDraft(food, draft) {
  * first.
  */
 export function mergeDrafts(groups, term) {
-  const terms = term.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = fold(term.trim()).split(/\s+/).filter(Boolean);
   const seen = [];
 
   for (const group of groups) {
@@ -387,7 +401,13 @@ export function scaleMacros(food, quantity) {
 
   const out = {};
   for (const m of MACROS) {
-    const value = Number(food[m]);
+    // null must stay null. Number(null) is 0 and passes isFinite, so a food
+    // whose protein is genuinely unknown was logging as zero protein — a
+    // silent understatement rather than a visible gap.
+    const raw = food[m];
+    if (raw === null || raw === undefined || raw === '') { out[m] = null; continue; }
+
+    const value = Number(raw);
     out[m] = Number.isFinite(value) ? round(value * factor, 1) : null;
   }
   return out;
@@ -547,7 +567,7 @@ export function comboTotals(combo, foodsById) {
 
 /** Meals matching what you typed, best match first. */
 export function searchCombos(combos, term) {
-  const q = term.trim().toLowerCase();
+  const q = fold(term.trim());
   if (!q) return combos;
 
   return combos
