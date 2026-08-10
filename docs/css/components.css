@@ -195,6 +195,35 @@
   flex: none;
 }
 
+/* A checkbox that has to be found and read before it is ticked — for the ones
+   whose default is "no" and where saying yes overwrites something. */
+.opt-in {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.opt-in input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  accent-color: var(--color-primary);
+}
+
+.opt-in small {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
 /* ---- feedback ------------------------------------------------------------- */
 
 .notice {
@@ -248,26 +277,18 @@
 
 .figure svg { height: 100%; width: auto; display: block; }
 
-/* The working muscle pulses. One universal motion rather than choreography per
-   exercise — it says "this is what's doing the work", which is the diagram's job.
- *
- * History, so this doesn't get "fixed" back into something worse:
- *  - transform: scale() needs `transform-box: fill-box` to pivot on the shape;
- *    that is unreliable on a <g>, so browsers dropped it entirely.
- *  - SMIL <animate> injected through innerHTML lands in the DOM but never joins
- *    the SVG timeline, so it sits there doing nothing.
- *  - This opacity rule was written once and appeared broken — but the service
- *    worker was serving stale CSS at the time. The selector matches; it works. */
-@keyframes muscle-flex {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: .45; }
-}
+/* No animation on the figure. It was built to say "this is what's doing the
+   work", and the honest verdict after living with it is that a moving diagram
+   is harder to read at a glance than a still one — you wait for the loop to come
+   round instead of just looking. The class is still applied so the worked muscle
+   stays highlighted; only the motion is gone.
 
-.mm-lit { animation: muscle-flex 1.5s ease-in-out infinite; }
-
-@media (prefers-reduced-motion: reduce) {
-  .mm-lit { animation: none; }
-}
+   History, so this doesn't get rebuilt from scratch: transform: scale() needs
+   `transform-box: fill-box` to pivot on the shape, which is unreliable on a <g>;
+   SMIL <animate> injected through innerHTML never joins the SVG timeline; and
+   the CSS opacity version worked all along but was masked by a stale service
+   worker. If motion is ever wanted again, CSS opacity is the approach that
+   works. */
 
 /* Front and back together, for the exercise detail sheet. */
 .figure-pair {
@@ -334,42 +355,9 @@
 .mm-shin  { transform-origin: 51px 153px; }  /* knee */
 .mm-torso { transform-origin: 60px 97px; }   /* pelvis */
 
-@keyframes mv-curl      { 0%, 100% { transform: rotate(-4deg);   } 55% { transform: rotate(-95deg); } }
-@keyframes mv-extend    { 0%, 100% { transform: rotate(-85deg);  } 55% { transform: rotate(-4deg);  } }
-@keyframes mv-press     { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-16deg); } }
-@keyframes mv-press-fore{ 0%, 100% { transform: rotate(-88deg);  } 55% { transform: rotate(-14deg); } }
-@keyframes mv-raise     { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-22deg); } }
-@keyframes mv-pull      { 0%, 100% { transform: rotate(-10deg);  } 55% { transform: rotate(10deg);  } }
-@keyframes mv-pull-fore { 0%, 100% { transform: rotate(-6deg);   } 55% { transform: rotate(-46deg); } }
-@keyframes mv-dip       { 0%, 100% { transform: translateY(0);   } 55% { transform: translateY(13px); } }
-@keyframes mv-knee      { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(9deg);  } }
-@keyframes mv-fold      { 0%, 100% { transform: rotate(0deg);    } 55% { transform: rotate(-13deg); } }
-@keyframes mv-rise      { 0%, 100% { transform: translateY(0);   } 55% { transform: translateY(-6px); } }
-@keyframes mv-bench     { 0%, 100% { transform: rotate(18deg);   } 55% { transform: rotate(-6deg);  } }
-
-.mm [class^="mm-"] { animation-duration: 2.2s; animation-timing-function: ease-in-out;
-                     animation-iteration-count: infinite; }
-
-.mv-curl      .mm-fore  { animation-name: mv-curl; }
-.mv-extension .mm-fore  { animation-name: mv-extend; }
-.mv-press     .mm-arm   { animation-name: mv-press; }
-.mv-press     .mm-fore  { animation-name: mv-press-fore; }
-.mv-raise     .mm-arm   { animation-name: mv-raise; }
-.mv-pull      .mm-arm   { animation-name: mv-pull; }
-.mv-pull      .mm-fore  { animation-name: mv-pull-fore; }
-.mv-squat     .mm-torso { animation-name: mv-dip; }
-.mv-squat     .mm-thigh { animation-name: mv-knee; }
-.mv-hinge     .mm-torso { animation-name: mv-fold; }
-.mv-calf      .mm-torso { animation-name: mv-rise; }
-.mv-crunch    .mm-torso { animation-name: mv-fold; }
-.mv-benchpress .mm-arm  { animation-name: mv-bench; }
-
-/* A moving figure doesn't also need a flashing muscle. */
-.mm[class*="mv-"] .mm-lit { animation: none; }
-
-@media (prefers-reduced-motion: reduce) {
-  .mm [class^="mm-"], .mm-lit { animation: none; }
-}
+/* The movement keyframes and their bindings were removed with the pulse. The
+   pivots above are kept: they are the measured joint positions, and they would
+   have to be re-derived from the figure geometry if motion ever returns. */
 
 /* ---- swipe to remove ------------------------------------------------------ */
 

@@ -347,3 +347,106 @@ test('plate maths splits the load either side of the bar', () => {
   const { plates } = workout.plateMath(225);
   assert.equal(plates.reduce((t, p) => t + p, 0) * 2 + workout.DEFAULT_BAR_LB, 225);
 });
+
+// ---- turning a session back into a routine ---------------------------------
+
+/** A finished session with two exercises, the second done heavier than the first. */
+async function seedFinishedSession() {
+  await seedSets([
+    { id: 'bp', name: 'Bench', warmup: true, weight: 45, reps: 10 },
+    { id: 'bp', name: 'Bench', weight: 135, reps: 8 },
+    { id: 'bp', name: 'Bench', weight: 155, reps: 5 },
+    { id: 'row', name: 'Barbell Row', weight: 95, reps: 10 },
+  ]);
+  return local.all('session_sets');
+}
+
+test('saving a session as a routine records what was actually done', async () => {
+  const sets = await seedFinishedSession();
+  const routine = await workout.saveSessionAsRoutine({
+    name: 'Push A', session: SESSION, sets, ownerEmail: ME,
+  });
+
+  assert.equal(routine.name, 'Push A');
+
+  const plan = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  assert.deepEqual(plan.map((i) => i.notes), ['Bench', 'Barbell Row'], 'in the order worked');
+  assert.equal(plan[0].target_sets, 2, 'warm-ups do not count towards the plan');
+  assert.equal(plan[0].target_weight_lb, 155, 'the heaviest working set sets the target');
+  assert.equal(plan[0].target_reps, '5');
+  assert.deepEqual(plan.map((i) => i.position), [0, 1]);
+});
+
+test('updating a routine keeps the routine itself, replacing only its plan', async () => {
+  const sets = await seedFinishedSession();
+  const routine = await workout.saveSessionAsRoutine({
+    name: 'Push A', session: SESSION, sets, ownerEmail: ME,
+  });
+
+  // A later session: one exercise swapped out, and heavier.
+  await local.wipe();
+  await local.save('routines', { ...routine }, ME);
+  await seedSets([
+    { id: 'bp', name: 'Bench', weight: 185, reps: 5 },
+    { id: 'db', name: 'Dumbbell Row', weight: 60, reps: 12 },
+    { id: 'db', name: 'Dumbbell Row', weight: 60, reps: 12 },
+  ]);
+
+  await workout.updateRoutineFromSession({
+    routine,
+    session: SESSION,
+    sets: await local.all('session_sets'),
+    ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  const kept = (await local.all('routines')).find((r) => r.id === routine.id);
+  assert.equal(kept.id, routine.id, 'the routine row survives, so its history does');
+  assert.equal(kept.name, 'Push A', 'and keeps its name');
+
+  const plan = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  assert.deepEqual(plan.map((i) => i.notes), ['Bench', 'Dumbbell Row'], 'the swap is reflected');
+  assert.equal(plan[0].target_weight_lb, 185, 'and the new weight');
+  assert.equal(plan[1].target_sets, 2);
+});
+
+test('updating tombstones the old plan rather than leaving it behind', async () => {
+  const sets = await seedFinishedSession();
+  const routine = await workout.saveSessionAsRoutine({
+    name: 'Push A', session: SESSION, sets, ownerEmail: ME,
+  });
+  const before = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+
+  await workout.updateRoutineFromSession({
+    routine,
+    session: SESSION,
+    sets,
+    ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  const live = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  assert.equal(live.length, 2, 'no duplicates from the rewrite');
+
+  const raw = await local.allRaw('routine_exercises');
+  const tombstoned = raw.filter((r) => r.deleted_at).map((r) => r.id);
+  assert.deepEqual(tombstoned.sort(), before.map((i) => i.id).sort(),
+    'every old row is soft-deleted, so the delete reaches the other device');
+});
+
+test('updating a routine from a session that did nothing leaves it empty, not stale', async () => {
+  const sets = await seedFinishedSession();
+  const routine = await workout.saveSessionAsRoutine({
+    name: 'Push A', session: SESSION, sets, ownerEmail: ME,
+  });
+
+  await workout.updateRoutineFromSession({
+    routine,
+    session: { id: 'empty-session', owner_email: ME },
+    sets: await local.all('session_sets'),
+    ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  assert.equal(workout.routineExercises(await local.all('routine_exercises'), routine.id).length, 0);
+});

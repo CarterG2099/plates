@@ -243,7 +243,9 @@ export function muscleMap(exercise, name = '', { both: pair = false } = {}) {
   const view = key ? MUSCLES[key].view : 'front';
   const label = key ? `Works ${key.replace(/([A-Z])/g, ' $1').toLowerCase()}` : 'Muscle map';
 
-  // The movement class drives the limbs; without a match the muscle just pulses.
+  // Still emitted, still classified — the figure just doesn't move any more.
+  // movementFor stays exported and tested because the classification is the
+  // useful part; the animation that consumed it is gone.
   const move = movementFor(exercise, name);
   const cls = `mm${move ? ` mv-${move}` : ''}`;
 

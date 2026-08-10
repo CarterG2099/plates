@@ -1943,19 +1943,52 @@ Alpine.data('trainPage', () => ({
     await Alpine.store('data').refreshTraining();
   },
 
+  /**
+   * The routine this workout was started from, if it is still around.
+   *
+   * Null for an empty workout, and for one whose routine has since been
+   * deleted — in both cases there is nothing to offer updating.
+   */
+  get startedFrom() {
+    if (!this.session?.routine_id) return null;
+    return this.routines.find((r) => r.id === this.session.routine_id) ?? null;
+  },
+
+  /** Off by default: a workout is usually a one-off, not a new plan. */
+  updateRoutine: false,
+
   async finishSession() {
     const name = this.routineName.trim();
+    const source = this.startedFrom;
+    const rewriting = this.updateRoutine && source;
+
     if (name) {
       await workout.saveSessionAsRoutine({
         name, session: this.session, sets: this.data.sessionSets, ownerEmail: this.email,
       });
     }
+    if (rewriting) {
+      await workout.updateRoutineFromSession({
+        routine: source,
+        session: this.session,
+        sets: this.data.sessionSets,
+        ownerEmail: this.email,
+        allRoutineExercises: this.data.routineExercises,
+      });
+    }
+
     await workout.finishSession(this.session);
     this.finishing = false;
     this.routineName = '';
+    this.updateRoutine = false;
     this.endRest();
     await Alpine.store('data').refreshTraining();
-    Alpine.store('ui').flash(name ? `Finished · saved “${name}”` : 'Workout finished');
+
+    Alpine.store('ui').flash(
+      name ? `Finished · saved “${name}”`
+        : rewriting ? `Finished · updated “${source.name}”`
+          : 'Workout finished',
+    );
   },
 
   async discard() {

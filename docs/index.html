@@ -1307,6 +1307,18 @@
                 <span x-text="volume.toLocaleString()"></span> lb ·
                 <span x-text="elapsed"></span>
               </p>
+              <!-- Only when this workout came from a routine that still exists.
+                   Off by default: a workout is usually a one-off, not a new plan. -->
+              <template x-if="startedFrom">
+                <label class="opt-in">
+                  <input type="checkbox" x-model="updateRoutine">
+                  <span>
+                    Update “<span x-text="startedFrom.name"></span>” with what I did
+                    <small>Replaces its exercises, sets and weights. Its history is kept.</small>
+                  </span>
+                </label>
+              </template>
+
               <div class="field">
                 <label for="r-name">Save as routine (optional)</label>
                 <input id="r-name" type="text" x-model="routineName" placeholder="Push A" autocomplete="off">

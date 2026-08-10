@@ -416,16 +416,46 @@ export function routinesFor(routines, ownerEmail) {
  */
 export async function saveSessionAsRoutine({ name, session, sets, ownerEmail }) {
   const routine = await local.save('routines', { name, notes: null }, ownerEmail);
+  await writePlan({ routineId: routine.id, session, sets, ownerEmail });
 
+  sync.nudge();
+  return routine;
+}
+
+/**
+ * Rewrite a routine's plan from the session that was just finished.
+ *
+ * For when the routine was the plan and the workout was the correction: you
+ * swapped an exercise, added a set, went up in weight, and want next week to
+ * start from what you actually did. The routine row itself survives, so its
+ * name and its id — and therefore its history — carry on.
+ *
+ * The old plan is tombstoned rather than edited in place. Matching up old rows
+ * to new ones has no answer once exercises have been swapped or reordered, and
+ * a soft delete is what the sync layer expects anyway.
+ */
+export async function updateRoutineFromSession({ routine, session, sets, ownerEmail, allRoutineExercises }) {
+  for (const item of routineExercises(allRoutineExercises, routine.id)) {
+    await local.remove('routine_exercises', item.id);
+  }
+  const written = await writePlan({ routineId: routine.id, session, sets, ownerEmail });
+
+  sync.nudge();
+  return written;
+}
+
+/** One exercise per card, in the order they were worked, with what was lifted. */
+async function writePlan({ routineId, session, sets, ownerEmail }) {
   const groups = groupByExercise(setsForSession(sets, session.id));
+  const written = [];
   let position = 0;
 
   for (const group of groups) {
     const working = group.sets.filter((s) => !s.is_warmup);
     const heaviest = working.reduce((b, s) => (!b || (s.weight_lb ?? 0) > (b.weight_lb ?? 0) ? s : b), null);
 
-    await local.save('routine_exercises', {
-      routine_id: routine.id,
+    written.push(await local.save('routine_exercises', {
+      routine_id: routineId,
       exercise_id: group.exerciseId ?? null,
       position: position++,
       target_sets: working.length || group.sets.length,
@@ -433,11 +463,10 @@ export async function saveSessionAsRoutine({ name, session, sets, ownerEmail }) 
       target_weight_lb: heaviest?.weight_lb ?? null,
       rest_seconds: DEFAULT_REST_SECONDS,
       notes: group.name,      // keeps the name if the exercise row disappears
-    }, ownerEmail);
+    }, ownerEmail));
   }
 
-  sync.nudge();
-  return routine;
+  return written;
 }
 
 /** Create or rename a routine. Used by the builder; saving from a session uses
