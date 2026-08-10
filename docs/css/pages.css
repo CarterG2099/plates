@@ -622,9 +622,16 @@
 /* A finished set goes green edge to edge. Mid-set, from a few feet away and out
    of breath, "which ones have I done" has to be answerable without reading —
    and the tick alone was too small a signal to carry that. */
-/* Fills its swipe wrapper, which is the row's real boundary — see .row-swipe. */
+/* Fills its swipe wrapper, which is the row's real boundary — see .row-swipe.
+ *
+ * Two layers, not one: the green is deliberately a translucent tint, and the
+ * remove action sits *behind* this row waiting to be swiped to. A see-through
+ * background let the red show through every finished set. Painting the tint
+ * over an opaque base keeps the tint honest and the row solid. */
 .setrow.done {
-  background: var(--color-success-soft);
+  background:
+    linear-gradient(var(--color-success-soft), var(--color-success-soft)),
+    var(--color-surface-raised);
   border-bottom-color: transparent;
 }
 

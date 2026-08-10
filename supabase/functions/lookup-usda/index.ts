@@ -15,10 +15,15 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
 
-// Open Food Facts, searched here rather than from the page. Its search endpoint
-// sends no CORS header and 503s a browser User-Agent, so the browser cannot call
-// it at all — the barcode endpoint can, and still does.
-const OFF_SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl";
+// Open Food Facts, searched here rather than from the page. The barcode endpoint
+// is browser-callable and still is; search is not.
+//
+// This is their newer Search-a-licious service, not the legacy
+// world.openfoodfacts.org/cgi/search.pl. That one answered every request from
+// the Edge Function with a 503 — observed live, not guessed — which read exactly
+// like "OFF has no MyProtein" when in fact OFF has 2,322 MyProtein products and
+// was simply refusing to talk to us.
+const OFF_SEARCH_URL = "https://search.openfoodfacts.org/search";
 const OFF_FIELDS = "code,product_name,generic_name,brands,nutriments"
   + ",serving_size,serving_quantity,serving_quantity_unit";
 // Raised for brands USDA cannot help with at all. MyProtein is UK-only, so
@@ -327,8 +332,7 @@ async function fetchFoods(
  * must stay in one place, or the barcode path and the search path will drift.
  */
 async function fetchOff(query: string): Promise<{ products: unknown[]; error: string }> {
-  const url = `${OFF_SEARCH_URL}?search_terms=${encodeURIComponent(query)}`
-    + `&search_simple=1&action=process&json=1`
+  const url = `${OFF_SEARCH_URL}?q=${encodeURIComponent(query)}`
     + `&page_size=${OFF_PAGE_SIZE}&fields=${OFF_FIELDS}`;
 
   const controller = new AbortController();
@@ -342,7 +346,8 @@ async function fetchOff(query: string): Promise<{ products: unknown[]; error: st
     if (!res.ok) return { products: [], error: `${res.status}` };
 
     const payload = await res.json();
-    return { products: Array.isArray(payload?.products) ? payload.products : [], error: "" };
+    // Search-a-licious calls them hits; the legacy endpoint called them products.
+    return { products: Array.isArray(payload?.hits) ? payload.hits : [], error: "" };
   } catch (e) {
     const err = e as Error;
     return { products: [], error: err.name === "AbortError" ? "timed out" : (err.message ?? "failed") };

@@ -403,9 +403,9 @@
 .row-swipe > .setrow .cell { user-select: text; }
 
 /* Set rows live inside a card, which is a lighter surface than a bare row sits
-   on — and a done set paints its own green, which must still win. */
+   on. The done state paints over this in pages.css and must stay opaque there —
+   anything see-through reveals the remove action sitting behind the row. */
 .row-swipe > .setrow { background: var(--color-surface-raised); }
-.row-swipe > .setrow.done { background: var(--color-success-soft); }
 
 .row-swipe.is-open > .row,
 .row-swipe.is-open > .setrow { transform: translateX(-96px); }

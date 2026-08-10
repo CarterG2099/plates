@@ -261,7 +261,17 @@ function sodiumMg(basis) {
   return salt == null ? null : Math.round((salt / 2.5) * 1000);
 }
 
+/**
+ * The first brand, from either shape OFF uses.
+ *
+ * The barcode endpoint returns a comma-separated string ("Chobani, Chobani
+ * LLC"); the search service returns an array (["MyProtein"]). Handling only the
+ * string turned an array into "MyProtein" via String() by luck for one element,
+ * and into "A,B" garbage for two.
+ */
 function firstBrand(brands) {
   if (!brands) return null;
-  return String(brands).split(',')[0].trim() || null;
+
+  const first = Array.isArray(brands) ? brands[0] : String(brands).split(',')[0];
+  return String(first ?? '').trim() || null;
 }
