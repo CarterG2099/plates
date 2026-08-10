@@ -12,6 +12,13 @@
 //
 // Members only: we check plates.is_member() with the caller's JWT.
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import {
+  type UsdaFood,
+  normaliseUpc,
+  rankFoods,
+  toDraft,
+  unmatchedTerms,
+} from "./ranking.ts";
 
 const SEARCH_URL = "https://api.nal.usda.gov/fdc/v1/foods/search";
 
@@ -65,245 +72,6 @@ function json(body: unknown, status = 200): Response {
     headers: { ...cors, "Content-Type": "application/json" },
   });
 }
-
-// FoodData Central nutrient ids. `nutrientNumber` is carried as a fallback
-// because the two identifiers are not consistently populated across datasets.
-const NUTRIENTS: Record<string, { id: number; number: string }> = {
-  calories: { id: 1008, number: "208" },
-  // Some entries carry only kilojoules — "Peanut butter, creamy" is one.
-  energy_kj: { id: 1062, number: "268" },
-  protein_g: { id: 1003, number: "203" },
-  carbs_g: { id: 1005, number: "205" },
-  fat_g: { id: 1004, number: "204" },
-  fiber_g: { id: 1079, number: "291" },
-  sodium_mg: { id: 1093, number: "307" },
-};
-
-const REQUIRED = ["calories", "protein_g", "carbs_g", "fat_g"];
-
-interface UsdaNutrient {
-  nutrientId?: number;
-  nutrientNumber?: string;
-  value?: number;
-}
-
-interface UsdaFood {
-  fdcId?: number;
-  description?: string;
-  brandOwner?: string;
-  brandName?: string;
-  gtinUpc?: string;
-  dataType?: string;
-  foodNutrients?: UsdaNutrient[];
-  // Branded foods carry the label serving directly.
-  servingSize?: number;
-  servingSizeUnit?: string;
-  householdServingFullText?: string;
-  // Foundation and SR Legacy carry household measures instead — this is where
-  // "1 fruit" for a clementine lives.
-  foodMeasures?: { gramWeight?: number; disseminationText?: string }[];
-}
-
-function pick(nutrients: UsdaNutrient[], key: string): number | null {
-  const want = NUTRIENTS[key];
-  const hit = nutrients.find(
-    (n) => n.nutrientId === want.id || n.nutrientNumber === want.number,
-  );
-  const value = Number(hit?.value);
-  return Number.isFinite(value) ? Math.round(value * 10) / 10 : null;
-}
-
-/**
- * One serving, wherever USDA gives us one.
- *
- * Search results always report nutrients per 100 g, but that is a measurement
- * basis, not a portion. You search for a clementine to log a clementine, so the
- * per-100g figures are scaled onto whatever serving USDA recorded and the food
- * is stored as `1 serving` — matching the Open Food Facts mapping exactly, so
- * one scaling rule serves both sources.
- *
- * Per 100 g remains the fallback for foods with no recorded portion, because
- * there is then nothing to express a serving in.
- */
-function servingOf(food: UsdaFood): { grams: number; label: string } | null {
-  // Branded: the label serving, but only as a mass or volume. A "1 bar" serving
-  // with no weight cannot be scaled from a per-100g figure.
-  const size = Number(food.servingSize);
-  const unit = (food.servingSizeUnit ?? "").trim().toLowerCase();
-  if (Number.isFinite(size) && size > 0 && (unit === "g" || unit === "ml")) {
-    return {
-      grams: size,
-      label: (food.householdServingFullText ?? "").trim() || `${size} ${unit}`,
-    };
-  }
-
-  // Foundation / SR Legacy: the first household measure, which is the one USDA
-  // treats as the primary portion ("1 fruit", "1 cup, sections").
-  for (const measure of food.foodMeasures ?? []) {
-    const grams = Number(measure.gramWeight);
-    if (Number.isFinite(grams) && grams > 0) {
-      return {
-        grams,
-        label: (measure.disseminationText ?? "").trim() || `${grams} g`,
-      };
-    }
-  }
-
-  return null;
-}
-
-function toDraft(food: UsdaFood) {
-  const nutrients = food.foodNutrients ?? [];
-  const rawBrand = (food.brandName || food.brandOwner || "").trim();
-  const brand = rawBrand ? tidyName(rawBrand) : null;
-  const serving = servingOf(food);
-
-  // Nutrients are per 100 g; a serving is `grams` of that.
-  const factor = serving ? serving.grams / 100 : 1;
-  const per = (key: string): number | null => {
-    const value = pick(nutrients, key);
-    return value == null ? null : Math.round(value * factor * 10) / 10;
-  };
-
-  const draft = {
-    external_id: food.fdcId ? String(food.fdcId) : null,
-    barcode: food.gtinUpc?.trim() || null,
-    name: tidyName((food.description ?? "").trim()) || "Unnamed food",
-    brand,
-    serving_qty: serving ? 1 : 100,
-    serving_unit: serving ? "serving" : "g",
-    basis: serving ? serving.label : "per 100 g",
-    calories: per("calories") ?? kjToKcal(per("energy_kj")),
-    protein_g: per("protein_g"),
-    carbs_g: per("carbs_g"),
-    fat_g: per("fat_g"),
-    fiber_g: per("fiber_g"),
-    sodium_mg: per("sodium_mg"),
-    source: "usda",
-  };
-
-  return {
-    draft,
-    // Branded vs SR Legacy matters at review time: SR Legacy rows are generic
-    // reference foods ("Peanut butter, creamy"), Branded rows are a specific
-    // product off a shelf.
-    dataType: food.dataType ?? null,
-    missing: REQUIRED.filter((k) => draft[k as keyof typeof draft] == null),
-  };
-}
-
-/**
- * Undo USDA's shouting.
- *
- * Branded descriptions are stored in caps — "GREAT VALUE, BLACK TEA" — which
- * arrives in the UI as a shouted row. SR Legacy and Foundation descriptions are
- * already sentence case, so only names that are genuinely almost all uppercase
- * are rewritten; anything else is left exactly as USDA wrote it.
- */
-function tidyName(text: string): string {
-  const letters = text.replace(/[^A-Za-z]/g, "");
-  if (letters.length < 3) return text;
-
-  const upper = (text.match(/[A-Z]/g) ?? []).length;
-  if (upper / letters.length < 0.8) return text;
-
-  return text.toLowerCase().replace(
-    /(^|[\s(\[\/-])([a-z])/g,
-    (_, lead: string, c: string) => lead + c.toUpperCase(),
-  );
-}
-
-function kjToKcal(kj: number | null): number | null {
-  return kj == null ? null : Math.round(kj / 4.184);
-}
-
-/**
- * Rank by how well an entry answers the query, not by how many of its words
- * appear somewhere in the text.
- *
- * Counting term hits scored "Milk, reduced fat, 2% milkfat" and "Puddings,
- * chocolate, dry mix, prepared with 2% milk" identically — both contain "milk"
- * and "2%" — and ties fell through to USDA's own order, which is the category
- * noise this function exists to undo. A search for milk returned pudding.
- *
- * Four signals, in rough order of weight:
- *
- *  - The head noun. USDA descriptions name the food first and qualify it after,
- *    so the first word is what the food IS. Milk is milk; pudding *made with*
- *    milk is pudding. This is what separates them.
- *  - Coverage, as a multiplier rather than a bonus. A short description
- *    answering half the query was otherwise beating a long one answering all of
- *    it, which surfaced "Milk Chocolate Candy Bar" for "milk 2%".
- *  - Where the match landed. Description beats brand: "great value" is a brand,
- *    "peanut butter" is the food.
- *  - Padding. Every word not answering the query costs a little, so a tight
- *    description wins over one carrying the terms incidentally.
- */
-function scoreAgainst(terms: string[], food: UsdaFood): number {
-  const desc = (food.description ?? "").toLowerCase();
-  const brand = [food.brandName, food.brandOwner].filter(Boolean).join(" ").toLowerCase();
-
-  const words = desc.split(/[^a-z0-9%.]+/).filter(Boolean);
-  const head = words[0] ?? "";
-  const tail = words[words.length - 1] ?? "";
-
-  // Whole words, not substrings. "myprotein".includes("protein") is true, so a
-  // substring test classified "protein" as a brand word when searching
-  // Myprotein — worth 5 instead of 12, and barred from the head bonus, on a
-  // product literally called "Impact Whey Protein".
-  const brandWords = brand.split(/[^a-z0-9%.]+/).filter(Boolean);
-  const isBrandTerm = (t: string) => brandWords.some((w) => w.startsWith(t));
-
-  // A term found in the brand is a brand term even when the description repeats
-  // it. Otherwise "Great Value Black Tea" earns description credit for "great
-  // value" while "2% Reduced Fat Milk" earns only brand credit, and a search for
-  // the brand ranks by whether the maker restated it in the product name — which
-  // is how searching "great value" returned black tea instead of milk.
-  let inDesc = 0;
-  let inBrand = 0;
-  for (const term of terms) {
-    if (isBrandTerm(term)) inBrand += 1;
-    else if (desc.includes(term)) inDesc += 1;
-  }
-
-  const matched = inDesc + inBrand;
-  if (!matched) return 0;
-
-  let score = inDesc * 12 + inBrand * 5;
-
-  // Where the head noun sits depends on who wrote the name. Branded names are
-  // natural English and put it last ("Great Value Whole Milk"); USDA's own
-  // descriptions invert it ("Milk, reduced fat"). Only branded rows get the tail
-  // checked — on an SR description the last word is a qualifier, and "Puddings,
-  // chocolate, dry mix, prepared with 2% milk" ends in "milk".
-  const branded = Boolean(brand) || food.dataType === "Branded";
-  const heads = branded ? [head, tail] : [head];
-
-  // Brand words cannot earn the bonus: branded descriptions often lead with the
-  // brand, so "great" would hand it to "Great Value Sandwich Cookies".
-  const headable = terms.filter((t) => !isBrandTerm(t));
-  if (headable.some((t) => heads.some((h) => h && (h.startsWith(t) || (t.length > 3 && t.startsWith(h)))))) {
-    score += 45;
-  }
-
-  // Padding punishes a long description that carries the query incidentally.
-  // That only makes sense for a description match — on a brand match the other
-  // words are the product's own name, not noise. Applying it flat meant a
-  // brand-only search scored that brand's products at zero: "myprotein" cost
-  // more in padding (-8) than it earned in brand credit (+5).
-  const padding = Math.min(Math.max(words.length - matched, 0), 14) * 2;
-  score -= padding * (inDesc / matched);
-
-  return Math.max(score, 0) * (matched / terms.length) ** 1.5;
-}
-
-// Deliberately no bonus for Branded entries. It was tried and it put Great Value
-// Lemonade at the top of a peanut butter search: brand words and food words score
-// identically, so any thumb on the scale for brand matches promotes the wrong
-// product.
-
-/** Everything far below the best match is noise, however many slots are free. */
-const RELEVANCE_FLOOR = 0.28;
 
 type FetchResult = { foods: UsdaFood[] } | { error: string; status?: number };
 
@@ -488,24 +256,9 @@ Deno.serve(async (req) => {
   }
 
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const scored = foods
-    .map((food) => ({ food, score: scoreAgainst(terms, food) }))
-    .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score);
+  const ranked = rankFoods(foods, terms, RETURN_LIMIT);
 
-  const best = scored[0]?.score ?? 0;
-  const ranked = scored
-    .filter((r) => r.score >= best * RELEVANCE_FLOOR)
-    .slice(0, RETURN_LIMIT);
-
-  // Words that matched nothing anywhere. A typo silently degrades the query —
-  // "2% great value mlik" quietly becomes a search for "2% great value", and the
-  // results look confident rather than wrong. Naming the dead word lets the UI
-  // say so instead of presenting tea as an answer about milk.
-  const unmatched = terms.filter((t) => !foods.some((f) => {
-    const hay = [f.description, f.brandName, f.brandOwner].filter(Boolean).join(" ").toLowerCase();
-    return hay.includes(t);
-  }));
+  const unmatched = unmatchedTerms(terms, foods);
 
   return json({
     query,
@@ -520,7 +273,3 @@ Deno.serve(async (req) => {
   });
 });
 
-/** UPC-A and EAN-13 differ only by a leading zero; compare them as the same code. */
-function normaliseUpc(code: string): string {
-  return code.replace(/\D/g, "").replace(/^0+/, "");
-}

@@ -600,19 +600,16 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-/* Hairlines between sets.
+/* Each set is its own rounded chip, separated by the grid's gap.
  *
- * The `:last-child` used to sit on the row itself, which stopped being true the
- * moment each row got its own swipe wrapper — every row became an only child, so
- * every separator switched off. It is the wrapper that is last now.
+ * The hairline this replaces could not do the job once a finished set went
+ * green: 1px of --color-border laid over that tint is invisible, so a run of
+ * checked sets read as one slab. The gap does the separating and the radius is
+ * what makes each row read as a thing rather than a slice of a list.
  *
- * The wrapper's corner radius goes too. A set row is a flush line inside a card,
- * not a lifted card of its own, and an 18px radius clipped ~18px off each end of
- * the hairline. Food rows keep theirs. */
-.setgrid .row-swipe { border-radius: 0; }
-
-.setrow { border-bottom: 1px solid var(--color-border); }
-.setgrid .row-swipe:last-child .setrow { border-bottom: 0; }
+ * Smaller than the food rows' --radius-md, which would eat most of the height
+ * of a 57px row. */
+.setgrid .row-swipe { border-radius: var(--radius-sm); }
 
 .setrow .idx {
   font-family: var(--font-mono);
