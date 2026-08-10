@@ -303,6 +303,22 @@
 
 .figure-pair svg { width: 100%; height: auto; display: block; }
 
+/* The drawing stands in for the pair rather than sitting over it: it is square
+   and the pair is wide, so a contained overlay would letterbox and leak the
+   figures around its edges. Static, not absolute, overriding .art below. */
+.figure-pair .art {
+  position: static;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+/* Set by the image's own onload, so the pair only disappears once there is
+   something to replace it with. */
+.figure-pair.has-art svg { display: none; }
+
 /* ---- sheet furniture ------------------------------------------------------- */
 /* A title row with a close control, so sheets stop ending in a stack of
    full-width buttons where only one is the actual action. */

@@ -137,3 +137,30 @@ test('exerciseArt prefers the exercise row name over the passed name', () => {
   const html = mm.exerciseArt({ name: 'Squat (Barbell)' }, 'ignored');
   assert.match(html, /squat-barbell\.png/);
 });
+
+test('exerciseArtPair layers the image over the front/back pair', () => {
+  const html = mm.exerciseArtPair(null, 'Bench Press (Barbell)');
+  assert.match(html, /FRONT/, 'the pair must still be the fallback');
+  assert.match(html, /BACK/);
+  assert.match(html, /src="\/img\/exercises\/bench-press-barbell\.png"/);
+});
+
+// The overlay trick the thumbnails use does not work on a wide canvas, so the
+// pair is hidden on load instead. Without the onload the drawing never shows;
+// without the onerror an exercise with no drawing shows a broken image.
+test('exerciseArtPair hides the pair only once the drawing has loaded', () => {
+  const html = mm.exerciseArtPair(null, 'Bench Press (Barbell)');
+  assert.match(html, /onload="this\.parentElement\.classList\.add\('has-art'\)"/);
+  assert.match(html, /onerror="this\.remove\(\)"/);
+});
+
+test('exerciseArtPair falls back to the pair alone when there is no name', () => {
+  const html = mm.exerciseArtPair(null, '');
+  assert.match(html, /FRONT/);
+  assert.equal(html.includes('<img'), false);
+});
+
+test('exerciseArtPair prefers the exercise row name over the passed name', () => {
+  const html = mm.exerciseArtPair({ name: 'Squat (Barbell)' }, 'ignored');
+  assert.match(html, /squat-barbell\.png/);
+});

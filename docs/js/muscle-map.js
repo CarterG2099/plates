@@ -267,6 +267,27 @@ export function exerciseArt(exercise, name = '') {
     + ` src="/img/exercises/${slug}.png" onerror="this.remove()">`;
 }
 
+/**
+ * The same swap for the detail sheet's front/back pair.
+ *
+ * Overlaying is wrong here: the pair is a wide canvas and the drawing is square,
+ * so a contained image letterboxes and the figures show around its edges. So the
+ * drawing announces itself on load instead, and CSS hides the pair — the failure
+ * direction still costs nothing, because an image that never loads never fires.
+ *
+ * The pair is replaced rather than joined by the drawing. Both say which muscle
+ * works, and the drawing says it about this exercise specifically.
+ */
+export function exerciseArtPair(exercise, name = '') {
+  const slug = artSlug(exercise?.name || name);
+  const figure = muscleMap(exercise, name, { both: true });
+  if (!slug) return figure;
+
+  return `${figure}<img class="art" alt="" loading="lazy"`
+    + ` src="/img/exercises/${slug}.png"`
+    + ` onload="this.parentElement.classList.add('has-art')" onerror="this.remove()">`;
+}
+
 export function muscleMap(exercise, name = '', { both: pair = false } = {}) {
   const key = muscleFor(exercise, name);
   const view = key ? MUSCLES[key].view : 'front';

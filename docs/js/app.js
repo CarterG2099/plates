@@ -17,7 +17,7 @@ import * as scanner from './scanner.js';
 import * as photo from './photo.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
-import { muscleMap, exerciseArt } from './muscle-map.js';
+import { exerciseArt, exerciseArtPair } from './muscle-map.js';
 import * as stats from './stats.js';
 import * as push from './push.js';
 
@@ -2523,9 +2523,9 @@ Alpine.data('trainPage', () => ({
     return exerciseArt(this.exerciseById(exerciseId), name);
   },
 
-  /** Front and back together, for the detail sheet. */
+  /** The drawing for the detail sheet, or front and back together without one. */
   muscleMapPair(exerciseId, name) {
-    return muscleMap(this.exerciseById(exerciseId), name, { both: true });
+    return exerciseArtPair(this.exerciseById(exerciseId), name);
   },
 
   /** Written form cues. The figure says which muscle; these say how. */
@@ -2587,9 +2587,9 @@ Alpine.data('trainPage', () => ({
     return exerciseArt(this.exerciseById(exerciseId), name);
   },
 
-  /** Front and back together, for the detail sheet. */
+  /** The drawing for the detail sheet, or front and back together without one. */
   muscleMapPair(exerciseId, name) {
-    return muscleMap(this.exerciseById(exerciseId), name, { both: true });
+    return exerciseArtPair(this.exerciseById(exerciseId), name);
   },
 
   /** Written form cues. The figure says which muscle; these say how. */
