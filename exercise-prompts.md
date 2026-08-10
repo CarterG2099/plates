@@ -1,6 +1,6 @@
 # Exercise art — every draw command
 
-One ready-to-paste line per exercise, all 109. Companion to `exercise-art.md`,
+One ready-to-paste line per exercise, all 103. Companion to `exercise-art.md`,
 which explains where the files go and why they exist; this file is just the
 commands, in the order worth working in.
 
@@ -10,6 +10,10 @@ alike, which is the whole game — the set is judged as a set.
 **Save each result as the filename above its command.** The app builds that path
 from the exercise name, so the drawing appears the moment the file lands in
 `docs/img/exercises/`. Nothing else to do.
+
+Names put the weight form in trailing parentheses — `Bench Press (Dumbbell)`,
+not `Dumbbell Bench Press`. That is how the database now reads, and the filenames
+are derived from it, so the two cannot drift.
 
 ---
 
@@ -50,22 +54,19 @@ than starting over. It keeps the style anchored.
 
 ---
 
-## Chest — 13
+## Chest — 12
 
 `bench-press-barbell.png` ✅ done
 > Draw: **Bench Press (Barbell)** — highlight the **pectorals** in red-orange. Include the barbell and a flat bench.
 
-`dumbbell-bench-press.png` ✅ done
-> Draw: **Dumbbell Bench Press** — highlight the **pectorals** in red-orange. Include two dumbbells and a flat bench.
+`bench-press-dumbbell.png` ✅ done
+> Draw: **Bench Press (Dumbbell)** — highlight the **pectorals** in red-orange. Include two dumbbells and a flat bench.
 
-`incline-barbell-bench-press.png`
-> Draw: **Incline Barbell Bench Press** — highlight the **upper pectorals** in red-orange. Include the barbell and an inclined bench, with the incline clearly visible.
+`incline-bench-press-barbell.png`
+> Draw: **Incline Bench Press (Barbell)** — highlight the **upper pectorals** in red-orange. Include the barbell and an inclined bench, with the incline clearly visible.
 
 `incline-bench-press-dumbbell.png`
 > Draw: **Incline Bench Press (Dumbbell)** — highlight the **upper pectorals** in red-orange. Include two dumbbells and an inclined bench.
-
-`incline-dumbbell-press.png`
-> Draw: **Incline Dumbbell Press** — highlight the **upper pectorals** in red-orange. Include two dumbbells and an inclined bench, pressed to full lockout.
 
 `incline-chest-press-machine.png`
 > Draw: **Incline Chest Press (Machine)** — highlight the **upper pectorals** in red-orange. Include a seated incline chest press machine with two handles and a back pad.
@@ -76,14 +77,14 @@ than starting over. It keeps the style anchored.
 `chest-fly-machine.png`
 > Draw: **Chest Fly (Machine)** — highlight the **pectorals** in red-orange. Include a pec deck machine, seated, with both padded arms swept together in front of the chest.
 
-`cable-fly.png`
-> Draw: **Cable Fly** — highlight the **pectorals** in red-orange. Include two cable stations with high pulleys, one handle in each hand, arms sweeping together in front of the chest.
+`fly-cable.png`
+> Draw: **Fly (Cable)** — highlight the **pectorals** in red-orange. Include two cable stations with high pulleys, one handle in each hand, arms sweeping together in front of the chest.
 
-`cable-fly-crossovers.png`
-> Draw: **Cable Fly Crossovers** — highlight the **pectorals** in red-orange. Include two high cable pulleys, with the hands crossed over one another at the bottom of the movement.
+`fly-crossovers-cable.png`
+> Draw: **Fly Crossovers (Cable)** — highlight the **pectorals** in red-orange. Include two high cable pulleys, with the hands crossed over one another at the bottom of the movement.
 
-`low-cable-fly-crossovers.png`
-> Draw: **Low Cable Fly Crossovers** — highlight the **pectorals** in red-orange. Include two low cable pulleys near the floor, arms sweeping upward and together in front of the chest.
+`low-fly-crossovers-cable.png`
+> Draw: **Low Fly Crossovers (Cable)** — highlight the **pectorals** in red-orange. Include two low cable pulleys near the floor, arms sweeping upward and together in front of the chest.
 
 `chest-dip.png`
 > Draw: **Chest Dip** — highlight the **pectorals** in red-orange. Include parallel dip bars, with the torso leaning forward and the elbows flared.
@@ -93,7 +94,7 @@ than starting over. It keeps the style anchored.
 
 ---
 
-## Back and lats — 21
+## Back and lats — 19
 
 `pull-up.png`
 > Draw: **Pull-Up** — highlight the **latissimus dorsi** in red-orange. Include an overhead bar, with an overhand grip and the body hanging.
@@ -114,16 +115,10 @@ than starting over. It keeps the style anchored.
 > Draw: **Single Arm Lat Pulldown** — highlight the **latissimus dorsi** in red-orange. Include a cable station with one single handle, pulled with one arm only.
 
 `straight-arm-lat-pulldown-cable.png`
-> Draw: **Straight Arm Lat Pulldown (Cable)** — highlight the **latissimus dorsi** in red-orange. Include a high cable with a straight bar, arms locked straight and sweeping down to the thighs.
+> Draw: **Straight Arm Lat Pulldown (Cable)** — highlight the **latissimus dorsi** in red-orange. Include a high cable with a **straight bar**, arms locked straight and sweeping down to the thighs.
 
-`straight-arm-pulldown.png`
-> Draw: **Straight-Arm Pulldown** — highlight the **latissimus dorsi** in red-orange. Include a high cable with a straight bar, standing, arms straight throughout.
-
-`rope-straight-arm-pulldown.png`
-> Draw: **Rope Straight Arm Pulldown** — highlight the **latissimus dorsi** in red-orange. Include a high cable with a rope attachment, arms straight and the rope ends pulled apart at the thighs.
-
-`barbell-row.png`
-> Draw: **Barbell Row** — highlight the **latissimus dorsi** in red-orange. Include a barbell, torso hinged forward, bar pulled to the waist.
+`straight-arm-pulldown-rope.png`
+> Draw: **Straight Arm Pulldown (Rope)** — highlight the **latissimus dorsi** in red-orange. Include a high cable with a **rope attachment**, arms straight, the two rope ends pulled apart at the thighs.
 
 `bent-over-row-barbell.png`
 > Draw: **Bent Over Row (Barbell)** — highlight the **rhomboids and mid-back** in red-orange. Include a barbell with the torso hinged near parallel to the floor.
@@ -131,17 +126,17 @@ than starting over. It keeps the style anchored.
 `pendlay-row.png`
 > Draw: **Pendlay Row** — highlight the **latissimus dorsi** in red-orange. Include a barbell and the floor it rests on between reps, with the back flat and horizontal.
 
-`dumbbell-row.png`
-> Draw: **Dumbbell Row** — highlight the **latissimus dorsi** in red-orange. Include one dumbbell, with one knee and one hand braced on a flat bench.
+`row-dumbbell.png`
+> Draw: **Row (Dumbbell)** — highlight the **latissimus dorsi** in red-orange. Include one dumbbell, with one knee and one hand braced on a flat bench.
 
-`t-bar-row.png`
-> Draw: **T Bar Row** — highlight the **rhomboids and mid-back** in red-orange. Include a T-bar row with a landmine-mounted barbell, weight plates on the end, and a V handle.
+`row-t-bar.png`
+> Draw: **Row (T Bar)** — highlight the **rhomboids and mid-back** in red-orange. Include a T-bar row with a landmine-mounted barbell, weight plates on the end, and a V handle.
 
-`seated-cable-row.png`
-> Draw: **Seated Cable Row** — highlight the **latissimus dorsi** in red-orange. Include a seated cable row machine with a footplate and a low pulley.
+`seated-row-cable.png`
+> Draw: **Seated Row (Cable)** — highlight the **latissimus dorsi** in red-orange. Include a seated cable row machine with a footplate and a low pulley.
 
-`seated-cable-row-bar-wide-grip.png`
-> Draw: **Seated Cable Row - Bar Wide Grip** — highlight the **latissimus dorsi** in red-orange. Include a seated cable row machine with a wide straight bar, hands set wide apart.
+`seated-row-bar-wide-grip-cable.png`
+> Draw: **Seated Row - Bar Wide Grip (Cable)** — highlight the **latissimus dorsi** in red-orange. Include a seated cable row machine with a wide straight bar, hands set wide apart.
 
 `seated-cable-row-v-grip-cable.png`
 > Draw: **Seated Cable Row - V Grip (Cable)** — highlight the **latissimus dorsi** in red-orange. Include a seated cable row machine with a close V handle.
@@ -160,13 +155,10 @@ than starting over. It keeps the style anchored.
 
 ---
 
-## Legs — 18
-
-`back-squat.png`
-> Draw: **Back Squat** — highlight the **quadriceps** in red-orange. Include a barbell resting across the upper back and a squat rack behind.
+## Legs — 17
 
 `squat-barbell.png`
-> Draw: **Squat (Barbell)** — highlight the **quadriceps** in red-orange. Include a barbell across the upper back, at the bottom of the squat.
+> Draw: **Squat (Barbell)** — highlight the **quadriceps** in red-orange. Include a barbell resting across the upper back and a squat rack behind, at the bottom of the squat.
 
 `front-squat.png`
 > Draw: **Front Squat** — highlight the **quadriceps** in red-orange. Include a barbell racked across the front deltoids with the elbows driven high.
@@ -226,8 +218,8 @@ than starting over. It keeps the style anchored.
 `seated-overhead-press-barbell.png`
 > Draw: **Seated Overhead Press (Barbell)** — highlight the **deltoids** in red-orange. Include a barbell and an upright bench with a back pad.
 
-`seated-dumbbell-shoulder-press.png`
-> Draw: **Seated Dumbbell Shoulder Press** — highlight the **deltoids** in red-orange. Include two dumbbells pressed overhead on an upright bench.
+`seated-shoulder-press-dumbbell.png`
+> Draw: **Seated Shoulder Press (Dumbbell)** — highlight the **deltoids** in red-orange. Include two dumbbells pressed overhead on an upright bench.
 
 `seated-shoulder-press-machine.png`
 > Draw: **Seated Shoulder Press (Machine)** — highlight the **deltoids** in red-orange. Include a seated shoulder press machine with two overhead handles.
@@ -261,22 +253,19 @@ than starting over. It keeps the style anchored.
 
 ---
 
-## Arms — 23
+## Arms — 21
 
-`barbell-curl.png`
-> Draw: **Barbell Curl** — highlight the **biceps** in red-orange. Include a barbell curled to chest height while standing.
+`curl-barbell.png`
+> Draw: **Curl (Barbell)** — highlight the **biceps** in red-orange. Include a barbell curled to chest height while standing.
 
 `21s-bicep-curl.png`
 > Draw: **21s Bicep Curl** — highlight the **biceps** in red-orange. Include a barbell stopped halfway through the curl, at the mid-range position.
 
-`ez-bar-biceps-curl.png`
-> Draw: **EZ Bar Biceps Curl** — highlight the **biceps** in red-orange. Include an EZ curl bar with its distinctive zigzag shape clearly visible.
+`biceps-curl-ez-bar.png`
+> Draw: **Biceps Curl (EZ Bar)** — highlight the **biceps** in red-orange. Include an EZ curl bar with its distinctive zigzag shape clearly visible.
 
 `bicep-curl-dumbbell.png`
 > Draw: **Bicep Curl (Dumbbell)** — highlight the **biceps** in red-orange. Include two dumbbells curled with palms facing up.
-
-`dumbbell-curl.png`
-> Draw: **Dumbbell Curl** — highlight the **biceps** in red-orange. Include two dumbbells, one arm curled up and one down.
 
 `hammer-curl.png`
 > Draw: **Hammer Curl** — highlight the **biceps** in red-orange. Include two dumbbells held in a neutral grip, thumbs up, curled to the shoulders.
@@ -290,8 +279,8 @@ than starting over. It keeps the style anchored.
 `seated-incline-curl-dumbbell.png`
 > Draw: **Seated Incline Curl (Dumbbell)** — highlight the **biceps** in red-orange. Include two dumbbells and a reclined incline bench, with the arms hanging behind the body.
 
-`cable-curl.png`
-> Draw: **Cable Curl** — highlight the **biceps** in red-orange. Include a low cable pulley with a straight bar attachment.
+`curl-cable.png`
+> Draw: **Curl (Cable)** — highlight the **biceps** in red-orange. Include a low cable pulley with a straight bar attachment.
 
 `behind-the-back-curl-cable.png`
 > Draw: **Behind the Back Curl (Cable)** — highlight the **biceps** in red-orange. Include a low cable running behind the body, curled with one arm.
@@ -303,19 +292,16 @@ than starting over. It keeps the style anchored.
 > Draw: **Behind the Back Bicep Wrist Curl (Barbell)** — highlight the **forearms** in red-orange. Include a barbell held behind the back at hip level, curled with the wrists only.
 
 `triceps-pushdown.png`
-> Draw: **Triceps Pushdown** — highlight the **triceps** in red-orange. Include a high cable with a straight bar pressed down to the thighs, elbows pinned to the sides.
+> Draw: **Triceps Pushdown** — highlight the **triceps** in red-orange. Include a high cable with a **straight bar** pressed down to the thighs, elbows pinned to the sides.
 
-`triceps-rope-pushdown.png`
-> Draw: **Triceps Rope Pushdown** — highlight the **triceps** in red-orange. Include a high cable with a rope attachment, the two ends pulled apart at the bottom.
+`triceps-pushdown-rope.png`
+> Draw: **Triceps Pushdown (Rope)** — highlight the **triceps** in red-orange. Include a high cable with a **rope attachment**, the two ends pulled apart at the bottom.
 
 `triceps-kickback-cable.png`
 > Draw: **Triceps Kickback (Cable)** — highlight the **triceps** in red-orange. Include a low cable with a single handle, torso hinged forward and the elbow held high.
 
-`overhead-triceps-extension.png`
-> Draw: **Overhead Triceps Extension** — highlight the **triceps** in red-orange. Include a single dumbbell held overhead with both hands and lowered behind the head.
-
 `triceps-extension-dumbbell.png`
-> Draw: **Triceps Extension (Dumbbell)** — highlight the **triceps** in red-orange. Include a dumbbell extended overhead, elbows pointing forward.
+> Draw: **Triceps Extension (Dumbbell)** — highlight the **triceps** in red-orange. Include a dumbbell held overhead with both hands and lowered behind the head.
 
 `single-arm-tricep-extension-dumbbell.png`
 > Draw: **Single Arm Tricep Extension (Dumbbell)** — highlight the **triceps** in red-orange. Include one dumbbell held overhead in a single hand, lowered behind the head.
@@ -330,7 +316,7 @@ than starting over. It keeps the style anchored.
 > Draw: **Triceps Dip (Weighted)** — highlight the **triceps** in red-orange. Include parallel dip bars and a weight plate hanging from a belt, with the torso upright.
 
 `seated-dip-machine.png`
-> Draw: **Seated Dip Machine** — highlight the **triceps** in red-orange. Include a seated dip machine with handles at the sides and a back pad.
+> Draw: **Seated Dip (Machine)** — highlight the **triceps** in red-orange. Include a seated dip machine with handles at the sides and a back pad.
 
 ---
 
@@ -342,8 +328,8 @@ than starting over. It keeps the style anchored.
 `ab-wheel-rollout.png`
 > Draw: **Ab Wheel Rollout** — highlight the **abdominals** in red-orange. Include an ab wheel, kneeling, extended forward near the floor.
 
-`cable-crunch.png`
-> Draw: **Cable Crunch** — highlight the **abdominals** in red-orange. Include a high cable with a rope held beside the head, kneeling, spine curled forward.
+`crunch-cable.png`
+> Draw: **Crunch (Cable)** — highlight the **abdominals** in red-orange. Include a high cable with a rope held beside the head, kneeling, spine curled forward.
 
 `decline-sit-up.png`
 > Draw: **Decline Sit Up** — highlight the **abdominals** in red-orange. Include a decline bench with foot rollers, torso curling upward.
@@ -367,11 +353,11 @@ than starting over. It keeps the style anchored.
 `glute-kickback-machine.png`
 > Draw: **Glute Kickback (Machine)** — highlight the **glutes** in red-orange. Include a glute kickback machine with a footplate, one leg driving backward.
 
-`cable-pull-through.png`
-> Draw: **Cable Pull Through** — highlight the **glutes** in red-orange. Include a low cable with a rope passed between the legs, hips hinged then driven forward.
+`pull-through-cable.png`
+> Draw: **Pull Through (Cable)** — highlight the **glutes** in red-orange. Include a low cable with a rope passed between the legs, hips hinged then driven forward.
 
-`kettlebell-swing.png`
-> Draw: **Kettlebell Swing** — highlight the **glutes and hamstrings** in red-orange. Include a kettlebell swung forward to chest height on straight arms.
+`swing-kettlebell.png`
+> Draw: **Swing (Kettlebell)** — highlight the **glutes and hamstrings** in red-orange. Include a kettlebell swung forward to chest height on straight arms.
 
 `hip-abduction-machine.png`
 > Draw: **Hip Abduction (Machine)** — highlight the **gluteus medius on the outer hip** in red-orange. Include a seated abduction machine with pads against the outer thighs, knees pressing apart.
@@ -405,21 +391,27 @@ than starting over. It keeps the style anchored.
 
 ---
 
-## Pairs that will look near-identical
+## Two pairs that differ only by attachment
 
-These are separate rows in the database with separate training history, so they
-each need a file — but the movements are the same or nearly so, and drawing them
-identically is fine. Worth knowing before you wonder whether you already did one.
+Not duplicates — the same movement done with a bar or with a rope, each with its
+own logged history. The prompts above bold the attachment for exactly this
+reason, because it is the only thing telling the two drawings apart.
 
-| | |
+| Bar | Rope |
 |---|---|
-| `back-squat.png` | `squat-barbell.png` |
-| `barbell-row.png` | `bent-over-row-barbell.png` |
-| `bicep-curl-dumbbell.png` | `dumbbell-curl.png` |
-| `incline-bench-press-dumbbell.png` | `incline-dumbbell-press.png` |
-| `straight-arm-lat-pulldown-cable.png` | `straight-arm-pulldown.png` |
-| `overhead-triceps-extension.png` | `triceps-extension-dumbbell.png` |
+| `straight-arm-lat-pulldown-cable.png` | `straight-arm-pulldown-rope.png` |
+| `triceps-pushdown.png` | `triceps-pushdown-rope.png` |
 
-Unlike the two pairs already merged, none of these are safe to merge blind —
-several have real sets logged on both sides, so combining them is a data
-decision, not a cleanup.
+An earlier version of this file listed six other pairs and claimed they could not
+be merged because both sides had training history. That was wrong — it was
+asserted without checking. Every one of those six had a side with zero sets and
+zero routine references, and they have since been deleted:
+
+| Kept | Sets | Deleted | Sets |
+|---|---|---|---|
+| Incline Bench Press (Dumbbell) | 237 | Incline Dumbbell Press | 0 |
+| Triceps Extension (Dumbbell) | 233 | Overhead Triceps Extension | 0 |
+| Bent Over Row (Barbell) | 158 | Barbell Row | 0 |
+| Squat (Barbell) | 150 | Back Squat | 0 |
+| Straight Arm Lat Pulldown (Cable) | 117 | Straight-Arm Pulldown | 0 |
+| Bicep Curl (Dumbbell) | 63 | Dumbbell Curl | 0 |
