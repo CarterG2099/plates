@@ -181,3 +181,12 @@ button {
   pointer-events: none;
   transition: opacity 160ms ease;
 }
+
+/* The Add food bar leads with its controls rather than spacing them apart:
+   back, menu, then the title. */
+.app-bar-left {
+  justify-content: flex-start;
+  gap: var(--space-2);
+}
+
+.app-bar-left h1 { margin-left: var(--space-1); }

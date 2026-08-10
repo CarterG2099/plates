@@ -125,6 +125,11 @@ function toDraft(product, code) {
     brand: firstBrand(product.brands),
     serving_qty: basis.qty,
     serving_unit: basis.unit,
+    // What that serving actually measures. Kept because `serving_unit` is the
+    // word 'serving' for almost everything scanned, which is unitless — this is
+    // what lets the amount sheet offer grams as a lens over servings.
+    serving_size: size?.qty ?? null,
+    serving_size_unit: size?.unit ?? null,
     // Nothing to override: one serving is already the amount you want.
     default_qty: null,
     calories: basis.read('energy-kcal') ?? kjToKcal(basis.raw('energy')),

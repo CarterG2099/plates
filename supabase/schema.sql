@@ -89,6 +89,12 @@ create table if not exists plates.foods (
   -- publishes the label serving; serving_qty has to stay consistent with the
   -- macros, so the serving gets its own column. Null falls back to serving_qty.
   default_qty   numeric,
+  -- What one serving physically measures, in its own unit — 170 g of yoghurt,
+  -- 355 ml of soda. `serving_unit` is usually the word 'serving' and says
+  -- nothing about size, so this is the only thing that makes servings and a
+  -- weight interconvertible. Null where the source never published it.
+  serving_size      numeric,
+  serving_size_unit text,
   calories      numeric,
   protein_g     numeric,
   carbs_g       numeric,

@@ -155,14 +155,92 @@
             <div class="rows">
               <template x-for="entry in meal.entries" :key="entry.id">
                 <div class="row">
-                  <div class="row-text">
+                  <button class="row-text" @click="openEdit(entry)">
                     <b x-text="entry.description"></b>
-                    <small><span x-text="entry.quantity"></span><span x-text="entry.unit"></span></small>
-                  </div>
+                    <small x-text="amountLabel(entry.quantity, entry.unit)"></small>
+                  </button>
                   <span class="row-num" x-text="round(entry.calories)"></span>
                   <button class="tap" @click="removeEntry(entry.id)" :aria-label="`Remove ${entry.description}`">×</button>
                 </div>
               </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Edit a logged amount ---------------------------------------------- -->
+        <template x-if="edit">
+          <div class="sheet-backdrop" @click.self="closeEdit()">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeEdit() })">
+              <div class="grabber"></div>
+
+              <div style="font-weight: 600;" x-text="edit.entry.description"></div>
+
+              <!-- Weight is a lens, not a second unit: whichever box you type
+                   in, the entry is stored and shown the way it was logged. -->
+              <template x-if="canMeasure">
+                <div class="chips">
+                  <button class="chip" :class="edit.lens === 'native' && 'is-active'"
+                          @click="setLens('native')">Servings</button>
+                  <button class="chip" :class="edit.lens === 'measure' && 'is-active'"
+                          @click="setLens('measure')" x-text="servingSizeUnit"></button>
+                </div>
+              </template>
+
+              <!-- Asked once per food, then never again — applyServingSize()
+                   writes it onto the food itself. -->
+              <template x-if="edit.lens === 'measure' && !servingSize">
+                <div class="notice">
+                  Nothing on record for what one serving of this measures. Take it
+                  off the label once and it is known from then on.
+                  <div class="serving-fix">
+                    <label class="field">
+                      <span>One serving is</span>
+                      <input type="number" inputmode="decimal" step="any" min="0" x-model="sizeInput">
+                    </label>
+                    <label class="field">
+                      <span>Unit</span>
+                      <input type="text" x-model="sizeUnit" autocomplete="off">
+                    </label>
+                    <button class="btn" @click="applyServingSize()"
+                            :disabled="!(Number(sizeInput) > 0)">Use it</button>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="edit.lens === 'native' || servingSize">
+                <div class="qty">
+                  <button class="qty-step" @click="editStep(-1)" aria-label="Decrease">−</button>
+                  <label class="qty-amount">
+                    <input type="number" inputmode="decimal" step="any" min="0" x-model.number="edit.amount">
+                    <small x-text="edit.lens === 'measure' ? servingSizeUnit
+                      : (edit.entry.unit === 'serving' && edit.amount !== 1 ? 'servings' : edit.entry.unit)"></small>
+                  </label>
+                  <button class="qty-step" @click="editStep(1)" aria-label="Increase">+</button>
+                </div>
+              </template>
+
+              <p class="prefill" x-show="edit.lens === 'measure' && servingSize"
+                 x-text="`Logged as ${amountLabel(editQuantity, edit.entry.unit)}`"></p>
+
+              <div class="macros">
+                <template x-for="m in [
+                  { key: 'protein_g', name: 'Protein', color: 'var(--color-protein)' },
+                  { key: 'carbs_g',   name: 'Carbs',   color: 'var(--color-carbs)' },
+                  { key: 'fat_g',     name: 'Fat',     color: 'var(--color-fat)' }
+                ]" :key="m.key">
+                  <div class="macro">
+                    <span class="dot" :style="`background: ${m.color}`"></span>
+                    <span class="macro-name" x-text="m.name"></span>
+                    <span class="macro-val" style="margin-left: auto;"
+                          x-text="editMacros[m.key] ?? '—'"></span>
+                  </div>
+                </template>
+              </div>
+
+              <button class="btn btn-primary btn-block" @click="saveEdit()">
+                Save <span x-text="Math.round(editMacros.calories ?? 0)"></span> kcal
+              </button>
+              <button class="btn btn-ghost btn-block" @click="closeEdit()">Cancel</button>
             </div>
           </div>
         </template>
@@ -240,16 +318,20 @@
       <!-- Log -------------------------------------------------------------- -->
       <main class="app-main log-panel" x-data="logPage" x-show="$store.ui.logOpen" x-cloak>
 
-        <div class="app-bar" style="padding-left: 0; padding-right: 0;">
+        <div class="app-bar app-bar-left" style="padding-left: 0; padding-right: 0;">
           <button class="tap" @click="$store.ui.closeLog()" aria-label="Close">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"
                  aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
           </button>
-          <h1>Add food</h1>
-          <button class="chip" @click="$store.ui.closeLog()">
-            <span x-text="$store.ui.dayLabel"></span> · Done
+          <button class="tap" @click="openMenu()" aria-label="More">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16"/>
+            </svg>
           </button>
+          <h1>Add food</h1>
+          <span class="app-bar-meta" style="margin-left: auto;" x-text="$store.ui.dayLabel"></span>
         </div>
 
         <div class="search-row">
@@ -372,33 +454,11 @@
           </div>
         </template>
 
-        <!-- Photo paths. A label is read; a plate is estimated. -->
-        <div class="btn-row">
-          <label class="btn" :class="photoBusy === 'label' && 'is-busy'">
-            <span x-show="photoBusy !== 'label'">Scan a label</span>
-            <span x-show="photoBusy === 'label'">Reading…</span>
-            <input type="file" accept="image/*" capture="environment"
-                   @change="readLabel($event)" hidden>
-          </label>
-          <label class="btn" :class="photoBusy === 'meal' && 'is-busy'">
-            <span x-show="photoBusy !== 'meal'">Estimate a meal</span>
-            <span x-show="photoBusy === 'meal'">Estimating…</span>
-            <input type="file" accept="image/*" capture="environment"
-                   @change="readMeal($event)" hidden>
-          </label>
-        </div>
+        <button class="btn btn-block" x-show="term" @click="startCreate()">
+          Add “<span x-text="term"></span>” by hand
+        </button>
 
         <div class="notice notice-error" x-show="photoError" x-text="photoError"></div>
-
-        <button class="btn btn-block" @click="startMeal()">
-          <span x-show="term">Build “<span x-text="term"></span>” as a meal</span>
-          <span x-show="!term">New meal</span>
-        </button>
-
-        <button class="btn btn-block" @click="startCreate()">
-          <span x-show="term">Add “<span x-text="term"></span>” by hand</span>
-          <span x-show="!term">Add a food</span>
-        </button>
 
         <template x-if="combos.length && !term">
           <div>
@@ -419,6 +479,40 @@
                   </div>
                 </div>
               </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Menu -------------------------------------------------------------- -->
+        <template x-if="menu">
+          <div class="sheet-backdrop" @click.self="closeMenu()">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeMenu() })">
+              <div class="grabber"></div>
+
+              <div class="card-label">New meal</div>
+              <div class="btn-row">
+                <button class="btn" @click="fromMenu(() => startMeal())">Build it</button>
+                <label class="btn" :class="photoBusy === 'meal' && 'is-busy'">
+                  <span x-show="photoBusy !== 'meal'">From a photo</span>
+                  <span x-show="photoBusy === 'meal'">Reading…</span>
+                  <input type="file" accept="image/*" capture="environment"
+                         @change="closeMenu(); buildMealFromPhoto($event)" hidden>
+                </label>
+              </div>
+
+              <div class="card-label">Add a food</div>
+              <div class="btn-row">
+                <button class="btn" @click="fromMenu(() => startCreate())">By hand</button>
+                <label class="btn" :class="photoBusy === 'label' && 'is-busy'">
+                  <span x-show="photoBusy !== 'label'">Scan a label</span>
+                  <span x-show="photoBusy === 'label'">Reading…</span>
+                  <input type="file" accept="image/*" capture="environment"
+                         @change="closeMenu(); readLabel($event)" hidden>
+                </label>
+              </div>
+
+              <button class="btn btn-block" @click="browseMine()">My foods &amp; meals</button>
+              <button class="btn btn-ghost btn-block" @click="closeMenu()">Cancel</button>
             </div>
           </div>
         </template>
@@ -821,6 +915,57 @@
                 No routines yet. Start a workout and save it as one at the end.
               </p>
             </div>
+
+            <!-- Past sessions ------------------------------------------------ -->
+            <div x-show="history.length">
+              <div class="section-head"><span>History</span></div>
+              <div class="rows">
+                <template x-for="s in history" :key="s.id">
+                  <button class="row" @click="openSession(s)">
+                    <div class="row-text">
+                      <b x-text="s.name || 'Workout'"></b>
+                      <small x-text="`${sessionDate(s)} · ${sessionSummary(s)}`"></small>
+                    </div>
+                    <span class="tap">›</span>
+                  </button>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- One past session, read back ------------------------------------- -->
+        <template x-if="past">
+          <div class="sheet-backdrop" @click.self="closeSession()">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeSession() })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2 x-text="past.name || 'Workout'"></h2>
+                <button class="tap" @click="closeSession()" aria-label="Close">×</button>
+              </div>
+
+              <div class="chips">
+                <span class="chip" x-text="sessionDate(past)"></span>
+                <span class="chip" x-show="sessionLength(past)" x-text="sessionLength(past)"></span>
+                <span class="chip" x-text="sessionSummary(past)"></span>
+              </div>
+
+              <div class="rows">
+                <template x-for="group in pastGroups" :key="group.key">
+                  <button class="row" @click="openExercise(group.exerciseId, group.name)">
+                    <span class="thumb" x-html="muscleMap(group.exerciseId, group.name)"></span>
+                    <div class="row-text">
+                      <b x-text="group.name"></b>
+                      <small x-text="groupLine(group)"></small>
+                    </div>
+                    <span class="tap">›</span>
+                  </button>
+                </template>
+              </div>
+
+              <p class="empty" x-show="!pastGroups.length">Nothing was logged in this one.</p>
+              <button class="btn btn-ghost btn-block" @click="closeSession()">Close</button>
+            </div>
           </div>
         </template>
 
@@ -862,6 +1007,8 @@
                       </div>
                     </button>
                   </div>
+                  <button class="chip" @click="openPicker(group)"
+                          :aria-label="`Replace ${group.name}`">Replace</button>
                 </div>
 
                 <div class="setgrid">
@@ -879,7 +1026,7 @@
                              aria-label="Reps">
                       <button class="check" @click="toggleDone(set)"
                               :aria-label="set.completed_at ? 'Mark set incomplete' : 'Mark set done'"
-                              x-text="set.completed_at ? '✓' : '○'"></button>
+                      >✓</button>
                       <button class="tap" @click="dropSet(set)" aria-label="Remove set">×</button>
                     </div>
                   </template>
@@ -899,7 +1046,7 @@
               </div>
             </template>
 
-            <button class="btn btn-block" @click="picker = true">Add exercise</button>
+            <button class="btn btn-block" @click="openPicker()">Add exercise</button>
             <button class="btn btn-primary btn-block" @click="finishing = true">Finish workout</button>
           </div>
         </template>
@@ -907,17 +1054,22 @@
         <!-- Exercise picker -------------------------------------------------- -->
         <!-- is-nested: this also opens from inside the routine builder, which
              sits later in the document and would otherwise paint over it. -->
+        <!-- is-search: anchored to the top of the screen, because the keyboard
+             opens over the bottom — see the rule in pages.css. -->
         <template x-if="picker">
-          <div class="sheet-backdrop is-nested" @click.self="picker = false">
-            <div class="sheet" x-init="$swipe($el, () =&gt; { picker = false })">
+          <div class="sheet-backdrop is-nested is-search" @click.self="closePicker()">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closePicker() })">
               <div class="grabber"></div>
+              <div class="card-label" x-show="replacing"
+                   x-text="replacing && `Replace ${replacing.name} with…`"></div>
               <div class="search">
                 <span aria-hidden="true">⌕</span>
                 <input type="search" placeholder="Search exercises…" x-model="pickerTerm" autocomplete="off">
               </div>
               <div class="rows">
                 <template x-for="e in library.slice(0, 40)" :key="e.id">
-                  <button class="row" @click="builder ? addToRoutine(e) : addExercise(e)">
+                  <button class="row"
+                          @click="builder ? addToRoutine(e) : (replacing ? applyReplace(e) : addExercise(e))">
                     <!-- loading="lazy": nothing downloads until it scrolls in -->
                     <span class="thumb" x-html="muscleMap(e.id, e.name)"></span>
                     <div class="row-text">
@@ -928,7 +1080,8 @@
                   </button>
                 </template>
               </div>
-              <button class="btn btn-ghost btn-block" @click="picker = false">Cancel</button>
+              <p class="empty" x-show="!library.length">Nothing matches that.</p>
+              <button class="btn btn-ghost btn-block" @click="closePicker()">Cancel</button>
             </div>
           </div>
         </template>
@@ -1082,7 +1235,7 @@
                   </div>
 
                   <p class="empty" x-show="!builderExercises.length">No exercises yet.</p>
-                  <button class="btn btn-block" @click="picker = true">Add exercise</button>
+                  <button class="btn btn-block" @click="openPicker()">Add exercise</button>
                 </div>
               </template>
 

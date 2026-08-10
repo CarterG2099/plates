@@ -375,6 +375,44 @@ function round(n, dp) {
   return Math.round(n * f) / f;
 }
 
+/**
+ * Rescale an already-logged entry's macros to a different amount.
+ *
+ * The entry's own snapshot is the basis, never the food it came from: fixing
+ * an amount you mis-tapped must not quietly pull in a food that has been
+ * edited or rescanned since. The one case the snapshot cannot serve is an
+ * amount of zero, which leaves no ratio to scale by — then the food is the
+ * only basis left, and if it is gone too the macros go with it.
+ */
+export function scaleEntry(entry, quantity, food) {
+  const previous = Number(entry.quantity);
+  if (!(previous > 0)) return food ? scaleMacros(food, quantity) : emptyTotals();
+
+  const factor = (Number(quantity) || 0) / previous;
+  const out = {};
+  for (const m of MACROS) {
+    // Null stays null. A macro nobody recorded is not a macro that is zero, and
+    // changing an amount is no occasion to decide otherwise — note that
+    // Number(null) is 0 and finite, so this cannot be left to Number.isFinite.
+    const value = entry[m] == null ? NaN : Number(entry[m]);
+    out[m] = Number.isFinite(value) ? round(value * factor, 1) : null;
+  }
+  return out;
+}
+
+/**
+ * How much, in words.
+ *
+ * `serving` is the only unit that reads as a word rather than a symbol, so it
+ * is the only one that takes a space and a plural. `170g` is right; `1serving`
+ * never was.
+ */
+export function amountLabel(quantity, unit) {
+  const n = Number(quantity) || 0;
+  if (unit !== 'serving') return `${n}${unit}`;
+  return `${n} ${n === 1 ? 'serving' : 'servings'}`;
+}
+
 // ---- writes ----------------------------------------------------------------
 
 /**
@@ -416,15 +454,40 @@ export async function saveCombo({ id, name, items }, ownerEmail) {
     ...(id ? { id } : {}),
     name: name.trim(),
     items: items.map((i) => ({
-      food_id: i.food_id,
+      food_id: i.food_id ?? null,
       name: i.name ?? null,
       quantity: Number(i.quantity),
       unit: i.unit,
+      // Snapshot items carry their own macros because they point at nothing: a
+      // meal built from a photo is a set of estimates, not a set of foods.
+      ...(i.food_id ? {} : Object.fromEntries(MACROS.map((m) => [m, i[m] ?? null]))),
     })),
   }, ownerEmail);
 
   sync.nudge();
   return row;
+}
+
+/**
+ * The food an item refers to, real or snapshotted.
+ *
+ * An item either points at one of your foods, or carries its own macros. The
+ * second kind exists so a meal can be built from a photo without inventing
+ * foods for a plate you ate once.
+ */
+function itemFood(item, foodsById) {
+  const real = item.food_id ? foodsById.get(item.food_id) : null;
+  if (real) return real;
+  if (item.calories == null) return null;
+
+  return {
+    id: null,
+    name: item.name ?? 'Item',
+    brand: null,
+    serving_qty: 1,
+    serving_unit: item.unit ?? 'serving',
+    ...Object.fromEntries(MACROS.map((m) => [m, item[m] ?? null])),
+  };
 }
 
 export async function deleteCombo(id) {
@@ -450,7 +513,7 @@ export function comboTotals(combo, foodsById) {
   const totals = emptyTotals();
 
   for (const item of combo.items ?? []) {
-    const food = foodsById.get(item.food_id);
+    const food = itemFood(item, foodsById);
     if (!food) continue;
     const scaled = scaleMacros(food, item.quantity);
     for (const m of MACROS) totals[m] += Number(scaled[m]) || 0;
@@ -477,7 +540,7 @@ export async function logCombo({ combo, foodsById, mealSlot, ownerEmail, date })
   const logged = [];
 
   for (const item of combo.items ?? []) {
-    const food = foodsById.get(item.food_id);
+    const food = itemFood(item, foodsById);
     if (!food) continue;
     logged.push(await logFood({
       food,
@@ -575,6 +638,24 @@ export async function deleteFood(id) {
 
 export async function deleteEntry(id) {
   const row = await local.remove('food_log', id);
+  sync.nudge();
+  return row;
+}
+
+/**
+ * Change how much of an entry you ate, after the fact.
+ *
+ * The unit never changes here. Grams are offered as a lens over servings in
+ * the UI, but what gets written back is the entry's own unit — a row that was
+ * logged in servings goes on reading in servings.
+ */
+export async function updateEntry({ entry, quantity, food }) {
+  const row = await local.save('food_log', {
+    ...entry,
+    quantity: Number(quantity),
+    ...scaleEntry(entry, quantity, food),
+  });
+
   sync.nudge();
   return row;
 }

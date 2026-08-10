@@ -347,6 +347,31 @@
   overflow-y: auto;
 }
 
+/* A sheet you type into cannot hug the bottom of the screen.
+ *
+ * The keyboard opens over exactly that space, and because it resizes the visual
+ * viewport rather than the layout viewport, `vh` never learns about it — so a
+ * bottom-anchored sheet stays put underneath. A short result list ended up
+ * entirely behind the keyboard, which is the case where you most need to see it.
+ *
+ * Anchoring to the top instead puts the field and the first results in the part
+ * of the screen the keyboard cannot reach, with no viewport arithmetic to get
+ * wrong. Phones only: the wide layout centres its dialogs and has no keyboard. */
+@media (max-width: 899px) {
+  .sheet-backdrop.is-search { align-items: flex-start; }
+
+  .sheet-backdrop.is-search .sheet {
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    border-top: 0;
+    border-bottom: 1px solid var(--color-border);
+    padding-top: calc(var(--space-4) + var(--inset-top));
+    padding-bottom: var(--space-4);
+  }
+
+  /* Below the content, where a top sheet's drag handle belongs. */
+  .sheet-backdrop.is-search .grabber { order: 99; }
+}
+
 .grabber {
   width: 36px;
   height: 4px;
@@ -548,9 +573,25 @@
 }
 .setrow .cell:focus { border-color: var(--color-primary); }
 
-/* A done set recedes: the row you're working on should be the loud one. */
-.setrow.done .cell { background: transparent; color: var(--color-text-dim); }
+/* A finished set goes green edge to edge. Mid-set, from a few feet away and out
+   of breath, "which ones have I done" has to be answerable without reading —
+   and the tick alone was too small a signal to carry that. */
+.setrow.done {
+  background: var(--color-success-soft);
+  border-radius: var(--radius-sm);
+  border-bottom-color: transparent;
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+  /* The row is a grid inside a fixed track list; padding would otherwise push
+     it wider than the unfinished rows and make the columns disagree. */
+  margin-left: calc(var(--space-2) * -1);
+  margin-right: calc(var(--space-2) * -1);
+}
 
+.setrow.done .cell { background: transparent; color: var(--color-text-muted); }
+
+/* Unfinished sets get the same tick, greyed out. An empty circle read as a
+   separate control rather than the off state of this one. */
 .setrow .check {
   height: 38px;
   border: 1px solid var(--color-border);
@@ -559,12 +600,14 @@
   place-items: center;
   color: var(--color-text-dim);
   font-size: var(--text-base);
+  opacity: .45;
 }
 
 .setrow.done .check {
   background: var(--color-success);
   border-color: var(--color-success);
   color: var(--color-ink);
+  opacity: 1;
 }
 
 /* Demonstration frames: the DB ships a start and end position per exercise. */

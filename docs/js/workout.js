@@ -110,8 +110,18 @@ export async function addSet({ session, exercise, weight, reps, isWarmup, ownerE
   return { set, positionWithinExercise: forExercise.length + 1 };
 }
 
+/**
+ * Change one field of a set.
+ *
+ * The stored row is re-read rather than the caller's copy being trusted, because
+ * that copy is routinely stale by the time it gets here. Typing reps and then
+ * tapping the checkmark fires `change` and then `click`, and the click's handler
+ * closed over the set as it was *before* the change — spreading it would write
+ * the old reps straight back over the ones just typed.
+ */
 export async function updateSet(set, fields) {
-  const saved = await local.save('session_sets', { ...set, ...fields }, set.owner_email);
+  const current = (await local.get('session_sets', set.id)) ?? set;
+  const saved = await local.save('session_sets', { ...current, ...fields }, set.owner_email);
   sync.nudge();
   return saved;
 }
@@ -120,6 +130,47 @@ export async function removeSet(id) {
   const row = await local.remove('session_sets', id);
   sync.nudge();
   return row;
+}
+
+/**
+ * Swap an exercise mid-workout — the rack is taken, the machine is broken.
+ *
+ * Sets already checked off stay put, under the exercise they were actually done
+ * on; only the unchecked ones move across, prefilled from the new exercise's own
+ * history. So swapping before you start moves the whole card, and swapping
+ * halfway through splits it in two — which is the honest record either way.
+ *
+ * Set indices are left alone, so the new card lands where the old one was in the
+ * workout rather than jumping to the end.
+ */
+export async function replaceExercise({ session, group, exercise, prefill, ownerEmail, existingSets }) {
+  const pending = group.sets.filter((s) => !s.completed_at);
+
+  // Nothing left to move. The card is finished, so the swap means "now do this
+  // one instead", which is a fresh set rather than a no-op.
+  if (!pending.length) {
+    const { set } = await addSet({
+      session,
+      exercise,
+      weight: prefill?.weight_lb ?? null,
+      reps: prefill?.reps ?? null,
+      isWarmup: false,
+      ownerEmail,
+      existingSets,
+    });
+    return [set];
+  }
+
+  const moved = [];
+  for (const set of pending) {
+    moved.push(await updateSet(set, {
+      exercise_id: exercise.id ?? null,
+      exercise_name: exercise.name,
+      weight_lb: prefill?.weight_lb ?? null,
+      reps: prefill?.reps ?? null,
+    }));
+  }
+  return moved;
 }
 
 // ---- history ---------------------------------------------------------------

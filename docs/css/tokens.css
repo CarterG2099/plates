@@ -41,6 +41,7 @@
 
   /* Semantic — separate from the accent */
   --color-success:        #2FA84F;   /* 10 kg green */
+  --color-success-soft:   rgba(47, 168, 79, .16);
   --color-warning:        #F2C230;
   --color-danger:         #E0362A;
 

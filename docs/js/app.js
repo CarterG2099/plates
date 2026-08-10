@@ -379,6 +379,34 @@ Alpine.store('data', {
     this.version++;
   },
 
+  /**
+   * Splice one changed set into the data already in memory.
+   *
+   * A full refresh re-reads all eleven stores and rebuilds the whole set index —
+   * thousands of rows with two years imported. Checking a set was paying that
+   * twice, because the weight/reps input's `change` fires before the button's
+   * `click`, and it is the single most repeated interaction in the app. Nothing
+   * about one set changes any of the rest, so nothing else is recomputed.
+   *
+   * Updates only. Adding or removing a set changes ordering and grouping, and
+   * those go through the full refresh.
+   */
+  patchSet(row) {
+    const splice = (list) => {
+      const i = list?.findIndex((s) => s.id === row.id) ?? -1;
+      if (i !== -1) list[i] = row;
+    };
+
+    splice(raw.sessionSets);
+    splice(raw.index.bySession.get(row.session_id));
+    splice(raw.index.byExercise.get(row.exercise_id ?? row.exercise_name));
+
+    const bucket = raw.index.bySession.get(row.session_id);
+    if (bucket) raw.index.volumeBySession.set(row.session_id, workout.volume(bucket));
+
+    this.version++;
+  },
+
   async refresh() {
     await this.refreshCore();
     await this.refreshTraining();
@@ -508,6 +536,121 @@ Alpine.data('todayPage', () => ({
     Alpine.store('ui').flash('Removed');
   },
 
+  amountLabel(quantity, unit) { return food.amountLabel(quantity, unit); },
+
+  // ---- editing a logged amount ---------------------------------------------
+  //
+  // Everything needed to correct a mis-tapped amount was already on the entry;
+  // the row just had no way to be opened. Weight is offered as a lens over
+  // servings rather than a second unit, so the entry keeps reading the way it
+  // was logged no matter which box you typed the number into.
+
+  edit: null,       // { entry, item, amount, lens }
+  sizeInput: '',    // one-time capture, for a food with no serving size yet
+  sizeUnit: 'g',
+
+  openEdit(entry) {
+    const item = this.data.foods.find((f) => f.id === entry.food_id) ?? null;
+    this.edit = { entry, item, amount: Number(entry.quantity), lens: 'native' };
+    this.sizeInput = '';
+    this.sizeUnit = item?.serving_size_unit ?? 'g';
+  },
+
+  closeEdit() { this.edit = null; },
+
+  /**
+   * What one serving of this food measures. Null is not a failure — it means
+   * nobody has told this food yet, and the sheet asks once.
+   */
+  get servingSize() {
+    return Number(this.edit?.item?.serving_size) || null;
+  },
+
+  get servingSizeUnit() { return this.edit?.item?.serving_size_unit ?? 'g'; },
+
+  /**
+   * Only a serving can be looked at through a weight. A food already logged in
+   * grams is its own lens, and one with no food row behind it — a deleted food,
+   * or an entry from a photo estimate — has nothing to convert against.
+   */
+  get canMeasure() {
+    return !!this.edit?.item && this.edit.entry.unit === 'serving';
+  },
+
+  /**
+   * The number in the box. Cleared to empty by the input while typing, which
+   * would otherwise reach the macros as NaN and render every one of them blank.
+   */
+  get editAmount() { return Number(this.edit?.amount) || 0; },
+
+  /** Switching lens converts the number in the box. The entry is not touched. */
+  setLens(lens) {
+    if (!this.edit || this.edit.lens === lens) return;
+
+    const per = this.servingSize;
+    if (per) {
+      this.edit.amount = lens === 'measure'
+        ? Math.round(this.editAmount * per * 10) / 10
+        : Math.round((this.editAmount / per) * 100) / 100;
+    }
+    this.edit.lens = lens;
+  },
+
+  /**
+   * Teach the food what one serving measures.
+   *
+   * Written onto the food rather than held for this edit, so it is asked once
+   * and then known everywhere — including the next time this food is logged.
+   */
+  async applyServingSize() {
+    const size = Number(this.sizeInput);
+    if (!(size > 0) || !this.edit?.item) return;
+
+    this.edit.item = await food.saveFood({
+      ...this.edit.item,
+      serving_size: size,
+      serving_size_unit: this.sizeUnit.trim() || 'g',
+    });
+    this.edit.amount = Math.round(this.editAmount * size * 10) / 10;
+    this.sizeInput = '';
+    await Alpine.store('data').refresh();
+  },
+
+  /** The number in the box, back in the entry's own unit. */
+  get editQuantity() {
+    if (!this.edit) return 0;
+    const per = this.servingSize;
+    if (this.edit.lens === 'measure' && per) {
+      return Math.round((this.editAmount / per) * 100) / 100;
+    }
+    return this.editAmount;
+  },
+
+  /** The step follows the lens: half a serving, or ten of whatever it weighs. */
+  editStep(direction) {
+    if (!this.edit) return;
+    const size = this.edit.lens === 'measure' || this.edit.entry.unit !== 'serving' ? 10 : 0.5;
+    const next = this.editAmount + Math.sign(direction) * size;
+    this.edit.amount = Math.max(0, Math.round(next * 100) / 100);
+  },
+
+  get editMacros() {
+    // Empty object rather than null, for the reason sheetMacros gives: Alpine
+    // flushes this sheet's bindings after `edit` is cleared but before the
+    // template unmounts, and a null throws on every one of them.
+    if (!this.edit) return {};
+    return food.scaleEntry(this.edit.entry, this.editQuantity, this.edit.item);
+  },
+
+  async saveEdit() {
+    const { entry, item } = this.edit;
+    await food.updateEntry({ entry, quantity: this.editQuantity, food: item });
+
+    this.closeEdit();
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash('Updated');
+  },
+
   // ---- meal prep -----------------------------------------------------------
 
   prep: null,       // 'copy' | 'save' | 'apply'
@@ -596,6 +739,8 @@ function blankDraft(name = '') {
     barcode: null,
     serving_qty: 100,
     serving_unit: 'g',
+    serving_size: null,
+    serving_size_unit: null,
     default_qty: null,
     calories: '',
     protein_g: '',
@@ -615,6 +760,7 @@ Alpine.data('logPage', () => ({
   draft: null,
 
   servingSize: '',      // review-form converter, see applyServingSize()
+  menu: false,
   photoBusy: '',        // '' | 'label' | 'meal'
   photoError: '',
   estimate: null,       // { items, confidence, note }
@@ -799,6 +945,26 @@ Alpine.data('logPage', () => ({
     Alpine.store('ui').flash(`Removed ${item.name}`);
   },
 
+  // ---- menu ----------------------------------------------------------------
+  // Everything that isn't searching lives here, so the page below the search
+  // stays results and nothing else. Buttons stacked under the results just sank
+  // further down the page as the list grew.
+
+  openMenu() { this.menu = true; },
+  closeMenu() { this.menu = false; },
+
+  /** Your own foods and meals, without typing anything. */
+  browseMine() {
+    this.term = '';
+    this.filter = 'mine';
+    this.closeMenu();
+  },
+
+  fromMenu(action) {
+    this.closeMenu();
+    action();
+  },
+
   // ---- photos --------------------------------------------------------------
   // A label is transcription; a meal is estimation. They are different kinds of
   // claim and the UI keeps them apart on purpose.
@@ -841,6 +1007,46 @@ Alpine.data('logPage', () => ({
   },
 
   closeEstimate() { this.estimate = null; },
+
+  /**
+   * Build a saved meal out of an estimated plate.
+   *
+   * The items keep their own macros rather than becoming foods. A plate you ate
+   * once is not a food worth keeping, and creating one per item would fill the
+   * list you search with guesses.
+   */
+  async buildMealFromPhoto(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    this.photoBusy = 'meal';
+    this.photoError = '';
+    try {
+      const result = await photo.estimateMeal(file);
+      this.meal = {
+        id: null,
+        name: '',
+        items: result.items.map((i) => ({
+          food_id: null,
+          name: i.portion ? `${i.name} (${i.portion})` : i.name,
+          quantity: 1,
+          unit: 'serving',
+          calories: i.calories,
+          protein_g: i.protein_g,
+          carbs_g: i.carbs_g,
+          fat_g: i.fat_g,
+          fiber_g: null,
+          sodium_mg: null,
+        })),
+      };
+      this.mealTerm = '';
+    } catch (e) {
+      this.photoError = e.message ?? String(e);
+    } finally {
+      this.photoBusy = '';
+    }
+  },
 
   removeEstimateItem(index) {
     this.estimate.items.splice(index, 1);
@@ -1274,7 +1480,16 @@ Alpine.data('logPage', () => ({
     this.chooseOnline({ ...hit, existingId: mine?.id });
   },
 
-  /** A photo from the system camera app, which focuses properly. */
+  /**
+   * One photo, whichever kind of thing it turns out to be.
+   *
+   * A barcode is looked up; anything else is treated as a plate and estimated.
+   * You should not have to decide which of those you are photographing before
+   * you photograph it — the picture already says.
+   *
+   * Barcode first because it is cheap, local, and exact: if there is a code in
+   * the frame the packet tells us what this is, and no estimate can beat that.
+   */
   async decodePhoto(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -1288,19 +1503,25 @@ Alpine.data('logPage', () => ({
     let code = null;
     try {
       code = await scanner.decodeImageFile(file);
+    } catch {
+      code = null;                         // not a barcode; the plate path may still work
+    }
+
+    if (code) {
+      await this.acceptCode(code);
+      return;
+    }
+
+    this.scan = { ...(this.scan ?? {}), status: 'reading', message: 'No barcode — reading the food…' };
+
+    try {
+      const result = await photo.estimateMeal(file);
+      this.closeScanner();
+      this.estimate = result;
     } catch (e) {
-      this.scan = { status: 'error', message: e.message, decoder: '' };
-      return;
-    }
-
-    if (!code) {
-      this.scan = { ...(this.scan ?? {}), status: 'ready',
-                    message: 'No barcode in that photo — fill the frame and try again.' };
+      this.scan = { ...(this.scan ?? {}), status: 'ready', message: e.message ?? String(e) };
       this.resumeDecoding();
-      return;
     }
-
-    await this.acceptCode(code);
   },
 
   /**
@@ -1403,6 +1624,8 @@ Alpine.data('logPage', () => ({
 
     this.draft.serving_qty = 1;
     this.draft.serving_unit = 'serving';
+    this.draft.serving_size = size;
+    this.draft.serving_size_unit = unit;
     this.draft.basis = `${size} ${unit}`;
     this.servingSize = '';
   },
@@ -1433,6 +1656,8 @@ Alpine.data('logPage', () => ({
       barcode: d.barcode || null,
       serving_qty: Number(d.serving_qty),
       serving_unit: d.serving_unit.trim() || 'g',
+      serving_size: numeric(d.serving_size),
+      serving_size_unit: (d.serving_size_unit ?? '').trim() || null,
       default_qty: d.default_qty == null || d.default_qty === '' ? null : Number(d.default_qty),
       calories: numeric(d.calories),
       protein_g: numeric(d.protein_g),
@@ -1453,6 +1678,7 @@ Alpine.data('trainPage', () => ({
   menu: false,
   picker: false,
   pickerTerm: '',
+  replacing: null,  // the group whose exercise is being swapped out; null = adding
   finishing: false,
   routineName: '',
   restEndsAt: null,
@@ -1528,23 +1754,28 @@ Alpine.data('trainPage', () => ({
       const exercise = library.find((e) => e.id === item.exercise_id)
         ?? { id: item.exercise_id, name: item.notes || 'Exercise' };
 
-      // One set to start, prefilled from the last time you did it. Add more as
-      // you go — a routine says which exercises, not how many sets.
+      // As many sets as the routine plans, each prefilled from the last time you
+      // did the exercise. target_sets is recorded when a routine is saved from a
+      // session or imported from Hevy; only a hand-built one leaves it empty,
+      // and one set is the right floor for that.
       const previous = workout.lastPerformance(
         this.data.sessionSets, this.data.sessions, this.email,
         exercise.id, exercise.name, session.id,
       );
 
-      const { set } = await workout.addSet({
-        session,
-        exercise,
-        weight: previous?.best?.weight_lb ?? null,
-        reps: previous?.best?.reps ?? null,
-        isWarmup: false,
-        ownerEmail: this.email,
-        existingSets: existing,
-      });
-      existing = [...existing, set];
+      const planCount = Math.max(1, Number(item.target_sets) || 1);
+      for (let n = 0; n < planCount; n++) {
+        const { set } = await workout.addSet({
+          session,
+          exercise,
+          weight: previous?.best?.weight_lb ?? null,
+          reps: previous?.best?.reps ?? null,
+          isWarmup: false,
+          ownerEmail: this.email,
+          existingSets: existing,
+        });
+        existing = [...existing, set];
+      }
     }
 
     await this.data.refresh();
@@ -1581,14 +1812,49 @@ Alpine.data('trainPage', () => ({
     );
   },
 
+  /**
+   * The picker serves three callers — add, replace, and the routine builder —
+   * so which one opened it has to be remembered while it is up.
+   */
+  openPicker(group = null) {
+    this.replacing = group;
+    this.pickerTerm = '';
+    this.picker = true;
+  },
+
+  closePicker() {
+    this.picker = false;
+    this.replacing = null;
+    this.pickerTerm = '';
+  },
+
   async addExercise(exercise) {
     await workout.addSet({
       session: this.session, exercise, weight: null, reps: null,
       isWarmup: false, ownerEmail: this.email, existingSets: this.sets,
     });
-    this.picker = false;
-    this.pickerTerm = '';
+    this.closePicker();
     await this.data.refresh();
+  },
+
+  /** Sets you have already done stay behind — see workout.replaceExercise. */
+  async applyReplace(exercise) {
+    const group = this.replacing;
+    await workout.replaceExercise({
+      session: this.session,
+      group,
+      exercise,
+      prefill: this.data.prior.get(exercise.id ?? exercise.name)?.best ?? null,
+      ownerEmail: this.email,
+      existingSets: this.sets,
+    });
+
+    const kept = group.sets.some((s) => s.completed_at);
+    this.closePicker();
+    await this.data.refresh();
+    Alpine.store('ui').flash(
+      kept ? `Rest of ${group.name} → ${exercise.name}` : `${group.name} → ${exercise.name}`,
+    );
   },
 
   async addSetTo(group) {
@@ -1606,24 +1872,27 @@ Alpine.data('trainPage', () => ({
   },
 
   async edit(set, field, value) {
-    await workout.updateSet(set, { [field]: value === '' ? null : Number(value) });
-    await this.data.refresh();
+    const saved = await workout.updateSet(set, { [field]: value === '' ? null : Number(value) });
+    Alpine.store('data').patchSet(saved);
   },
 
   /** Checking a set is what starts the rest clock — the moment you finish lifting. */
   async toggleDone(set) {
     const done = Boolean(set.completed_at);
-    await workout.updateSet(set, { completed_at: done ? null : new Date().toISOString() });
-    await this.data.refresh();
+    const saved = await workout.updateSet(set, {
+      completed_at: done ? null : new Date().toISOString(),
+    });
+    Alpine.store('data').patchSet(saved);
 
     if (!done) {
       this.startRest(workout.DEFAULT_REST_SECONDS);
       if (navigator.vibrate) navigator.vibrate(30);
 
       // Told at the moment it happens, not discovered in a stats screen weeks on.
-      const group = this.groups.find((g) => g.sets.some((s) => s.id === set.id));
-      if (group && workout.isRecord({ ...set, completed_at: new Date().toISOString() },
-                                    this.bestBefore(group))) {
+      // Judged on `saved`, not the handler's copy: that one predates the reps
+      // you typed immediately before checking the set, which is most of them.
+      const group = this.groups.find((g) => g.sets.some((s) => s.id === saved.id));
+      if (group && workout.isRecord(saved, this.bestBefore(group))) {
         Alpine.store('ui').flash(`PR · ${group.name}`);
         if (navigator.vibrate) navigator.vibrate([60, 50, 60]);
       }
@@ -1692,6 +1961,34 @@ Alpine.data('trainPage', () => ({
     const sets = workout.setsOf(this.data.index, session.id);
     const groups = workout.groupByExercise(sets);
     return `${groups.length} exercises · ${Math.round(workout.volume(sets)).toLocaleString()} lb`;
+  },
+
+  // ---- past sessions -------------------------------------------------------
+
+  past: null,   // a finished session being read back
+
+  openSession(session) { this.past = session; },
+  closeSession() { this.past = null; },
+
+  get pastGroups() {
+    if (!this.past) return [];
+    return workout.groupByExercise(workout.setsOf(this.data.index, this.past.id));
+  },
+
+  /** How long it ran. Sessions abandoned without finishing have no end. */
+  sessionLength(session) {
+    if (!session?.ended_at) return null;
+    const minutes = Math.round(
+      (new Date(session.ended_at) - new Date(session.started_at)) / 60_000,
+    );
+    return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  },
+
+  /** "135 × 10, 135 × 8" for one exercise within a past session. */
+  groupLine(group) {
+    return group.sets
+      .map((s) => `${s.weight_lb ?? '—'}×${s.reps ?? '—'}${s.is_warmup ? 'w' : ''}`)
+      .join(', ');
   },
 
   async deleteRoutine(routine) {
