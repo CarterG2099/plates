@@ -26,6 +26,22 @@
 </head>
 <body>
 
+<!-- Opening IndexedDB measured at 350ms on a warm profile, and it is on the
+     path to the first screen with data on it. Starting it here means it runs
+     while the 200KB module graph is still downloading and parsing, instead of
+     after.
+
+     No version number: an unversioned open never triggers onupgradeneeded, so
+     this cannot race the real schema in local.js. The connection is closed
+     immediately — holding it would make local.js's versioned open fire
+     `blocked` and wait for us, which is the opposite of the point. -->
+<script>
+  try {
+    var warm = indexedDB.open('plates');
+    warm.onsuccess = function () { warm.result.close(); };
+  } catch (e) { /* private mode; the app opens it the normal way */ }
+</script>
+
 <!-- Painted by the HTML parser, before Alpine exists. Without this the page is
      blank until a 100 KB framework has downloaded, parsed and walked the DOM. -->
 <div id="boot">

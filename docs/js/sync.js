@@ -187,7 +187,17 @@ export async function sync() {
 
   try {
     await push();
-    for (const table of PULL_ORDER) await pullTable(table);
+
+    // In parallel. These were pulled one after another, which measured at ~700ms
+    // of dead time on a cold start for eleven tables — and they are independent:
+    // each upserts into its own object store, and last-write-wins is decided per
+    // row against a local timestamp, not against sibling tables.
+    //
+    // allSettled, not all: one table failing used to abandon every table after
+    // it in the list. Now the rest still land and the failure is reported.
+    const settled = await Promise.allSettled(PULL_ORDER.map((table) => pullTable(table)));
+    const failed = settled.find((r) => r.status === 'rejected');
+    if (failed) throw failed.reason;
 
     emit({ status: 'idle', lastSyncedAt: new Date().toISOString(), error: null });
   } catch (error) {
