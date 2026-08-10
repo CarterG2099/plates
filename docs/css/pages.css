@@ -631,8 +631,8 @@
 .setrow .cell:focus { border-color: var(--color-primary); }
 
 /* A finished set goes green edge to edge. Mid-set, from a few feet away and out
-   of breath, "which ones have I done" has to be answerable without reading —
-   and the tick alone was too small a signal to carry that. */
+ * of breath, "which ones have I done" has to be answerable without reading —
+ * and the tick alone was too small a signal to carry that.
  *
  * Two layers, not one: the green is deliberately a translucent tint, and the
  * remove action sits *behind* this row waiting to be swiped to. A see-through
