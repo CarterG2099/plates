@@ -450,6 +450,31 @@ export function scaleEntry(entry, quantity, food) {
  * is the only one that takes a space and a plural. `170g` is right; `1serving`
  * never was.
  */
+/**
+ * What a draft's macros are measured against, in words.
+ *
+ * `basis` off a lookup is sometimes a measure ("55 g", "3/4 cup (170 g)"),
+ * sometimes the phrase "one serving", and sometimes "per 100 g" — so it cannot
+ * just be pasted after "one serving =", which is how a per-100g food came to
+ * announce itself as "one serving = per 100 g".
+ *
+ * There is no serving at all in the per-100g case: that basis is the fallback
+ * for products whose label never published one. Saying so plainly beats
+ * inventing a serving that does not exist.
+ */
+export function basisLabel(draft) {
+  if (!draft) return '';
+
+  const unit = (draft.serving_unit ?? '').trim();
+  if (unit !== 'serving') {
+    const qty = Number(draft.serving_qty) || 1;
+    return `per ${qty} ${unit}`.trimEnd();
+  }
+
+  const measure = (draft.basis ?? '').trim();
+  return measure && measure !== 'one serving' ? `one serving = ${measure}` : 'per serving';
+}
+
 export function amountLabel(quantity, unit) {
   const n = Number(quantity) || 0;
   if (unit !== 'serving') return `${n}${unit}`;

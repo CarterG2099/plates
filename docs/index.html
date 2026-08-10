@@ -798,7 +798,7 @@
               <div class="grabber"></div>
               <div class="card-label">
                 New food ·
-                <span x-text="draft.basis ? `one serving = ${draft.basis}` : 'per serving'"></span>
+                <span x-text="draftBasis"></span>
               </div>
               <p class="servingraw" x-show="draft.servingRaw" x-text="draft.servingRaw"></p>
 
@@ -813,8 +813,11 @@
               </div>
 
               <div class="field-grid">
+                <!-- "Amount", not "Serving": this pair is the basis the macros
+                     below are stored against, which is a serving only when the
+                     unit happens to be one. For a per-100g food it is 100 g. -->
                 <div class="field">
-                  <label for="f-qty">Serving</label>
+                  <label for="f-qty">Amount</label>
                   <input id="f-qty" type="number" inputmode="decimal" step="any" x-model.number="draft.serving_qty">
                 </div>
                 <div class="field">

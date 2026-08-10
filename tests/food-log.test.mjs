@@ -189,3 +189,50 @@ test('applying an empty template is a no-op rather than a throw', async () => {
   });
   assert.deepEqual(created, []);
 });
+
+// ---- basisLabel ---------------------------------------------------------------
+// What the new-food form says the macros are measured against. `basis` arrives
+// in three different shapes from lookup.js, which is how a per-100g food came
+// to announce itself as "one serving = per 100 g".
+
+test('a per-100g food does not claim to have a serving', () => {
+  // There is no serving here at all — 100g is the fallback for products whose
+  // label never published one.
+  assert.equal(
+    food.basisLabel({ serving_qty: 100, serving_unit: 'g', basis: 'per 100 g' }),
+    'per 100 g',
+  );
+  assert.equal(
+    food.basisLabel({ serving_qty: 100, serving_unit: 'ml', basis: 'per 100 ml' }),
+    'per 100 ml',
+  );
+});
+
+test('a serving-based food shows what one serving measures', () => {
+  assert.equal(
+    food.basisLabel({ serving_qty: 1, serving_unit: 'serving', basis: '55 g' }),
+    'one serving = 55 g',
+  );
+  assert.equal(
+    food.basisLabel({ serving_qty: 1, serving_unit: 'serving', basis: '3/4 cup (170 g)' }),
+    'one serving = 3/4 cup (170 g)',
+  );
+});
+
+test('with no measure to show, it just says per serving', () => {
+  // Not "one serving = one serving".
+  assert.equal(
+    food.basisLabel({ serving_qty: 1, serving_unit: 'serving', basis: 'one serving' }),
+    'per serving',
+  );
+  assert.equal(food.basisLabel({ serving_qty: 1, serving_unit: 'serving', basis: null }), 'per serving');
+  assert.equal(food.basisLabel({ serving_qty: 1, serving_unit: 'serving' }), 'per serving');
+});
+
+test('basisLabel survives a half-typed form', () => {
+  assert.equal(food.basisLabel(null), '');
+  assert.equal(food.basisLabel({ serving_qty: 100, serving_unit: '' }), 'per 100',
+    'no trailing space while the unit is empty');
+  assert.equal(food.basisLabel({ serving_qty: null, serving_unit: 'g' }), 'per 1 g',
+    'a blank amount reads as one rather than zero or NaN');
+});

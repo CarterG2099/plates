@@ -1793,6 +1793,8 @@ Alpine.data('logPage', () => ({
     this.servingSize = '';
   },
 
+  get draftBasis() { return food.basisLabel(this.draft); },
+
   get canSaveDraft() {
     return this.draft?.name?.trim() && Number(this.draft.serving_qty) > 0;
   },
