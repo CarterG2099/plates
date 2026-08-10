@@ -450,3 +450,87 @@ test('updating a routine from a session that did nothing leaves it empty, not st
 
   assert.equal(workout.routineExercises(await local.all('routine_exercises'), routine.id).length, 0);
 });
+
+// ---- what "update the routine" actually captures ---------------------------
+// Every card in the session goes in, however it got there, and the numbers come
+// from sets that were checked off.
+
+test('the new plan is the session, whatever the old plan said', async () => {
+  await seedSets([
+    { id: 'bp', name: 'Bench', weight: 185, reps: 5, done: 'T' },     // went up
+    { id: 'row', name: 'Barbell Row', weight: 135, reps: 10, done: 'T' },
+    { id: 'db', name: 'Dumbbell Row', weight: 60, reps: 12, done: 'T' },  // swapped in
+    { id: 'curl', name: 'Curl', weight: 30, reps: 12, done: 'T' },        // added halfway
+  ]);
+  const routine = await local.save('routines', { name: 'Push A' }, ME);
+
+  await workout.updateRoutineFromSession({
+    routine, session: SESSION, sets: await local.all('session_sets'), ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  const plan = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  assert.deepEqual(plan.map((p) => p.notes),
+    ['Bench', 'Barbell Row', 'Dumbbell Row', 'Curl'],
+    'an exercise added mid-workout or swapped in is in the plan like any other');
+  assert.equal(plan[0].target_weight_lb, 185, 'and carries the weight actually used');
+});
+
+test('a set left at its prefill does not set the target', async () => {
+  // The bug this replaced: drop 185 -> 155, do two, never touch the third, and
+  // the routine recorded 185x3 — a weight nobody lifted.
+  await seedSets([
+    { id: 'bp', name: 'Bench', weight: 155, reps: 5, done: 'T1' },
+    { id: 'bp', name: 'Bench', weight: 155, reps: 5, done: 'T2' },
+    { id: 'bp', name: 'Bench', weight: 185, reps: 5 },
+  ]);
+  const routine = await local.save('routines', { name: 'Push A' }, ME);
+
+  await workout.updateRoutineFromSession({
+    routine, session: SESSION, sets: await local.all('session_sets'), ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  const [plan] = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  assert.equal(plan.target_weight_lb, 155, 'the heaviest set you finished');
+  assert.equal(plan.target_sets, 2, 'and only the sets you finished');
+});
+
+test('an exercise you skipped stays in the plan at its planned shape', async () => {
+  // Nothing checked, so there is no "what I did" to record — but dropping it
+  // would quietly delete an exercise from the routine for running out of time.
+  await seedSets([
+    { id: 'bp', name: 'Bench', weight: 185, reps: 5, done: 'T' },
+    { id: 'sq', name: 'Squat', weight: 225, reps: 5 },
+    { id: 'sq', name: 'Squat', weight: 225, reps: 5 },
+  ]);
+  const routine = await local.save('routines', { name: 'Push A' }, ME);
+
+  await workout.updateRoutineFromSession({
+    routine, session: SESSION, sets: await local.all('session_sets'), ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  const plan = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  const squat = plan.find((p) => p.notes === 'Squat');
+  assert.ok(squat, 'still there');
+  assert.equal(squat.target_sets, 2, 'at the shape it was planned to be');
+});
+
+test('warm-ups never count towards the plan', async () => {
+  await seedSets([
+    { id: 'bp', name: 'Bench', warmup: true, weight: 45, reps: 10, done: 'T' },
+    { id: 'bp', name: 'Bench', warmup: true, weight: 95, reps: 5, done: 'T' },
+    { id: 'bp', name: 'Bench', weight: 185, reps: 5, done: 'T' },
+  ]);
+  const routine = await local.save('routines', { name: 'Push A' }, ME);
+
+  await workout.updateRoutineFromSession({
+    routine, session: SESSION, sets: await local.all('session_sets'), ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  const [plan] = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  assert.equal(plan.target_sets, 1);
+  assert.equal(plan.target_weight_lb, 185, 'a heavy warm-up cannot become the target');
+});

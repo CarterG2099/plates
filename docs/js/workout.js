@@ -444,7 +444,21 @@ export async function updateRoutineFromSession({ routine, session, sets, ownerEm
   return written;
 }
 
-/** One exercise per card, in the order they were worked, with what was lifted. */
+/**
+ * One exercise per card, in the order they were worked, with what was lifted.
+ *
+ * Every card in the session goes in, however it got there — planned, added
+ * halfway through, or swapped in over something else. The old plan is not
+ * consulted at all, so the result is a description of the session rather than
+ * a merge with what you meant to do.
+ *
+ * "Lifted" means checked off. Counting unchecked sets meant a set left sitting
+ * at its prefilled weight could set the target: drop from 185 to 155, do two,
+ * leave the third untouched, and the routine recorded 185×3 — a weight nobody
+ * lifted. Completed sets win; an exercise with none falls back to all of them,
+ * so one you skipped entirely stays in the plan at its planned shape instead of
+ * silently disappearing.
+ */
 async function writePlan({ routineId, session, sets, ownerEmail }) {
   const groups = groupByExercise(setsForSession(sets, session.id));
   const written = [];
@@ -452,13 +466,15 @@ async function writePlan({ routineId, session, sets, ownerEmail }) {
 
   for (const group of groups) {
     const working = group.sets.filter((s) => !s.is_warmup);
-    const heaviest = working.reduce((b, s) => (!b || (s.weight_lb ?? 0) > (b.weight_lb ?? 0) ? s : b), null);
+    const done = working.filter((s) => s.completed_at);
+    const counted = done.length ? done : working;
+    const heaviest = counted.reduce((b, s) => (!b || (s.weight_lb ?? 0) > (b.weight_lb ?? 0) ? s : b), null);
 
     written.push(await local.save('routine_exercises', {
       routine_id: routineId,
       exercise_id: group.exerciseId ?? null,
       position: position++,
-      target_sets: working.length || group.sets.length,
+      target_sets: counted.length || group.sets.length,
       target_reps: heaviest?.reps ? String(heaviest.reps) : null,
       target_weight_lb: heaviest?.weight_lb ?? null,
       rest_seconds: DEFAULT_REST_SECONDS,
