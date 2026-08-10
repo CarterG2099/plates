@@ -234,8 +234,33 @@ create table if not exists plates.sessions (
   started_at  timestamptz not null default now(),
   ended_at    timestamptz,
   notes       text,
+  -- When the "you left this running" reminder was last pushed for this session.
+  -- Stops the five-minute cron sending the same nudge on every pass.
+  idle_notified_at timestamptz,
   updated_at  timestamptz not null default now(),
   deleted_at  timestamptz
+);
+
+-- Web Push endpoints, one row per browser that opted in to idle reminders.
+--
+-- The one table that is NOT synced to IndexedDB: a subscription belongs to a
+-- single installed browser and is meaningless on any other device, so there is
+-- nothing to sync and nothing worth having offline.
+--
+-- An endpoint is a capability to send someone a notification, so the policy is
+-- scoped to the owner as well as to membership.
+create table if not exists plates.push_subscriptions (
+  id          uuid primary key default gen_random_uuid(),
+  owner_email text not null default auth.email(),
+  endpoint    text not null unique,
+  p256dh      text not null,
+  auth        text not null,
+  user_agent  text,
+  -- Set when a push comes back 404/410: the browser dropped the subscription
+  -- and the endpoint must not be retried forever.
+  failed_at   timestamptz,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
 );
 
 -- exercise_name is snapshotted for the same reason food_log snapshots macros:
@@ -270,6 +295,7 @@ create index if not exists day_templates_owner_idx  on plates.day_templates (own
 create index if not exists sessions_owner_time_idx  on plates.sessions     (owner_email, started_at desc);
 create index if not exists session_sets_session_idx on plates.session_sets (session_id);
 create index if not exists routine_ex_routine_idx   on plates.routine_exercises (routine_id);
+create index if not exists push_subs_owner_idx       on plates.push_subscriptions (owner_email);
 create index if not exists exercises_name_idx       on plates.exercises    (lower(name));
 
 -- Sync pulls everything changed since the last cursor.
@@ -300,6 +326,7 @@ alter table plates.routines          enable row level security;
 alter table plates.routine_exercises enable row level security;
 alter table plates.sessions          enable row level security;
 alter table plates.session_sets      enable row level security;
+alter table plates.push_subscriptions enable row level security;
 
 -- Postgres has no CREATE POLICY IF NOT EXISTS, so every policy is dropped first.
 -- That keeps this file re-runnable as the source of truth.
@@ -350,6 +377,19 @@ begin
       'create policy %1$s_delete on plates.%1$I for delete using (plates.is_owner(owner_email))', t);
   end loop;
 end $$;
+
+-- push_subscriptions: strictly your own, not shared.
+--
+-- Deliberately owner_email = auth.email() rather than can_read(), which the
+-- other owner-scoped tables use. can_read() honours share_grants, and while
+-- letting someone see your weight log is the point of sharing, letting them see
+-- — or delete — the endpoints that can push to your phone is not.
+drop policy if exists push_subs_own on plates.push_subscriptions;
+
+create policy push_subs_own on plates.push_subscriptions
+  for all
+  using (plates.is_member() and owner_email = auth.email())
+  with check (plates.is_member() and owner_email = auth.email());
 
 -- Tables with a shared (null-owner) tier.
 do $$

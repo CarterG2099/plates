@@ -19,6 +19,7 @@ import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
 import { muscleMap } from './muscle-map.js';
 import * as stats from './stats.js';
+import * as push from './push.js';
 
 /**
  * Drag a sheet down to dismiss it.
@@ -2257,6 +2258,49 @@ Alpine.data('trainPage', () => ({
     const sets = workout.setsOf(this.data.index, session.id);
     const groups = workout.groupByExercise(sets);
     return `${groups.length} exercises · ${Math.round(workout.volume(sets)).toLocaleString()} lb`;
+  },
+
+  // ---- idle-workout reminders ----------------------------------------------
+  //
+  // Server-sent, because the app cannot notice this itself: a backgrounded PWA
+  // is suspended within moments, so no timer in the page survives long enough
+  // to fire. See supabase/functions/notify-idle-workouts.
+
+  reminders: 'unknown',   // 'unknown' | 'unsupported' | 'off' | 'on' | 'blocked'
+
+  async loadReminderState() {
+    if (!push.isSupported()) { this.reminders = 'unsupported'; return; }
+    if (push.permission() === 'denied') { this.reminders = 'blocked'; return; }
+    this.reminders = (await push.isSubscribed()) ? 'on' : 'off';
+  },
+
+  /** Must run from the click: a permission prompt with no gesture is ignored. */
+  async toggleReminders() {
+    if (this.reminders === 'on') {
+      await push.disable();
+      this.reminders = 'off';
+      Alpine.store('ui').flash('Reminders off');
+      return;
+    }
+
+    const result = await push.enable();
+    if (result === 'granted') {
+      this.reminders = 'on';
+      Alpine.store('ui').flash('Reminders on');
+    } else if (result === 'denied') {
+      // Not recoverable from script — the browser has to be told directly.
+      this.reminders = 'blocked';
+    }
+  },
+
+  get reminderLabel() {
+    return {
+      unknown: 'Idle-workout reminders',
+      unsupported: 'Reminders not supported here',
+      off: 'Remind me if I leave a workout running',
+      on: 'Reminders on · tap to turn off',
+      blocked: 'Notifications blocked in browser settings',
+    }[this.reminders];
   },
 
   // ---- past sessions -------------------------------------------------------

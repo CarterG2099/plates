@@ -1142,6 +1142,12 @@
               <div class="grabber"></div>
               <div class="card-label">Options</div>
 
+              <button class="btn btn-block" x-init="loadReminderState()"
+                      :disabled="reminders === 'unsupported' || reminders === 'blocked'"
+                      @click="toggleReminders()">
+                <span x-text="reminderLabel"></span>
+              </button>
+
               <label class="btn btn-block" style="cursor:pointer">
                 Import from Hevy (CSV)
                 <input type="file" accept=".csv,text/csv" @change="importFile($event)" hidden>

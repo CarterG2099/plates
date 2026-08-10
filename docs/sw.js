@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v50';
+const CACHE_VERSION = 'plates-v51';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -57,6 +57,7 @@ const SHELL = [
   '/js/muscle-map.js',
   '/js/import-hevy.js',
   '/js/stats.js',
+  '/js/push.js',
   '/js/vendor/alpine.esm.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -164,4 +165,47 @@ async function staleWhileRevalidate(request) {
 /** Lets the page force an update without waiting for a reload cycle. */
 self.addEventListener('message', (event) => {
   if (event.data === 'skip-waiting') self.skipWaiting();
+});
+
+// ---- push --------------------------------------------------------------------
+
+/**
+ * "You left a workout running", sent by the notify-idle-workouts function.
+ *
+ * A worker woken for a push must show a notification — Chrome subscribed us
+ * with userVisibleOnly, and swallowing one silently eventually revokes the
+ * permission. So a malformed payload still surfaces something rather than
+ * nothing.
+ */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data?.json() ?? {}; } catch { /* falls through to defaults */ }
+
+  event.waitUntil(self.registration.showNotification(data.title || 'Plates', {
+    body: data.body || 'You have a workout still running.',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    // Replaces its predecessor rather than stacking, so a second reminder about
+    // the same session does not become two things to dismiss.
+    tag: data.tag || 'plates',
+    renotify: true,
+    data: { url: '/#train' },
+  }));
+});
+
+/** Focus the tab that is already open rather than opening a second one. */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = event.notification.data?.url || '/';
+
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) {
+      if (new URL(client.url).origin === self.location.origin) {
+        await client.focus();
+        return;
+      }
+    }
+    await self.clients.openWindow(target);
+  })());
 });
