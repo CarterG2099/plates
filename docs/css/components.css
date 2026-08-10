@@ -410,6 +410,14 @@
 .row-swipe.is-open > .row,
 .row-swipe.is-open > .setrow { transform: translateX(-96px); }
 
+/* Not painted at all until it is wanted.
+ *
+ * The row sits exactly on top of this and is opaque, which ought to be enough —
+ * `elementFromPoint` agrees the row covers every pixel of it. It is not enough.
+ * Two stacked layers under one rounded `overflow: hidden` clip get their edges
+ * anti-aliased independently, and the difference showed as a red arc tracing the
+ * corner of every row in the app. Covering it more carefully is a losing game;
+ * not drawing it is exact. */
 .row-remove {
   position: absolute;
   inset: 0 0 0 auto;
@@ -419,6 +427,16 @@
   color: #fff;
   font-size: var(--text-sm);
   font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Revealed while a drag is in progress, so it slides out from under the row the
+   way it always did, and once the row has settled open. */
+.row-swipe.is-sliding .row-remove,
+.row-swipe.is-open .row-remove {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

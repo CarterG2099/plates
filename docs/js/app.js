@@ -132,6 +132,8 @@ Alpine.magic('swipeRow', () => (wrap) => {
       if (Math.abs(x) < 6) return;                 // too small to call yet
       locked = true;
       dragged = true;
+      // The action is not painted until this lands — see .row-remove.
+      wrap.classList.add('is-sliding');
       // Captured only once the gesture is known to be ours, so a vertical drag
       // is left entirely to the browser.
       slide.setPointerCapture(pointerId);
@@ -147,6 +149,7 @@ Alpine.magic('swipeRow', () => (wrap) => {
     pointerId = null;
     slide.style.transition = '';
     slide.style.transform = '';        // the class drives it from here
+    wrap.classList.remove('is-sliding');
     wrap.classList.toggle('is-open', dx < -THRESHOLD);
   };
 
