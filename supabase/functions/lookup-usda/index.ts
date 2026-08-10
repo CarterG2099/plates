@@ -34,6 +34,16 @@ const OFF_PAGE_SIZE = 30;
 const OFF_AGENT = "Plates/1.0 (https://plates.cartergividen.com)";
 const OFF_TIMEOUT_MS = 9000;
 
+// The search service does not return serving fields — it drops serving_size even
+// when you ask for it — so every result came back measured in 100 g. The single
+// product endpoint does return them ("1 scoop (31 g)"), and it is the only OFF
+// endpoint that answers us at all: both search endpoints on world.openfoodfacts
+// .org 503. So the servings are fetched one product at a time, for the handful
+// likely to be shown.
+const OFF_PRODUCT_URL = "https://world.openfoodfacts.org/api/v2/product";
+const OFF_ENRICH_LIMIT = 10;
+const OFF_ENRICH_TIMEOUT_MS = 4000;
+
 // Branded first — that is the US store-brand coverage Open Food Facts is weakest
 // on, which is the whole reason this fallback exists.
 const DATA_TYPES = "Branded,SR Legacy,Foundation";
@@ -347,13 +357,51 @@ async function fetchOff(query: string): Promise<{ products: unknown[]; error: st
 
     const payload = await res.json();
     // Search-a-licious calls them hits; the legacy endpoint called them products.
-    return { products: Array.isArray(payload?.hits) ? payload.hits : [], error: "" };
+    const hits = Array.isArray(payload?.hits) ? payload.hits : [];
+    await enrichServings(hits);
+    return { products: hits, error: "" };
   } catch (e) {
     const err = e as Error;
     return { products: [], error: err.name === "AbortError" ? "timed out" : (err.message ?? "failed") };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Fill in the serving sizes the search service omitted.
+ *
+ * Best-effort and parallel: a product that fails to enrich keeps its per-100g
+ * basis rather than dropping out, which is the same trade the mapping already
+ * makes for products that genuinely have no serving recorded.
+ */
+async function enrichServings(hits: Record<string, unknown>[]): Promise<void> {
+  const targets = hits.slice(0, OFF_ENRICH_LIMIT).filter((h) => h?.code);
+
+  await Promise.all(targets.map(async (hit) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), OFF_ENRICH_TIMEOUT_MS);
+    try {
+      const url = `${OFF_PRODUCT_URL}/${encodeURIComponent(String(hit.code))}.json`
+        + `?fields=serving_size,serving_quantity,serving_quantity_unit`;
+      const res = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": OFF_AGENT },
+        signal: controller.signal,
+      });
+      if (!res.ok) return;
+
+      const product = (await res.json())?.product;
+      if (!product) return;
+
+      for (const key of ["serving_size", "serving_quantity", "serving_quantity_unit"]) {
+        if (product[key] != null) hit[key] = product[key];
+      }
+    } catch {
+      // Keep the un-enriched hit.
+    } finally {
+      clearTimeout(timer);
+    }
+  }));
 }
 
 Deno.serve(async (req) => {

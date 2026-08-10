@@ -312,7 +312,30 @@ export function scoreDraft(terms, draft) {
   const padding = Math.min(Math.max(words.length - matched, 0), 14) * 2;
   score -= padding * (inName / matched);
 
-  return Math.max(score, 0) * (matched / terms.length) ** 1.5;
+  score = Math.max(score, 0) * (matched / terms.length) ** 1.5;
+
+  // Open Food Facts is a global database, so a search for "myprotein impact
+  // whey" surfaced the Cyrillic listings above the English ones. They are real
+  // products, but not the packet in your hand — the name won't match the label
+  // and the numbers came off a different market's packaging. Demoted, not
+  // dropped, so they still appear when nothing else does.
+  return isMostlyLatin(draft.name) ? score : score * 0.3;
+}
+
+/**
+ * Accented Latin counts as Latin: "Héritage", "Müsli" and "Crème" are all names
+ * you might read off a label here. Cyrillic, Greek, Arabic and CJK are not.
+ *
+ * A proportion test is too lenient — "Протеин MyProtein Impact Whey Protein" is
+ * 79% Latin and would survive it, and that listing is precisely the problem.
+ * A few non-Latin letters are enough to mark a listing as another market's.
+ */
+function isMostlyLatin(name) {
+  const letters = (name ?? '').replace(/[^\p{Letter}]/gu, '');
+  if (!letters) return true;
+
+  const foreign = letters.length - (letters.match(/\p{Script=Latin}/gu) ?? []).length;
+  return foreign < 3;
 }
 
 /** Does this food already cover what a lookup returned? */
