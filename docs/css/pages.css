@@ -527,7 +527,14 @@
   padding-top: 4px;
 }
 
-.setgrid { display: flex; flex-direction: column; }
+/* The gap is what keeps consecutive finished sets apart. A hairline is invisible
+   against the green — three checked sets in a row read as one block and you
+   could not count them — and this is the number the eye actually uses. */
+.setgrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
 
 /* ---- reorderable exercise cards ------------------------------------------- */
 
@@ -639,8 +646,8 @@
  * background let the red show through every finished set. Painting the tint
  * over an opaque base keeps the tint honest and the row solid.
  *
- * The separator stays. Without it a run of finished sets reads as one green
- * block and you cannot count them at a glance, which is the whole point. */
+ * Keeping consecutive green rows apart is .setgrid's gap, not the hairline —
+ * a 1px border in --color-border does not survive being laid over this tint. */
 .setrow.done {
   background:
     linear-gradient(var(--color-success-soft), var(--color-success-soft)),
