@@ -277,6 +277,11 @@ create table if not exists plates.session_sets (
   rpe           numeric,
   is_warmup     boolean not null default false,
   completed_at  timestamptz,
+  -- Stamped on sets left behind when the exercise was replaced mid-workout.
+  -- They still count for volume, history and records — you lifted them — but
+  -- "update the routine from this session" leaves the card out, because a
+  -- replace means you switched away from it deliberately.
+  replaced_at   timestamptz,
   updated_at    timestamptz not null default now(),
   deleted_at    timestamptz
 );

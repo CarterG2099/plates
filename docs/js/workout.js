@@ -246,6 +246,14 @@ export async function removeExercise(group) {
  */
 export async function replaceExercise({ session, group, exercise, prefill, ownerEmail, existingSets }) {
   const pending = group.sets.filter((s) => !s.completed_at);
+  const kept = group.sets.filter((s) => s.completed_at);
+
+  // Stamp what stays behind as an exercise you moved on from. It still counts
+  // for volume, history and records — you lifted it — but a replace means "I am
+  // switching to this", so rebuilding the routine afterwards should not plan the
+  // thing you were switching away from.
+  const replacedAt = new Date().toISOString();
+  for (const set of kept) await updateSet(set, { replaced_at: replacedAt });
 
   // Nothing left to move. The card is finished, so the swap means "now do this
   // one instead", which is a fresh set rather than a no-op.
@@ -465,6 +473,10 @@ async function writePlan({ routineId, session, sets, ownerEmail }) {
   let position = 0;
 
   for (const group of groups) {
+    // A card you replaced away from is history, not plan. Its sets stay in the
+    // session; they just do not describe what you intend to do next time.
+    if (group.sets.every((s) => s.replaced_at)) continue;
+
     const working = group.sets.filter((s) => !s.is_warmup);
     const done = working.filter((s) => s.completed_at);
     const counted = done.length ? done : working;

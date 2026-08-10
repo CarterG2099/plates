@@ -534,3 +534,125 @@ test('warm-ups never count towards the plan', async () => {
   assert.equal(plan.target_sets, 1);
   assert.equal(plan.target_weight_lb, 185, 'a heavy warm-up cannot become the target');
 });
+
+// ---- replacing away, and what the routine inherits --------------------------
+
+test('replacing marks what stays behind without disturbing it', async () => {
+  const sets = await seedSets([
+    { id: 'row', name: 'Barbell Row', weight: 135, reps: 10, done: 'T1' },
+    { id: 'row', name: 'Barbell Row', weight: null, reps: null },
+  ]);
+
+  await workout.replaceExercise({
+    session: SESSION, group: await groupNamed('row'),
+    exercise: { id: 'db', name: 'Dumbbell Row' },
+    prefill: { weight_lb: 60, reps: 12 }, ownerEmail: ME, existingSets: sets,
+  });
+
+  const left = (await liveSets()).filter((s) => s.exercise_name === 'Barbell Row');
+  assert.equal(left.length, 1);
+  assert.ok(left[0].replaced_at, 'stamped as an exercise you moved on from');
+  assert.equal(left[0].completed_at, 'T1', 'still checked');
+  assert.equal(left[0].weight_lb, 135, 'and still what you actually lifted');
+
+  const moved = (await liveSets()).filter((s) => s.exercise_name === 'Dumbbell Row');
+  assert.equal(moved.length, 1);
+  assert.equal(moved[0].replaced_at, undefined, 'the exercise you switched to is not stamped');
+});
+
+test('a replaced-away exercise still counts towards the session', async () => {
+  // The stamp is about intent, not about undoing work.
+  const sets = await seedSets([
+    { id: 'row', name: 'Barbell Row', weight: 100, reps: 10, done: 'T1' },
+    { id: 'row', name: 'Barbell Row', weight: null, reps: null },
+  ]);
+  await workout.replaceExercise({
+    session: SESSION, group: await groupNamed('row'),
+    exercise: { id: 'db', name: 'Dumbbell Row' },
+    prefill: null, ownerEmail: ME, existingSets: sets,
+  });
+
+  assert.equal(workout.volume(await liveSets()), 1000, 'the work still counts');
+  assert.deepEqual((await cards()).map(([n]) => n), ['Barbell Row', 'Dumbbell Row'],
+    'and both cards are still on screen');
+});
+
+test('updating the routine leaves out the exercise you replaced away from', async () => {
+  const sets = await seedSets([
+    { id: 'bp', name: 'Bench', weight: 185, reps: 5, done: 'T' },
+    { id: 'row', name: 'Barbell Row', weight: 135, reps: 10, done: 'T1' },
+    { id: 'row', name: 'Barbell Row', weight: null, reps: null },
+  ]);
+  await workout.replaceExercise({
+    session: SESSION, group: await groupNamed('row'),
+    exercise: { id: 'db', name: 'Dumbbell Row' },
+    prefill: { weight_lb: 60, reps: 12 }, ownerEmail: ME, existingSets: sets,
+  });
+
+  // Finish the exercise you switched to, so it has something to record.
+  const swapped = (await liveSets()).find((s) => s.exercise_name === 'Dumbbell Row');
+  await workout.updateSet(swapped, { completed_at: 'T2' });
+
+  const routine = await local.save('routines', { name: 'Pull A' }, ME);
+  await workout.updateRoutineFromSession({
+    routine, session: SESSION, sets: await local.all('session_sets'), ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  const plan = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  assert.deepEqual(plan.map((p) => p.notes), ['Bench', 'Dumbbell Row'],
+    'Barbell Row is history, not plan');
+  assert.deepEqual(plan.map((p) => p.position), [0, 1], 'positions stay contiguous');
+});
+
+test('replacing a finished card still drops it from the plan', async () => {
+  const sets = await seedSets([{ id: 'row', name: 'Barbell Row', weight: 135, reps: 10, done: 'T1' }]);
+  await workout.replaceExercise({
+    session: SESSION, group: await groupNamed('row'),
+    exercise: { id: 'db', name: 'Dumbbell Row' },
+    prefill: { weight_lb: 60, reps: 12 }, ownerEmail: ME, existingSets: sets,
+  });
+
+  const routine = await local.save('routines', { name: 'Pull A' }, ME);
+  await workout.updateRoutineFromSession({
+    routine, session: SESSION, sets: await local.all('session_sets'), ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  assert.deepEqual(
+    workout.routineExercises(await local.all('routine_exercises'), routine.id).map((p) => p.notes),
+    ['Dumbbell Row'],
+  );
+});
+
+test('going back to an exercise you replaced away from puts it back in the plan', async () => {
+  const sets = await seedSets([
+    { id: 'row', name: 'Barbell Row', weight: 135, reps: 10, done: 'T1' },
+    { id: 'row', name: 'Barbell Row', weight: null, reps: null },
+  ]);
+  await workout.replaceExercise({
+    session: SESSION, group: await groupNamed('row'),
+    exercise: { id: 'db', name: 'Dumbbell Row' },
+    prefill: null, ownerEmail: ME, existingSets: sets,
+  });
+
+  // The rack freed up. Adding it back is a fresh, unstamped set, so the card is
+  // no longer wholly "moved on from".
+  await workout.addSet({
+    session: SESSION, exercise: { id: 'row', name: 'Barbell Row' },
+    weight: 145, reps: 10, isWarmup: false, ownerEmail: ME, existingSets: await liveSets(),
+  });
+  const back = (await liveSets()).find((s) => s.exercise_name === 'Barbell Row' && !s.replaced_at);
+  await workout.updateSet(back, { completed_at: 'T3' });
+
+  const routine = await local.save('routines', { name: 'Pull A' }, ME);
+  await workout.updateRoutineFromSession({
+    routine, session: SESSION, sets: await local.all('session_sets'), ownerEmail: ME,
+    allRoutineExercises: await local.all('routine_exercises'),
+  });
+
+  const plan = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  const row = plan.find((p) => p.notes === 'Barbell Row');
+  assert.ok(row, 'back in the plan');
+  assert.equal(row.target_weight_lb, 145, 'at the weight you came back with');
+});
