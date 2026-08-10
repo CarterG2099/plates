@@ -994,10 +994,16 @@
               <button class="chip" @click="endRest()">Skip rest</button>
             </div>
 
+            <!-- data-card: what $dragCard measures and moves. -->
+            <div class="cardstack" x-ref="cardstack">
             <template x-for="group in groups" :key="group.key">
-              <div class="card">
+              <div class="card" data-card :data-key="group.key">
                 <div class="readout-head">
                   <div style="display:flex; align-items:center; gap:var(--space-3); min-width:0;">
+                    <span class="grip" aria-hidden="true"
+                          x-init="$dragCard($el,
+                                    () => [...$refs.cardstack.querySelectorAll('[data-card]')],
+                                    (to, key) => reorderTo(key, to))">⠿</span>
                     <span class="thumb" x-html="muscleMap(group.exerciseId, group.name)"></span>
                     <button style="min-width:0; text-align:left"
                             @click="openExercise(group.exerciseId, group.name)">
@@ -1007,27 +1013,30 @@
                       </div>
                     </button>
                   </div>
-                  <button class="chip" @click="openPicker(group)"
-                          :aria-label="`Replace ${group.name}`">Replace</button>
+                  <button class="chip" @click="openExMenu(group)"
+                          :aria-label="`Options for ${group.name}`">⋯</button>
                 </div>
 
                 <div class="setgrid">
                   <div class="sethead">
-                    <span>#</span><span>lb</span><span>Reps</span><span></span><span></span>
+                    <span>#</span><span>lb</span><span>Reps</span><span></span>
                   </div>
                   <template x-for="(set, i) in group.sets" :key="set.id">
-                    <div class="setrow" :class="[set.completed_at && 'done', isRecord(set, group) && 'record']">
-                      <span class="idx" :class="set.is_warmup && 'warm'" x-text="set.is_warmup ? 'W' : i + 1"></span>
-                      <input class="cell num" type="number" inputmode="decimal" step="any"
-                             :value="set.weight_lb" @change="edit(set, 'weight_lb', $event.target.value)"
-                             aria-label="Weight in pounds">
-                      <input class="cell num" type="number" inputmode="numeric"
-                             :value="set.reps" @change="edit(set, 'reps', $event.target.value)"
-                             aria-label="Reps">
-                      <button class="check" @click="toggleDone(set)"
-                              :aria-label="set.completed_at ? 'Mark set incomplete' : 'Mark set done'"
-                      >✓</button>
-                      <button class="tap" @click="dropSet(set)" aria-label="Remove set">×</button>
+                    <div class="row-swipe" x-init="$swipeRow($el)">
+                      <button class="row-remove" @click="dropSet(set)"
+                              :aria-label="`Remove set ${i + 1}`">Remove</button>
+                      <div class="setrow" :class="[set.completed_at && 'done', isRecord(set, group) && 'record']">
+                        <span class="idx" :class="set.is_warmup && 'warm'" x-text="set.is_warmup ? 'W' : i + 1"></span>
+                        <input class="cell num" type="number" inputmode="decimal" step="any"
+                               :value="set.weight_lb" @change="edit(set, 'weight_lb', $event.target.value)"
+                               aria-label="Weight in pounds">
+                        <input class="cell num" type="number" inputmode="numeric"
+                               :value="set.reps" @change="edit(set, 'reps', $event.target.value)"
+                               aria-label="Reps">
+                        <button class="check" @click="toggleDone(set)"
+                                :aria-label="set.completed_at ? 'Mark set incomplete' : 'Mark set done'"
+                        >✓</button>
+                      </div>
                     </div>
                   </template>
                 </div>
@@ -1045,9 +1054,35 @@
                 <button class="btn btn-ghost btn-block" @click="addSetTo(group)">Add set</button>
               </div>
             </template>
+            </div>
 
             <button class="btn btn-block" @click="openPicker()">Add exercise</button>
             <button class="btn btn-primary btn-block" @click="finishing = true">Finish workout</button>
+          </div>
+        </template>
+
+        <!-- Exercise card menu ---------------------------------------------- -->
+        <template x-if="exMenu">
+          <div class="sheet-backdrop" @click.self="closeExMenu()">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeExMenu() })">
+              <div class="grabber"></div>
+              <div class="card-label" x-text="exMenu.name"></div>
+
+              <button class="btn btn-block" @click="replaceFromMenu()">Replace exercise</button>
+              <button class="btn btn-block" @click="addWarmupFromMenu()">Add warm-up set</button>
+              <button class="btn btn-block" @click="duplicateFromMenu()">Duplicate exercise</button>
+
+              <div class="btn-row">
+                <button class="btn" @click="nudgeExercise(-1)"
+                        :disabled="exMenuIndex &lt;= 0">↑ Move up</button>
+                <button class="btn" @click="nudgeExercise(1)"
+                        :disabled="exMenuIndex === groups.length - 1">↓ Move down</button>
+              </div>
+              <p class="prefill">Or drag a card by its ⠿ handle.</p>
+
+              <button class="btn btn-danger btn-block" @click="removeFromMenu()">Remove exercise</button>
+              <button class="btn btn-ghost btn-block" @click="closeExMenu()">Cancel</button>
+            </div>
           </div>
         </template>
 

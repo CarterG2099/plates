@@ -381,14 +381,34 @@
 
 /* Opaque, or the action behind it shows through the row it is meant to sit
    under. Matches the surface the rows are painted on. */
-.row-swipe > .row {
+.row-swipe > .row,
+.row-swipe > .setrow {
   position: relative;
   background: var(--color-surface);
+  /* No radius of its own — the wrapper's overflow clip supplies it.
+     Two identically-sized rounded rects rasterise independently, and the
+     antialiased seam between them let the red action show as a thin arc down
+     the right-hand curve. One rounded shape cannot seam against itself. */
+  border-radius: 0;
   transition: transform var(--transition-fast);
   will-change: transform;
+  /* The browser keeps vertical panning and hands us the horizontal, so a list
+     still scrolls under a finger while a row can be dragged sideways. */
+  touch-action: pan-y;
+  /* Or a mouse drag paints the row's own label blue on the way across. */
+  user-select: none;
 }
 
-.row-swipe.is-open > .row { transform: translateX(-96px); }
+/* The fields are still fields: the row around them is what resists selection. */
+.row-swipe > .setrow .cell { user-select: text; }
+
+/* Set rows live inside a card, which is a lighter surface than a bare row sits
+   on — and a done set paints its own green, which must still win. */
+.row-swipe > .setrow { background: var(--color-surface-raised); }
+.row-swipe > .setrow.done { background: var(--color-success-soft); }
+
+.row-swipe.is-open > .row,
+.row-swipe.is-open > .setrow { transform: translateX(-96px); }
 
 .row-remove {
   position: absolute;
@@ -402,7 +422,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .row-swipe > .row { transition: none; }
+  .row-swipe > .row,
+  .row-swipe > .setrow { transition: none; }
 }
 
 /* The brand, beside the name it belongs to. Lighter and unshouted: it is

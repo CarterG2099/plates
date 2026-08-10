@@ -133,6 +133,107 @@ export async function removeSet(id) {
 }
 
 /**
+ * Write a session's sets back in the order given, renumbering as it goes.
+ *
+ * `set_index` is what every reader orders by — the set rows, and the exercise
+ * cards through groupByExercise's first-appearance rule — so moving an exercise
+ * or slotting a warm-up in front of its working sets is entirely a matter of
+ * renumbering. Rows whose index already matches are skipped, so a reorder writes
+ * only what actually moved.
+ */
+export async function reindexSets(ordered) {
+  const written = [];
+
+  for (const [index, set] of ordered.entries()) {
+    if (set.set_index === index) continue;
+    written.push(await updateSet(set, { set_index: index }));
+  }
+
+  return written;
+}
+
+/** Exercise cards in display order, which is what a reorder rearranges. */
+export function orderGroups(groups, fromKey, toIndex) {
+  const from = groups.findIndex((g) => g.key === fromKey);
+  if (from === -1) return groups;
+
+  const next = groups.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(Math.max(0, Math.min(next.length, toIndex)), 0, moved);
+  return next;
+}
+
+/**
+ * Add a warm-up to an exercise, ahead of its working sets.
+ *
+ * Warm-ups come first or they are not warm-ups. addSet can only append to the
+ * session, so the set is created and then the whole session is renumbered with
+ * it slotted into the front of its own group.
+ */
+export async function addWarmupSet({ session, group, exercise, weight, ownerEmail, existingSets }) {
+  const { set } = await addSet({
+    session, exercise, weight, reps: null, isWarmup: true, ownerEmail, existingSets,
+  });
+
+  const keyOf = (s) => s.exercise_id ?? s.exercise_name;
+  const ordered = [];
+  let placed = false;
+
+  for (const s of existingSets) {
+    // In front of the first set of this exercise that is not itself a warm-up.
+    if (!placed && keyOf(s) === group.key && !s.is_warmup) {
+      ordered.push(set);
+      placed = true;
+    }
+    ordered.push(s);
+  }
+  if (!placed) ordered.push(set);
+
+  await reindexSets(ordered);
+  return set;
+}
+
+/**
+ * Another round of the same exercise: as many more sets as it already has,
+ * carrying its current loads.
+ *
+ * They land in the same card rather than a second one, because a card *is* an
+ * exercise here — groupByExercise keys on the exercise, and giving one exercise
+ * two independent cards would need an instance column the schema does not have.
+ */
+export async function duplicateExercise({ session, group, ownerEmail, existingSets }) {
+  const exercise = { id: group.exerciseId, name: group.name };
+  const source = group.sets.filter((s) => !s.is_warmup);
+  const template = source.length ? source : group.sets;
+
+  let existing = existingSets;
+  const made = [];
+
+  for (const set of template) {
+    const { set: created } = await addSet({
+      session,
+      exercise,
+      weight: set.weight_lb,
+      reps: set.reps,
+      isWarmup: set.is_warmup,
+      ownerEmail,
+      existingSets: existing,
+    });
+    existing = [...existing, created];
+    made.push(created);
+  }
+
+  return made;
+}
+
+/** Take a whole exercise out of the workout. Soft, like every other delete. */
+export async function removeExercise(group) {
+  for (const set of group.sets) await local.remove('session_sets', set.id);
+  sync.nudge();
+  return group.sets.length;
+}
+
+/**
  * Swap an exercise mid-workout — the rack is taken, the machine is broken.
  *
  * Sets already checked off stay put, under the exercise they were actually done

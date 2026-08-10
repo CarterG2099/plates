@@ -529,13 +529,59 @@
 
 .setgrid { display: flex; flex-direction: column; }
 
+/* ---- reorderable exercise cards ------------------------------------------- */
+
+/* The stack $dragCard measures. It owns the gap so the drag can assume one
+   constant stride between cards — matching .app-main's, since the cards used to
+   be its direct children and the spacing should not have changed. */
+.cardstack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Siblings glide into the gap; the dragged card follows the finger exactly and
+   must not be animated, or it lags behind by the transition duration. */
+.cardstack > .card { transition: transform var(--transition-fast); }
+
+.cardstack > .card.is-dragging {
+  transition: none;
+  position: relative;
+  z-index: 5;
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-primary-soft);
+}
+
+.grip {
+  flex: none;
+  width: 28px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-dim);
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: grab;
+  /* The drag is driven by pointer events, which need the browser to stop
+     claiming vertical drags for scrolling. Also set in JS, belt and braces. */
+  touch-action: none;
+}
+
+.cardstack > .card.is-dragging .grip { cursor: grabbing; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cardstack > .card { transition: none; }
+}
+
+/* Four tracks, not five: the remove button is gone and a left swipe reveals it
+   instead, so nothing sits to the right of the checkmark any more. */
 .sethead,
 .setrow {
   display: grid;
-  grid-template-columns: 26px 1fr 1fr 40px 32px;
+  grid-template-columns: 26px 1fr 1fr 40px;
   gap: var(--space-2);
   align-items: center;
-  padding: var(--space-2) 0;
+  padding: var(--space-2) var(--space-2);
 }
 
 .sethead {
@@ -576,16 +622,10 @@
 /* A finished set goes green edge to edge. Mid-set, from a few feet away and out
    of breath, "which ones have I done" has to be answerable without reading —
    and the tick alone was too small a signal to carry that. */
+/* Fills its swipe wrapper, which is the row's real boundary — see .row-swipe. */
 .setrow.done {
   background: var(--color-success-soft);
-  border-radius: var(--radius-sm);
   border-bottom-color: transparent;
-  padding-left: var(--space-2);
-  padding-right: var(--space-2);
-  /* The row is a grid inside a fixed track list; padding would otherwise push
-     it wider than the unfinished rows and make the columns disagree. */
-  margin-left: calc(var(--space-2) * -1);
-  margin-right: calc(var(--space-2) * -1);
 }
 
 .setrow.done .cell { background: transparent; color: var(--color-text-muted); }

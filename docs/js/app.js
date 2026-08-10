@@ -70,75 +70,195 @@ Alpine.magic('swipe', () => (sheet, close) => {
 });
 
 /**
- * Swipe a row left to reveal its action.
+ * Drag a row left to reveal its action.
  *
- * Direction is decided on the first move and then locked: if the finger goes
+ * Pointer events, so a mouse does this as well as a finger — with no remove
+ * button on the row any more, a touch-only gesture would leave a desktop with
+ * no way to delete anything.
+ *
+ * Direction is decided on the first move and then locked: if the pointer goes
  * more vertical than horizontal it is a scroll, and the row must not creep
- * sideways while the list moves under it.
+ * sideways while the list moves under it. On touch that verdict is the
+ * browser's to make as well — `touch-action: pan-y` (set in CSS alongside the
+ * transition) lets it keep vertical panning and hand us the horizontal, and it
+ * sends `pointercancel` if it claims the gesture mid-drag.
  */
 Alpine.magic('swipeRow', () => (wrap) => {
   if (!wrap || wrap.dataset.swipeRow) return;
   wrap.dataset.swipeRow = '1';
 
-  const slide = wrap.querySelector('.row');
+  // `.setrow` too: a set inside a workout is swiped away exactly like a food row.
+  const slide = wrap.querySelector('.row, .setrow');
   if (!slide) return;
 
   const WIDTH = 96;             // matches .row-remove
   const THRESHOLD = 40;
 
-  let startX = 0, startY = 0, dx = 0;
-  let dragging = false, locked = false;
+  let startX = 0, startY = 0, dx = 0, pointerId = null;
+  let dragging = false, locked = false, dragged = false;
 
   const isOpen = () => wrap.classList.contains('is-open');
 
-  slide.addEventListener('touchstart', (e) => {
+  slide.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;      // primary button or touch; never a right-click
+
+    // A mouse dragging sideways inside the weight or reps box is selecting
+    // text, not swiping the row away. Only a mouse: dragging a finger across a
+    // number field is a swipe, and excluding those columns on touch would
+    // leave barely any of a set row to grab.
+    if (e.pointerType === 'mouse' && e.target.closest('input, textarea, select')) return;
+
     // One row open at a time; two revealed actions is a mis-tap waiting.
     for (const other of document.querySelectorAll('.row-swipe.is-open')) {
       if (other !== wrap) other.classList.remove('is-open');
     }
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
+    startX = e.clientX;
+    startY = e.clientY;
     dx = isOpen() ? -WIDTH : 0;
+    pointerId = e.pointerId;
     dragging = true;
     locked = false;
     slide.style.transition = 'none';
-  }, { passive: true });
+  });
 
-  slide.addEventListener('touchmove', (e) => {
-    if (!dragging) return;
+  slide.addEventListener('pointermove', (e) => {
+    if (!dragging || e.pointerId !== pointerId) return;
 
-    const x = e.touches[0].clientX - startX;
-    const y = e.touches[0].clientY - startY;
+    const x = e.clientX - startX;
+    const y = e.clientY - startY;
 
     if (!locked) {
       if (Math.abs(y) > Math.abs(x)) { dragging = false; slide.style.transition = ''; return; }
       if (Math.abs(x) < 6) return;                 // too small to call yet
       locked = true;
+      dragged = true;
+      // Captured only once the gesture is known to be ours, so a vertical drag
+      // is left entirely to the browser.
+      slide.setPointerCapture(pointerId);
     }
 
     dx = Math.min(0, Math.max(-WIDTH, (isOpen() ? -WIDTH : 0) + x));
     slide.style.transform = `translateX(${dx}px)`;
-  }, { passive: true });
+  });
 
   const release = () => {
     if (!dragging) return;
     dragging = false;
+    pointerId = null;
     slide.style.transition = '';
     slide.style.transform = '';        // the class drives it from here
     wrap.classList.toggle('is-open', dx < -THRESHOLD);
   };
 
-  slide.addEventListener('touchend', release);
-  slide.addEventListener('touchcancel', release);
+  slide.addEventListener('pointerup', release);
+  slide.addEventListener('pointercancel', release);
 
   // While open, a tap closes rather than logging. Capture phase, so it lands
   // before the row's own click handlers.
   slide.addEventListener('click', (e) => {
+    // A mouse fires a click at the end of a drag; touch suppresses it once the
+    // finger has moved past the browser's slop. Without this, dragging a row
+    // open with a mouse would open and then immediately close it.
+    if (dragged) {
+      dragged = false;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     if (!isOpen()) return;
     e.preventDefault();
     e.stopPropagation();
     wrap.classList.remove('is-open');
   }, true);
+});
+
+/**
+ * Drag a card by its handle to reorder it among its siblings.
+ *
+ * Pointer events rather than touch, so the same code serves a finger and a
+ * mouse. The dragged card is lifted with a transform and its siblings shift to
+ * open a gap; nothing is written until the drop, and then only the new index is
+ * reported — the caller owns what "order" means.
+ *
+ * Positions are measured once at drag start. Reading layout during the move
+ * would be both slower and wrong, because the transforms being applied are
+ * exactly what would be read back.
+ *
+ * The dragged card's identity is read off the DOM at drop time rather than
+ * captured when the handle was bound. x-init runs once per element, and x-for
+ * reuses elements across reorders — a captured scope reference is exactly the
+ * kind of thing that ends up one position stale.
+ *
+ * @param {HTMLElement} handle  what you press to start dragging
+ * @param {() => HTMLElement[]} cards  siblings in current display order
+ * @param {(toIndex: number, key: string) => void} onDrop  only when the index changes
+ */
+Alpine.magic('dragCard', () => (handle, cards, onDrop) => {
+  if (!handle || handle.dataset.dragCard) return;
+  handle.dataset.dragCard = '1';
+
+  handle.style.touchAction = 'none';
+
+  handle.addEventListener('pointerdown', (down) => {
+    // Left button or touch only; a right-click must not start a drag.
+    if (down.button !== 0) return;
+
+    const list = cards();
+    const card = handle.closest('[data-card]');
+    const from = list.indexOf(card);
+    if (from === -1 || list.length < 2) return;
+
+    down.preventDefault();
+    handle.setPointerCapture(down.pointerId);
+
+    const boxes = list.map((el) => el.getBoundingClientRect());
+    const height = boxes[from].height;
+    // Gap included, or every card shifts short by the flex gap and the stack
+    // visibly overlaps as it opens.
+    const stride = list.length > 1
+      ? Math.abs((boxes[1].top - boxes[0].top) || height)
+      : height;
+
+    let to = from;
+    card.classList.add('is-dragging');
+
+    const move = (e) => {
+      const dy = e.clientY - down.clientY;
+      card.style.transform = `translateY(${dy}px)`;
+
+      // Half a card's travel is one place. Rounding means the swap happens as
+      // the dragged card's centre passes its neighbour's, which is where the
+      // eye expects it.
+      const next = Math.max(0, Math.min(list.length - 1, from + Math.round(dy / stride)));
+      if (next === to) return;
+      to = next;
+
+      list.forEach((el, i) => {
+        if (i === from) return;
+        // Everything between the old and new slot steps one place the other way.
+        let shift = 0;
+        if (from < to && i > from && i <= to) shift = -stride;
+        else if (from > to && i >= to && i < from) shift = stride;
+        el.style.transform = shift ? `translateY(${shift}px)` : '';
+      });
+    };
+
+    const end = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+
+      card.classList.remove('is-dragging');
+      for (const el of list) el.style.transform = '';
+
+      if (to !== from) onDrop(to, card.dataset.key);
+    };
+
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  });
 });
 
 // ---- auth ------------------------------------------------------------------
@@ -321,15 +441,39 @@ const raw = {
   prior: new Map(),
 };
 
-/** Read raw data while still re-rendering when it changes. */
+/**
+ * Read raw data while still re-rendering when it changes.
+ *
+ * There are two counters, not one, because `x-show` keeps a tab's component
+ * mounted and reactive while it is hidden — Today and the log panel stay live
+ * through an entire workout. On one shared counter, checking a set re-ran
+ * `rankFoods` over the whole food log twice (Today's remaining-in-food line and
+ * the log panel's results) before the tick could paint. Splitting them means a
+ * set toggle touches the set rows and nothing else.
+ */
 function snapshot() {
-  Alpine.store('data').version;   // registers the dependency
+  Alpine.store('data').version;        // registers the dependency
+  return raw;
+}
+
+/** The training half: exercises, routines, sessions, sets, and the set index. */
+function snapshotTraining() {
+  Alpine.store('data').trainVersion;
+  return raw;
+}
+
+/** For the one screen that reads both halves. */
+function snapshotAll() {
+  const store = Alpine.store('data');
+  store.version;
+  store.trainVersion;
   return raw;
 }
 
 Alpine.store('data', {
   ready: false,
-  version: 0,
+  version: 0,        // the food half — see snapshot()
+  trainVersion: 0,   // the training half — see snapshotTraining()
   goals: [],
   foods: [],
   log: [],
@@ -376,7 +520,7 @@ Alpine.store('data', {
     // Indexed once per refresh rather than per render.
     raw.index = workout.buildIndex(sessionSets, sessions, Alpine.store('auth').email);
     raw.prior = workout.priorForm(raw.index, null);
-    this.version++;
+    this.trainVersion++;
   },
 
   /**
@@ -404,7 +548,7 @@ Alpine.store('data', {
     const bucket = raw.index.bySession.get(row.session_id);
     if (bucket) raw.index.volumeBySession.set(row.session_id, workout.volume(bucket));
 
-    this.version++;
+    this.trainVersion++;
   },
 
   async refresh() {
@@ -1699,7 +1843,7 @@ Alpine.data('trainPage', () => ({
 
       try {
         await workout.importExerciseMetadata(this.data.exercises, this.email);
-        await this.data.refresh();
+        await Alpine.store('data').refreshTraining();
       } catch { /* cosmetic; the figure falls back to reading the name */ }
     });
 
@@ -1716,7 +1860,7 @@ Alpine.data('trainPage', () => ({
   },
 
   get email() { return Alpine.store('auth').email; },
-  get data() { return snapshot(); },
+  get data() { return snapshotTraining(); },
 
   get session() { return workout.activeSession(this.data.sessions, this.email); },
   get sets() { return this.session ? workout.setsOf(this.data.index, this.session.id) : []; },
@@ -1735,7 +1879,7 @@ Alpine.data('trainPage', () => ({
 
   async startEmpty() {
     await workout.startSession({ name: null, ownerEmail: this.email });
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
     this.picker = true;
   },
 
@@ -1778,7 +1922,7 @@ Alpine.data('trainPage', () => ({
       }
     }
 
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
   },
 
   async finishSession() {
@@ -1792,7 +1936,7 @@ Alpine.data('trainPage', () => ({
     this.finishing = false;
     this.routineName = '';
     this.endRest();
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
     Alpine.store('ui').flash(name ? `Finished · saved “${name}”` : 'Workout finished');
   },
 
@@ -1800,7 +1944,7 @@ Alpine.data('trainPage', () => ({
     await workout.discardSession(this.session, this.data.sessionSets);
     this.finishing = false;
     this.endRest();
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
     Alpine.store('ui').flash('Workout discarded');
   },
 
@@ -1834,7 +1978,7 @@ Alpine.data('trainPage', () => ({
       isWarmup: false, ownerEmail: this.email, existingSets: this.sets,
     });
     this.closePicker();
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
   },
 
   /** Sets you have already done stay behind — see workout.replaceExercise. */
@@ -1851,7 +1995,7 @@ Alpine.data('trainPage', () => ({
 
     const kept = group.sets.some((s) => s.completed_at);
     this.closePicker();
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
     Alpine.store('ui').flash(
       kept ? `Rest of ${group.name} → ${exercise.name}` : `${group.name} → ${exercise.name}`,
     );
@@ -1868,40 +2012,141 @@ Alpine.data('trainPage', () => ({
       ownerEmail: this.email,
       existingSets: this.sets,
     });
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
+  },
+
+  /**
+   * The set as it stands right now.
+   *
+   * Handlers close over the set object as it was when the row rendered, and by
+   * the time one runs that copy can be a revision behind — typing reps fires
+   * `change` and then the checkmark's `click`, and the click's copy predates the
+   * reps. The in-memory index is the current truth, so read from that.
+   */
+  currentSet(set) {
+    return this.sets.find((s) => s.id === set.id) ?? set;
   },
 
   async edit(set, field, value) {
-    const saved = await workout.updateSet(set, { [field]: value === '' ? null : Number(value) });
-    Alpine.store('data').patchSet(saved);
+    const next = { [field]: value === '' ? null : Number(value) };
+
+    // Painted from memory first, persisted after. Three IndexedDB round trips
+    // and a sync nudge sit inside updateSet, and none of them are the reason a
+    // number appears in a box.
+    Alpine.store('data').patchSet({ ...this.currentSet(set), ...next });
+    Alpine.store('data').patchSet(await workout.updateSet(set, next));
   },
 
   /** Checking a set is what starts the rest clock — the moment you finish lifting. */
   async toggleDone(set) {
     const done = Boolean(set.completed_at);
-    const saved = await workout.updateSet(set, {
-      completed_at: done ? null : new Date().toISOString(),
-    });
-    Alpine.store('data').patchSet(saved);
+    const next = { completed_at: done ? null : new Date().toISOString() };
+
+    // Green before the write, for the same reason as edit(): this is the most
+    // repeated interaction in the app and it has to feel like a light switch.
+    const optimistic = { ...this.currentSet(set), ...next };
+    Alpine.store('data').patchSet(optimistic);
 
     if (!done) {
       this.startRest(workout.DEFAULT_REST_SECONDS);
       if (navigator.vibrate) navigator.vibrate(30);
 
       // Told at the moment it happens, not discovered in a stats screen weeks on.
-      // Judged on `saved`, not the handler's copy: that one predates the reps
-      // you typed immediately before checking the set, which is most of them.
-      const group = this.groups.find((g) => g.sets.some((s) => s.id === saved.id));
-      if (group && workout.isRecord(saved, this.bestBefore(group))) {
+      const group = this.groups.find((g) => g.sets.some((s) => s.id === optimistic.id));
+      if (group && workout.isRecord(optimistic, this.bestBefore(group))) {
         Alpine.store('ui').flash(`PR · ${group.name}`);
         if (navigator.vibrate) navigator.vibrate([60, 50, 60]);
       }
     }
+
+    Alpine.store('data').patchSet(await workout.updateSet(set, next));
   },
 
   async dropSet(set) {
     await workout.removeSet(set.id);
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
+  },
+
+  // ---- the exercise card's menu --------------------------------------------
+
+  exMenu: null,   // the group whose menu is open
+
+  openExMenu(group) { this.exMenu = group; },
+  closeExMenu() { this.exMenu = null; },
+
+  /** Reopens the picker in swap mode — see workout.replaceExercise. */
+  replaceFromMenu() {
+    const group = this.exMenu;
+    this.closeExMenu();
+    this.openPicker(group);
+  },
+
+  async addWarmupFromMenu() {
+    const group = this.exMenu;
+    this.closeExMenu();
+
+    // Warm-ups start well under the working weight; half is the usual first
+    // rung and is easier to correct than an empty box.
+    const working = group.sets.find((s) => !s.is_warmup && s.weight_lb);
+    await workout.addWarmupSet({
+      session: this.session,
+      group,
+      exercise: { id: group.exerciseId, name: group.name },
+      weight: working ? Math.round((Number(working.weight_lb) / 2) / 5) * 5 : null,
+      ownerEmail: this.email,
+      existingSets: this.sets,
+    });
+    await Alpine.store('data').refreshTraining();
+  },
+
+  async duplicateFromMenu() {
+    const group = this.exMenu;
+    this.closeExMenu();
+
+    const made = await workout.duplicateExercise({
+      session: this.session,
+      group,
+      ownerEmail: this.email,
+      existingSets: this.sets,
+    });
+    await Alpine.store('data').refreshTraining();
+    Alpine.store('ui').flash(`${made.length} more ${group.name}`);
+  },
+
+  async removeFromMenu() {
+    const group = this.exMenu;
+    this.closeExMenu();
+
+    const count = await workout.removeExercise(group);
+    await Alpine.store('data').refreshTraining();
+    Alpine.store('ui').flash(`Removed ${group.name} · ${count} sets`);
+  },
+
+  /** Menu equivalent of dragging: one place up or down the card list. */
+  async nudgeExercise(direction) {
+    const group = this.exMenu;
+    const groups = this.groups;
+    const at = groups.findIndex((g) => g.key === group.key);
+    const to = at + direction;
+    if (at === -1 || to < 0 || to >= groups.length) return;
+
+    this.closeExMenu();
+    await this.reorderTo(group.key, to);
+  },
+
+  get exMenuIndex() {
+    if (!this.exMenu) return -1;
+    return this.groups.findIndex((g) => g.key === this.exMenu.key);
+  },
+
+  /**
+   * Move a card to a position. Both the menu and the drag handle end here, so
+   * there is one definition of what reordering means.
+   */
+  async reorderTo(key, toIndex) {
+    const ordered = workout.orderGroups(this.groups, key, toIndex);
+    await workout.reindexSets(ordered.flatMap((g) => g.sets));
+    await Alpine.store('data').refreshTraining();
   },
 
   previous(group) {
@@ -1993,7 +2238,7 @@ Alpine.data('trainPage', () => ({
 
   async deleteRoutine(routine) {
     await workout.deleteRoutine(routine, this.data.routineExercises);
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
     Alpine.store('ui').flash('Routine deleted');
   },
 
@@ -2105,7 +2350,7 @@ Alpine.data('trainPage', () => ({
       { id: this.builder.routine?.id, name }, this.email,
     );
     this.builder.routine = routine;
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
   },
 
   /** Picker doubles as "add to routine" while the builder is open. */
@@ -2120,19 +2365,19 @@ Alpine.data('trainPage', () => ({
     });
     this.picker = false;
     this.pickerTerm = '';
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
   },
 
   async editRoutineItem(item, field, value) {
     await workout.updateRoutineExercise(item, {
       [field]: value === '' ? null : (field === 'target_reps' ? value : Number(value)),
     });
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
   },
 
   async dropRoutineItem(item) {
     await workout.removeRoutineExercise(item.id);
-    await this.data.refresh();
+    await Alpine.store('data').refreshTraining();
   },
 
   // ---- Hevy import ---------------------------------------------------------
@@ -2151,7 +2396,7 @@ Alpine.data('trainPage', () => ({
         existingExercises: this.data.exercises,
       }, (p) => { this.hevy = p; });
 
-      await this.data.refresh();
+      await Alpine.store('data').refreshTraining();
       Alpine.store('ui').flash(
         `Imported ${this.hevy.sessions} workouts · ${this.hevy.routines} routines`);
     } catch (e) {
@@ -2212,7 +2457,7 @@ Alpine.data('trainPage', () => ({
         existingExercises: this.data.exercises,
       }, (p) => { this.hevy = p; });
 
-      await this.data.refresh();
+      await Alpine.store('data').refreshTraining();
       Alpine.store('ui').flash(
         `Imported ${this.hevy.sessions} workouts · ${this.hevy.routines} routines`);
     } catch (e) {
@@ -2267,7 +2512,7 @@ Alpine.data('statsPage', () => ({
   newWeight: '',
 
   get email() { return Alpine.store('auth').email; },
-  get data() { return snapshot(); },
+  get data() { return snapshotAll(); },
 
   // ---- body weight ---------------------------------------------------------
 
@@ -2288,7 +2533,7 @@ Alpine.data('statsPage', () => ({
     await stats.logWeight(lb, this.email);
     this.newWeight = '';
     this.weighing = false;
-    await this.data.refresh();
+    await Alpine.store('data').refresh();
     Alpine.store('ui').flash(`Logged ${lb} lb`);
   },
 
@@ -2369,14 +2614,14 @@ Alpine.data('statsPage', () => ({
   async saveGoal() {
     await food.updateGoal(this.goal ?? {}, this.draft, this.email);
     this.editing = false;
-    await this.data.refresh();
+    await Alpine.store('data').refresh();
     Alpine.store('ui').flash('Targets updated');
   },
 
   async saveNewPhase() {
     await food.startPhase(this.draft, this.goal, this.email);
     this.editing = false;
-    await this.data.refresh();
+    await Alpine.store('data').refresh();
     Alpine.store('ui').flash(`Started ${this.draft.phase}`);
   },
 }));
