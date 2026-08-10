@@ -33,6 +33,40 @@ function die(message) {
   process.exit(1);
 }
 
+/** Mean luminance down a column (`axis` 0) or across a row (`axis` 1). */
+function lineMean(img, index, axis) {
+  const { width, height, channels, data } = img;
+  const n = axis === 0 ? height : width;
+  let sum = 0;
+  for (let k = 0; k < n; k++) {
+    const i = (axis === 0 ? k * width + index : index * width + k) * channels;
+    sum += (data[i] + data[i + 1] + data[i + 2]) / 3;
+  }
+  return sum / n;
+}
+
+/**
+ * How far the divider between two cells bleeds either side of the boundary.
+ *
+ * Gemini draws a light rule between quadrants even when told not to — 8px on one
+ * sheet, 20px on another — so cropping at the exact half leaves a bright strip
+ * down the inside edge of every cell. Measured rather than hard-coded because it
+ * has been a different width in every batch so far.
+ *
+ * A seam runs the full height, so a column mean separates it from artwork
+ * cleanly; a figure crossing the boundary only lifts the mean a little.
+ */
+function seamRadius(img, boundary, axis, limit = 40) {
+  const away = lineMean(img, boundary - limit * 2, axis);
+  const bright = (k) => lineMean(img, k, axis) > away + 8;
+  if (!bright(boundary) && !bright(boundary - 1)) return 0;
+
+  let lo = boundary, hi = boundary - 1;
+  while (lo - 1 > boundary - limit && bright(lo - 1)) lo--;
+  while (hi + 1 < boundary + limit && bright(hi + 1)) hi++;
+  return Math.max(boundary - lo, hi - boundary + 1);
+}
+
 function write(image, slug) {
   if (!/^[a-z0-9-]+$/.test(slug)) die(`"${slug}" is not a slug — lowercase, digits and hyphens only.`);
   const file = path.join(OUT_DIR, `${slug}.png`);
@@ -71,10 +105,20 @@ if (command === 'single') {
     die(`${args.length} slugs does not fill a ${cols}×${rows} grid — pass exactly ${rows * cols}, or set --cols`);
   }
 
+  // One radius for the whole sheet: the widest divider found on any interior
+  // boundary. Uneven insets would make the cells different sizes, and a drawing
+  // that is 1% smaller than its neighbours is not worth the precision.
+  let pad = 0;
+  for (let c = 1; c < cols; c++) pad = Math.max(pad, seamRadius(source, c * cellW, 0));
+  for (let r = 1; r < rows; r++) pad = Math.max(pad, seamRadius(source, r * cellH, 1));
+  if (pad) console.log(`trimming a ${pad * 2}px divider between cells`);
+
   args.forEach((slug, i) => {
-    const x = (i % cols) * cellW;
-    const y = Math.floor(i / cols) * cellH;
-    write(crop(source, x, y, cellW, cellH), slug);
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    // Inset every edge, not just the ones touching a divider, so each cell keeps
+    // the same framing as its neighbours.
+    write(crop(source, col * cellW + pad, row * cellH + pad, cellW - pad * 2, cellH - pad * 2), slug);
   });
 } else {
   die(`unknown command "${command}" — expected sheet or single`);

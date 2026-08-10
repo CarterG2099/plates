@@ -4,7 +4,7 @@
 key has no image quota. Companion to `exercise-art.md`, which explains where the
 files go and why they exist; this file is just the commands.
 
-**8 done, 95 to go — 24 sheets.** Four exercises per image, sliced apart
+**20 done, 83 to go — 21 sheets.** Four exercises per image, sliced apart
 afterwards. A 2048px sheet gives 1024px cells against a 512px target, so nothing
 is lost to the grid, and it is four times fewer requests.
 
@@ -57,177 +57,162 @@ exercise, send its one line with "Draw this one alone, as a single square image.
 
 ---
 
-## Already done — 8
+## Already done — 20
 
-`bench-press-barbell.png` · `bench-press-dumbbell.png` ·
-`incline-bench-press-barbell.png` · `incline-bench-press-dumbbell.png` ·
-`iso-lateral-chest-press-machine.png` · `chest-fly-machine.png` ·
-`chest-dip.png` · `push-up.png`
+**Chest, all 12.** `bench-press-barbell` · `bench-press-dumbbell` ·
+`incline-bench-press-barbell` · `incline-bench-press-dumbbell` ·
+`incline-chest-press-machine` · `iso-lateral-chest-press-machine` ·
+`chest-fly-machine` · `fly-cable` · `fly-crossovers-cable` ·
+`low-fly-crossovers-cable` · `chest-dip` · `push-up`
+
+**Back, 8 of 19.** `pull-up` · `chin-up` · `lat-pulldown` ·
+`lat-pulldown-close-grip-cable` · `reverse-grip-lat-pulldown-cable` ·
+`single-arm-lat-pulldown` · `straight-arm-lat-pulldown-cable` ·
+`straight-arm-pulldown-rope`
 
 ---
 
-## Sheet 1 — chest
-
-> Top-left: **Incline Chest Press (Machine)** — highlight the upper pectorals. Include a seated incline chest press machine with two handles and a back pad.
-> Top-right: **Fly (Cable)** — highlight the pectorals. Include two cable stations with high pulleys, one handle in each hand, arms sweeping together in front of the chest.
-> Bottom-left: **Fly Crossovers (Cable)** — highlight the pectorals. Include two high cable pulleys, with the hands crossed over one another at the bottom.
-> Bottom-right: **Low Fly Crossovers (Cable)** — highlight the pectorals. Include two low cable pulleys near the floor, arms sweeping upward and together.
-
-## Sheet 2 — back
-
-> Top-left: **Pull-Up** — highlight the latissimus dorsi. Include an overhead bar, overhand grip, body hanging.
-> Top-right: **Chin-Up** — highlight the latissimus dorsi and biceps. Include an overhead bar, underhand grip.
-> Bottom-left: **Lat Pulldown** — highlight the latissimus dorsi. Include a lat pulldown machine with a wide bar overhead and a thigh pad.
-> Bottom-right: **Lat Pulldown - Close Grip (Cable)** — highlight the latissimus dorsi. Include a pulldown machine with a close-grip V handle, hands together.
-
-## Sheet 3 — back
-
-> Top-left: **Reverse Grip Lat Pulldown (Cable)** — highlight the latissimus dorsi. Include a pulldown machine with a straight bar held underhand.
-> Top-right: **Single Arm Lat Pulldown** — highlight the latissimus dorsi. Include a cable station with one single handle, pulled with one arm only.
-> Bottom-left: **Straight Arm Lat Pulldown (Cable)** — highlight the latissimus dorsi. Include a high cable with a straight bar, arms locked straight, sweeping down to the thighs.
-> Bottom-right: **Straight Arm Pulldown (Rope)** — highlight the latissimus dorsi. Include a high cable with a rope attachment, arms straight, the two rope ends pulled apart at the thighs.
-
-## Sheet 4 — back
+## Sheet 1 — back
 
 > Top-left: **Bent Over Row (Barbell)** — highlight the rhomboids and mid-back. Include a barbell, torso hinged near parallel to the floor.
 > Top-right: **Pendlay Row** — highlight the latissimus dorsi. Include a barbell and the floor it rests on between reps, back flat and horizontal.
 > Bottom-left: **Row (Dumbbell)** — highlight the latissimus dorsi. Include one dumbbell, with one knee and one hand braced on a flat bench.
 > Bottom-right: **Row (T Bar)** — highlight the rhomboids and mid-back. Include a landmine-mounted barbell with plates on the end and a V handle.
 
-## Sheet 5 — back
+## Sheet 2 — back
 
 > Top-left: **Seated Row (Cable)** — highlight the latissimus dorsi. Include a seated cable row machine with a footplate and a low pulley.
 > Top-right: **Seated Row - Bar Wide Grip (Cable)** — highlight the latissimus dorsi. Include a seated cable row machine with a wide straight bar, hands set wide apart.
 > Bottom-left: **Seated Cable Row - V Grip (Cable)** — highlight the latissimus dorsi. Include a seated cable row machine with a close V handle.
 > Bottom-right: **Seated Row (Machine)** — highlight the latissimus dorsi. Include a seated row machine with a chest pad and two handles.
 
-## Sheet 6 — back, then legs
+## Sheet 3 — back, then legs
 
 > Top-left: **Iso-Lateral Row (Machine)** — highlight the latissimus dorsi. Include a plate-loaded row machine with two independent handles and a chest pad.
 > Top-right: **Iso-Lateral Low Row** — highlight the latissimus dorsi. Include a plate-loaded low row machine with a chest pad, handles pulled low toward the hips.
 > Bottom-left: **Deadlift** — highlight the erector spinae and hamstrings. Include a loaded barbell lifted from the floor, hips hinged, back flat.
 > Bottom-right: **Squat (Barbell)** — highlight the quadriceps. Include a barbell across the upper back and a squat rack behind, at the bottom of the squat.
 
-## Sheet 7 — legs
+## Sheet 4 — legs
 
 > Top-left: **Front Squat** — highlight the quadriceps. Include a barbell racked across the front deltoids with the elbows driven high.
 > Top-right: **Goblet Squat** — highlight the quadriceps. Include a single dumbbell held vertically against the chest with both hands.
 > Bottom-left: **Hack Squat (Machine)** — highlight the quadriceps. Include an angled hack squat machine with shoulder pads and a footplate.
 > Bottom-right: **Bulgarian Split Squat** — highlight the quadriceps. Include a bench with the rear foot elevated on it, and a dumbbell in each hand.
 
-## Sheet 8 — legs
+## Sheet 5 — legs
 
 > Top-left: **Assisted Pistol Squats** — highlight the quadriceps. Include a support strap or upright post held for balance, one leg extended straight forward.
 > Top-right: **Lunge (Barbell)** — highlight the quadriceps. Include a barbell across the upper back, in a deep forward lunge.
 > Bottom-left: **Reverse Lunge (Barbell)** — highlight the quadriceps. Include a barbell across the upper back, stepping backward into the lunge.
 > Bottom-right: **Walking Lunge** — highlight the quadriceps. Include a dumbbell in each hand, mid-stride in a forward lunge.
 
-## Sheet 9 — legs
+## Sheet 6 — legs
 
 > Top-left: **Leg Press** — highlight the quadriceps. Include a 45-degree leg press machine with a loaded sled and footplate.
 > Top-right: **Leg Press Horizontal (Machine)** — highlight the quadriceps. Include a seated horizontal leg press machine with a back pad and footplate.
 > Bottom-left: **Leg Extension** — highlight the quadriceps. Include a seated leg extension machine with an ankle pad, legs straightening.
 > Bottom-right: **Lying Leg Curl** — highlight the hamstrings. Include a lying leg curl machine, face down, ankle pad curled toward the glutes.
 
-## Sheet 10 — legs
+## Sheet 7 — legs
 
 > Top-left: **Seated Leg Curl** — highlight the hamstrings. Include a seated leg curl machine with a thigh pad and an ankle pad.
 > Top-right: **Romanian Deadlift** — highlight the hamstrings. Include a barbell held at arm's length, hips pushed back, knees only slightly bent.
 > Bottom-left: **Sumo Deadlift** — highlight the hamstrings and glutes. Include a loaded barbell, a wide stance, hands gripping inside the knees.
 > Bottom-right: **Hip Adduction (Machine)** — highlight the adductors on the inner thigh. Include a seated adduction machine with pads against the inner thighs, legs squeezing together.
 
-## Sheet 11 — shoulders
+## Sheet 8 — shoulders
 
 > Top-left: **Overhead Press** — highlight the deltoids. Include a barbell pressed overhead while standing.
 > Top-right: **Seated Overhead Press (Barbell)** — highlight the deltoids. Include a barbell and an upright bench with a back pad.
 > Bottom-left: **Seated Shoulder Press (Dumbbell)** — highlight the deltoids. Include two dumbbells pressed overhead on an upright bench.
 > Bottom-right: **Seated Shoulder Press (Machine)** — highlight the deltoids. Include a seated shoulder press machine with two overhead handles.
 
-## Sheet 12 — shoulders
+## Sheet 9 — shoulders
 
 > Top-left: **Shoulder Press (Machine Plates)** — highlight the deltoids. Include a plate-loaded shoulder press machine with weight plates visible on the horns.
 > Top-right: **Arnold Press (Dumbbell)** — highlight the deltoids. Include two dumbbells mid-press with the wrists rotating outward.
 > Bottom-left: **Landmine Press** — highlight the deltoids. Include a barbell anchored in a landmine at floor level, pressed forward and up with one arm.
 > Bottom-right: **Lateral Raise** — highlight the deltoids. Include two dumbbells raised out to the sides to shoulder height.
 
-## Sheet 13 — shoulders
+## Sheet 10 — shoulders
 
 > Top-left: **Seated Lateral Raise** — highlight the deltoids. Include two dumbbells raised to the sides, seated upright on a bench.
 > Top-right: **Rear Delt Fly** — highlight the rear deltoids. Include two dumbbells with the torso hinged forward and the arms sweeping wide.
 > Bottom-left: **Rear Delt Reverse Fly (Machine)** — highlight the rear deltoids. Include a reverse pec deck machine, chest against the pad, arms sweeping backward.
 > Bottom-right: **Face Pull** — highlight the rear deltoids. Include a high cable with a rope pulled toward the face, elbows high and wide.
 
-## Sheet 14 — shoulders, then arms
+## Sheet 11 — shoulders, then arms
 
 > Top-left: **Shrug** — highlight the trapezius. Include a barbell held at arm's length in front of the thighs, shoulders lifted straight up.
 > Top-right: **Curl (Barbell)** — highlight the biceps. Include a barbell curled to chest height while standing.
 > Bottom-left: **21s Bicep Curl** — highlight the biceps. Include a barbell stopped halfway through the curl, at the mid-range position.
 > Bottom-right: **Biceps Curl (EZ Bar)** — highlight the biceps. Include an EZ curl bar with its distinctive zigzag shape clearly visible.
 
-## Sheet 15 — arms
+## Sheet 12 — arms
 
 > Top-left: **Bicep Curl (Dumbbell)** — highlight the biceps. Include two dumbbells curled with palms facing up.
 > Top-right: **Hammer Curl** — highlight the biceps. Include two dumbbells held in a neutral grip, thumbs up, curled to the shoulders.
 > Bottom-left: **Concentration Curl** — highlight the biceps. Include one dumbbell, seated on a bench with the elbow braced against the inner thigh.
 > Bottom-right: **Preacher Curl** — highlight the biceps. Include a preacher bench with an angled arm pad and an EZ curl bar.
 
-## Sheet 16 — arms
+## Sheet 13 — arms
 
 > Top-left: **Seated Incline Curl (Dumbbell)** — highlight the biceps. Include two dumbbells and a reclined incline bench, arms hanging behind the body.
 > Top-right: **Curl (Cable)** — highlight the biceps. Include a low cable pulley with a straight bar attachment.
 > Bottom-left: **Behind the Back Curl (Cable)** — highlight the biceps. Include a low cable running behind the body, curled with one arm.
 > Bottom-right: **Reverse Curl (Barbell)** — highlight the biceps and forearms. Include a barbell held with an overhand grip, knuckles up.
 
-## Sheet 17 — arms
+## Sheet 14 — arms
 
 > Top-left: **Behind the Back Bicep Wrist Curl (Barbell)** — highlight the forearms. Include a barbell held behind the back at hip level, curled with the wrists only.
 > Top-right: **Triceps Pushdown** — highlight the triceps. Include a high cable with a straight bar pressed down to the thighs, elbows pinned to the sides.
 > Bottom-left: **Triceps Pushdown (Rope)** — highlight the triceps. Include a high cable with a rope attachment, the two ends pulled apart at the bottom.
 > Bottom-right: **Triceps Kickback (Cable)** — highlight the triceps. Include a low cable with a single handle, torso hinged forward, elbow held high.
 
-## Sheet 18 — arms
+## Sheet 15 — arms
 
 > Top-left: **Triceps Extension (Dumbbell)** — highlight the triceps. Include a dumbbell held overhead with both hands and lowered behind the head.
 > Top-right: **Single Arm Tricep Extension (Dumbbell)** — highlight the triceps. Include one dumbbell held overhead in a single hand, lowered behind the head.
 > Bottom-left: **Skullcrusher** — highlight the triceps. Include an EZ curl bar lowered toward the forehead while lying on a flat bench.
 > Bottom-right: **Close-Grip Bench Press** — highlight the triceps. Include a barbell gripped narrow, hands close together, on a flat bench.
 
-## Sheet 19 — arms, then core
+## Sheet 16 — arms, then core
 
 > Top-left: **Triceps Dip (Weighted)** — highlight the triceps. Include parallel dip bars and a weight plate hanging from a belt, torso upright.
 > Top-right: **Seated Dip (Machine)** — highlight the triceps. Include a seated dip machine with handles at the sides and a back pad.
 > Bottom-left: **Plank** — highlight the abdominals. No equipment — forearms on the floor, body held in one straight line.
 > Bottom-right: **Ab Wheel Rollout** — highlight the abdominals. Include an ab wheel, kneeling, extended forward near the floor.
 
-## Sheet 20 — core
+## Sheet 17 — core
 
 > Top-left: **Crunch (Cable)** — highlight the abdominals. Include a high cable with a rope held beside the head, kneeling, spine curled forward.
 > Top-right: **Decline Sit Up** — highlight the abdominals. Include a decline bench with foot rollers, torso curling upward.
 > Bottom-left: **Hanging Leg Raise** — highlight the abdominals. Include an overhead bar with the body hanging and the legs raised to horizontal.
 > Bottom-right: **Leg Raise Parallel Bars (Weighted)** — highlight the abdominals. Include a captain's chair with parallel arm pads and a back rest, legs raised, a weight held between the feet.
 
-## Sheet 21 — core, then glutes
+## Sheet 18 — core, then glutes
 
 > Top-left: **Russian Twist** — highlight the obliques. Include a weight plate held at the chest, seated on the floor, torso rotated to one side, feet lifted.
 > Top-right: **Hip Thrust** — highlight the glutes. Include a barbell across the hips with the upper back braced against a flat bench.
 > Bottom-left: **Glute Kickback (Machine)** — highlight the glutes. Include a glute kickback machine with a footplate, one leg driving backward.
 > Bottom-right: **Pull Through (Cable)** — highlight the glutes. Include a low cable with a rope passed between the legs, hips hinged then driven forward.
 
-## Sheet 22 — glutes and lower back
+## Sheet 19 — glutes and lower back
 
 > Top-left: **Swing (Kettlebell)** — highlight the glutes and hamstrings. Include a kettlebell swung forward to chest height on straight arms.
 > Top-right: **Hip Abduction (Machine)** — highlight the gluteus medius on the outer hip. Include a seated abduction machine with pads against the outer thighs, knees pressing apart.
 > Bottom-left: **Back Extension** — highlight the erector spinae. Include a 45-degree back extension bench with hip and ankle pads.
 > Bottom-right: **Standing Calf Raise** — highlight the calves. Include a standing calf raise machine with shoulder pads and a raised footplate, heels dropped below the toes.
 
-## Sheet 23 — calves
+## Sheet 20 — calves
 
 > Top-left: **Seated Calf Raise** — highlight the calves. Include a seated calf raise machine with pads across the thighs and the toes on a block.
 > Top-right: **Calf Extension (Machine)** — highlight the calves. Include a calf machine with a footplate, rising onto the toes.
 > Bottom-left: **Calf Press (Machine)** — highlight the calves. Include a leg press sled with only the toes on the bottom edge of the footplate, legs straight.
 > Bottom-right: **Single Leg Standing Calf Raise (Dumbbell)** — highlight the calves. Include one dumbbell held at the side, one foot on a raised step, the other leg lifted.
 
-## Sheet 24 — cardio (three only)
+## Sheet 21 — cardio (three only)
 
 Send this one as a **3 × 1 horizontal strip**, not a 2 × 2, and say so — there is
 no fourth exercise and an empty quadrant tends to get filled with an invention.
@@ -253,6 +238,10 @@ node tools/art.mjs single <image.png> <slug>
 
 Slugs are given without the `.png`. Nothing is written outside
 `docs/img/exercises/`.
+
+Gemini draws a light rule between the quadrants whatever the prompt says — it has
+been 8px, 10px, 12px and 20px across four sheets so far. The slicer measures it
+per sheet and trims it, so there is no need to keep asking for no dividers.
 
 ---
 
