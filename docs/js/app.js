@@ -17,7 +17,7 @@ import * as scanner from './scanner.js';
 import * as photo from './photo.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
-import { muscleMap } from './muscle-map.js';
+import { muscleMap, exerciseArt } from './muscle-map.js';
 import * as stats from './stats.js';
 import * as push from './push.js';
 
@@ -2518,7 +2518,7 @@ Alpine.data('trainPage', () => ({
   // demonstration. Consistent, offline, and no licence attached.
 
   muscleMap(exerciseId, name) {
-    return muscleMap(this.exerciseById(exerciseId), name);
+    return exerciseArt(this.exerciseById(exerciseId), name);
   },
 
   /** Front and back together, for the detail sheet. */
@@ -2582,7 +2582,7 @@ Alpine.data('trainPage', () => ({
   exerciseById(id) { return this.data.exercises.find((e) => e.id === id) ?? null; },
 
   muscleMap(exerciseId, name) {
-    return muscleMap(this.exerciseById(exerciseId), name);
+    return exerciseArt(this.exerciseById(exerciseId), name);
   },
 
   /** Front and back together, for the detail sheet. */

@@ -238,6 +238,35 @@ function figure(view, litKey) {
  * @param {string} name   fallback name when the exercise row is missing
  * @param {object} [opts] { both: render front and back side by side }
  */
+/**
+ * The filename an exercise's drawing would have.
+ *
+ * Derived from the name rather than stored, so dropping a PNG into
+ * docs/img/exercises/ is the whole install step — no upload, no database write,
+ * nothing to keep in sync.
+ */
+export function artSlug(name) {
+  return String(name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+/**
+ * A drawing if one exists, the figure if not.
+ *
+ * Both are rendered and the image sits on top; if the file 404s it removes
+ * itself and the figure underneath shows through. That avoids asking the server
+ * whether 111 files exist to answer a question a failed load answers for free,
+ * and avoids escaping a whole SVG into an onerror attribute, which is where the
+ * first attempt at this went wrong.
+ */
+export function exerciseArt(exercise, name = '') {
+  const slug = artSlug(exercise?.name || name);
+  const figure = muscleMap(exercise, name);
+  if (!slug) return figure;
+
+  return `${figure}<img class="art" alt="" loading="lazy"`
+    + ` src="/img/exercises/${slug}.png" onerror="this.remove()">`;
+}
+
 export function muscleMap(exercise, name = '', { both: pair = false } = {}) {
   const key = muscleFor(exercise, name);
   const view = key ? MUSCLES[key].view : 'front';

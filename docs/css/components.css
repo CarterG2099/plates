@@ -458,3 +458,16 @@
 }
 
 .btn.is-busy { opacity: .6; }
+
+/* The generated drawing, laid over the figure it replaces. If the file isn't
+   there the <img> removes itself and the figure underneath is what shows. */
+.thumb, .figure { position: relative; }
+
+.art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+}

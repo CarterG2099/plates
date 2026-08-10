@@ -102,3 +102,38 @@ test('mealTotals treats missing macros as zero rather than poisoning the sum', (
   assert.equal(totals.calories, 150);
   assert.equal(Object.values(totals).every(Number.isFinite), true);
 });
+
+// ---- generated art ---------------------------------------------------------
+
+test('artSlug matches the filenames in exercise-art.md', () => {
+  assert.equal(mm.artSlug('Bench Press (Barbell)'), 'bench-press-barbell');
+  assert.equal(mm.artSlug('Lat Pulldown - Close Grip (Cable)'), 'lat-pulldown-close-grip-cable');
+  assert.equal(mm.artSlug('T Bar Row'), 't-bar-row');
+  assert.equal(mm.artSlug('21s Bicep Curl'), '21s-bicep-curl');
+  assert.equal(mm.artSlug('Chin-Up'), 'chin-up');
+});
+
+test('artSlug never leaves a leading or trailing separator', () => {
+  assert.equal(mm.artSlug('  Squat (Barbell)  '), 'squat-barbell');
+  assert.equal(mm.artSlug('!!!'), '');
+  assert.equal(mm.artSlug(''), '');
+  assert.equal(mm.artSlug(null), '');
+});
+
+test('exerciseArt renders the figure and layers the image over it', () => {
+  const html = mm.exerciseArt(null, 'Bench Press (Barbell)');
+  assert.match(html, /<svg/, 'the figure must be present as the fallback');
+  assert.match(html, /src="\/img\/exercises\/bench-press-barbell\.png"/);
+  assert.match(html, /onerror="this\.remove\(\)"/, 'a missing file must fall back, not 404 visibly');
+});
+
+test('exerciseArt falls back to the figure alone when there is no name', () => {
+  const html = mm.exerciseArt(null, '');
+  assert.match(html, /<svg/);
+  assert.equal(html.includes('<img'), false);
+});
+
+test('exerciseArt prefers the exercise row name over the passed name', () => {
+  const html = mm.exerciseArt({ name: 'Squat (Barbell)' }, 'ignored');
+  assert.match(html, /squat-barbell\.png/);
+});
