@@ -950,6 +950,8 @@ Alpine.data('logPage', () => ({
   get email() { return Alpine.store('auth').email; },
   get data() { return snapshot(); },
 
+  amountLabel(quantity, unit) { return food.amountLabel(quantity, unit); },
+
   get ranked() {
     return food.rankFoods(this.data.foods, this.data.log, this.email);
   },

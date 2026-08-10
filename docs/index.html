@@ -398,7 +398,7 @@
                   <b><span x-text="item.name"></span><span
                     class="brand" x-show="item.brand" x-text="` (${item.brand})`"></span></b>
                   <small>
-                    <span x-text="item.lastQuantity ?? item.default_qty ?? item.serving_qty"></span><span x-text="item.serving_unit === 'serving' ? ' serving' : item.serving_unit"></span>
+                    <span x-text="amountLabel(item.lastQuantity ?? item.default_qty ?? item.serving_qty, item.serving_unit)"></span>
                     <span x-show="item.calories !== null"> · <span x-text="Math.round(item.calories)"></span> kcal</span>
                   </small>
                 </button>
@@ -539,10 +539,7 @@
                   <div class="row">
                     <div class="row-text">
                       <b x-text="item.name || 'Removed food'"></b>
-                      <small>
-                        <span x-text="item.quantity"></span><span
-                          x-text="item.unit === 'serving' ? ' serving' : item.unit"></span>
-                      </small>
+                      <small x-text="amountLabel(item.quantity, item.unit)"></small>
                     </div>
                     <button class="tap" @click="stepIngredient(i, -1)"
                             :aria-label="`Less ${item.name}`">−</button>
@@ -582,10 +579,7 @@
                         <div class="row-text">
                           <b><span x-text="choice.name"></span><span
                             class="brand" x-show="choice.brand" x-text="` (${choice.brand})`"></span></b>
-                          <small>
-                            <span x-text="choice.default_qty ?? choice.serving_qty"></span><span
-                              x-text="choice.serving_unit === 'serving' ? ' serving' : choice.serving_unit"></span>
-                          </small>
+                          <small x-text="amountLabel(choice.default_qty ?? choice.serving_qty, choice.serving_unit)"></small>
                         </div>
                         <span class="tap">+</span>
                       </button>
