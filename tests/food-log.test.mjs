@@ -1,0 +1,191 @@
+/**
+ * food.js — the write path and the amount label.
+ *
+ * Separate from food.test.mjs, which covers the pure helpers. These go through
+ * the real local.js into the in-memory IndexedDB, so the snapshot rule is tested
+ * end to end rather than as arithmetic.
+ */
+
+import { test, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { installBrowser } from './helpers/browser.mjs';
+
+installBrowser();
+
+const local = await import('../docs/js/local.js');
+const food = await import('../docs/js/food.js');
+
+const ME = 'me@example.com';
+beforeEach(() => local.wipe());
+
+const OATS = {
+  id: 'f-oats', name: 'Oats', brand: 'Quaker',
+  serving_qty: 1, serving_unit: 'serving',
+  calories: 150, protein_g: 5, carbs_g: 27, fat_g: 3, fiber_g: 4, sodium_mg: 0,
+};
+
+// ---- amountLabel -------------------------------------------------------------
+// The reported bug was "1serving". `serving` is the only unit that reads as a
+// word, so it is the only one that takes a space and a plural.
+
+test('one serving keeps its space', () => {
+  assert.equal(food.amountLabel(1, 'serving'), '1 serving');
+});
+
+test('anything but one is plural', () => {
+  assert.equal(food.amountLabel(2, 'serving'), '2 servings');
+  assert.equal(food.amountLabel(0.5, 'serving'), '0.5 servings');
+  assert.equal(food.amountLabel(1.5, 'serving'), '1.5 servings');
+  assert.equal(food.amountLabel(0, 'serving'), '0 servings');
+});
+
+test('symbol units stay tight against the number and never pluralise', () => {
+  assert.equal(food.amountLabel(170, 'g'), '170g');
+  assert.equal(food.amountLabel(1, 'g'), '1g');
+  assert.equal(food.amountLabel(2, 'ml'), '2ml');
+  assert.equal(food.amountLabel(1, 'fl oz'), '1fl oz');
+});
+
+test('a missing quantity reads as zero rather than NaN', () => {
+  assert.equal(food.amountLabel(undefined, 'serving'), '0 servings');
+  assert.equal(food.amountLabel(null, 'g'), '0g');
+  assert.equal(food.amountLabel('', 'serving'), '0 servings');
+});
+
+// ---- scaleEntry ---------------------------------------------------------------
+
+const ENTRY = {
+  id: 'e1', owner_email: ME, quantity: 1, unit: 'serving',
+  calories: 150, protein_g: 12, carbs_g: 24, fat_g: 2.5, fiber_g: 3, sodium_mg: 190,
+};
+
+test('an edited amount rescales the entry proportionally', () => {
+  assert.deepEqual(food.scaleEntry(ENTRY, 2), {
+    calories: 300, protein_g: 24, carbs_g: 48, fat_g: 5, fiber_g: 6, sodium_mg: 380,
+  });
+  assert.equal(food.scaleEntry(ENTRY, 0.5).calories, 75);
+  assert.equal(food.scaleEntry(ENTRY, 1).calories, 150, 'no change is a no-op');
+});
+
+test('the entry\'s own snapshot is the basis, never the food behind it', () => {
+  // This is what makes keeping food_id safe. If scaleEntry ever consults the
+  // food while the snapshot is usable, editing a food rewrites what you ate.
+  const rewritten = { serving_qty: 1, calories: 9999, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sodium_mg: 0 };
+  assert.equal(food.scaleEntry(ENTRY, 2, rewritten).calories, 300);
+});
+
+test('a macro nobody recorded stays null rather than becoming a hard zero', () => {
+  // Number(null) is 0 and passes Number.isFinite, which is exactly how this
+  // went wrong: "not recorded" silently became "none".
+  assert.equal(food.scaleEntry({ ...ENTRY, fiber_g: null }, 2).fiber_g, null);
+  assert.equal(food.scaleEntry({ ...ENTRY, sodium_mg: undefined }, 2).sodium_mg, null);
+  assert.equal(food.scaleEntry({ ...ENTRY, fiber_g: null }, 2).calories, 300, 'the rest still scale');
+});
+
+test('a zero-quantity entry leaves no ratio, so the food is the only basis left', () => {
+  const zeroed = { ...ENTRY, quantity: 0 };
+  const backing = { serving_qty: 1, calories: 100, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sodium_mg: 0 };
+
+  assert.equal(food.scaleEntry(zeroed, 2, backing).calories, 200);
+  assert.deepEqual(food.scaleEntry(zeroed, 2), food.emptyTotals(), 'and zeros when the food is gone too');
+});
+
+// ---- logging, editing, deleting -------------------------------------------------
+
+test('logging snapshots the scaled macros and a readable description', async () => {
+  const entry = await food.logFood({ food: OATS, quantity: 2, ownerEmail: ME, date: new Date() });
+
+  assert.equal(entry.description, 'Oats · Quaker');
+  assert.equal(entry.food_id, 'f-oats', 'provenance only');
+  assert.equal(entry.calories, 300, 'frozen at log time');
+  assert.equal(entry.unit, 'serving');
+});
+
+test('a food with no brand still gets a description', async () => {
+  const entry = await food.logFood({
+    food: { ...OATS, brand: null }, quantity: 1, ownerEmail: ME, date: new Date(),
+  });
+  assert.equal(entry.description, 'Oats');
+});
+
+test('editing an amount updates the row in place and keeps its unit', async () => {
+  const entry = await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: new Date() });
+  const edited = await food.updateEntry({ entry, quantity: 1.18 });
+
+  assert.equal(edited.id, entry.id, 'the same row, not a second one');
+  assert.equal(edited.unit, 'serving', 'grams are a display lens; the stored unit never changes');
+  assert.equal(edited.quantity, 1.18);
+  assert.equal(edited.calories, 177);
+  assert.equal((await local.all('food_log')).length, 1);
+});
+
+test('editing an amount cannot pull in a food edited since', async () => {
+  const entry = await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: new Date() });
+  const rewritten = { ...OATS, calories: 9999 };
+
+  const edited = await food.updateEntry({ entry, quantity: 2, food: rewritten });
+  assert.equal(edited.calories, 300);
+});
+
+test('deleting an entry tombstones it and drops it from the day', async () => {
+  const entry = await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: new Date() });
+  await food.deleteEntry(entry.id);
+
+  const raw = await local.allRaw('food_log');
+  assert.equal(raw.length, 1, 'kept so the delete can propagate');
+  assert.equal(food.entriesForDay(raw, ME, new Date()).length, 0);
+});
+
+// ---- meal prep --------------------------------------------------------------------
+
+test('copying a day forward writes new rows carrying the snapshot', async () => {
+  const from = new Date('2026-08-10T12:00:00');
+  const to = new Date('2026-08-11T12:00:00');
+  await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: from });
+
+  const log = await local.all('food_log');
+  const created = await food.copyDay({ log, ownerEmail: ME, from, targets: [to] });
+
+  assert.equal(created.length, 1);
+  assert.equal(created[0].calories, 150, 'the copy carries the macros, not a reference');
+  assert.notEqual(created[0].id, log[0].id);
+  assert.equal(food.entriesForDay(await local.all('food_log'), ME, to).length, 1);
+});
+
+test('copying forward covers every target day', async () => {
+  const from = new Date('2026-08-10T12:00:00');
+  await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: from });
+
+  const created = await food.copyDay({
+    log: await local.all('food_log'),
+    ownerEmail: ME,
+    from,
+    targets: [food.addDays(from, 1), food.addDays(from, 2), food.addDays(from, 3)],
+  });
+  assert.equal(created.length, 3);
+});
+
+test('a template captures a day and replays it onto another', async () => {
+  const day = new Date('2026-08-10T12:00:00');
+  const later = new Date('2026-08-12T12:00:00');
+  await food.logFood({ food: OATS, quantity: 3, ownerEmail: ME, date: day });
+
+  const template = await food.saveDayTemplate({
+    name: 'Cut day A', log: await local.all('food_log'), ownerEmail: ME, date: day,
+  });
+  assert.equal(template.items.length, 1);
+  assert.equal(template.name, 'Cut day A');
+
+  await food.applyDayTemplate({ template, ownerEmail: ME, date: later });
+  const replayed = food.entriesForDay(await local.all('food_log'), ME, later);
+
+  assert.equal(replayed.length, 1);
+  assert.equal(replayed[0].calories, 450, 'the amount travels with the template');
+});
+
+test('applying an empty template is a no-op rather than a throw', async () => {
+  const created = await food.applyDayTemplate({
+    template: { name: 'Empty', items: [] }, ownerEmail: ME, date: new Date(),
+  });
+  assert.deepEqual(created, []);
+});

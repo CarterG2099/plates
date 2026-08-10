@@ -73,8 +73,27 @@ The repo being public is fine and expected; a missing RLS policy is not.
 
 ## Commands
 
-No build, test, or lint tooling yet. Static files are served directly; deploys
-are a push to the GitHub Pages branch.
+```
+node --test "tests/**/*.test.mjs"
+```
+
+No build and no lint tooling. Static files are served directly; deploys are a
+push to the GitHub Pages branch.
+
+Tests use Node's built-in runner — no npm packages, no `node_modules`, no
+`package.json`, nothing to install. That is deliberate: a test suite is not a
+good reason to acquire a build step.
+
+`tests/helpers/browser.mjs` supplies the handful of browser globals the app
+modules touch at import (`window.supabase`, `navigator`, `document`,
+`localStorage`) plus an in-memory IndexedDB, so `docs/js/*` runs **unmodified**
+under test. Writes go through the real `local.js`, which is the point — the
+outbox, the tombstones and the client-generated ids are the local-first
+guarantees, and stubbing that module out would test none of them.
+
+A fix ships with the test that fails without it. Two of this suite's tests exist
+because the bug reached production first: reps being reverted by a stale copy on
+the checkmark, and a null macro quietly becoming zero.
 
 ## Related
 
