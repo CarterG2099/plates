@@ -53,7 +53,11 @@
 <div class="app" x-data :class="$store.ui.logOpen && 'has-panel'">
 
   <!-- Booting ------------------------------------------------------------- -->
-  <template x-if="!$store.auth.ready">
+  <!-- Held until the local read finishes too, not just auth. Painting the shell
+       first and filling it 60ms later moved the whole page down as the rows
+       arrived — a 0.17 layout shift to save an interval nobody can perceive.
+       The local read is ~4ms of IndexedDB, so this waits on almost nothing. -->
+  <template x-if="!$store.auth.ready || ($store.auth.isMember && !$store.data.ready)">
     <div class="screen-centered">
       <div class="spinner" role="status" aria-label="Loading"></div>
     </div>
@@ -83,7 +87,7 @@
   </template>
 
   <!-- The app ------------------------------------------------------------- -->
-  <template x-if="$store.auth.ready && $store.auth.isMember">
+  <template x-if="$store.auth.ready && $store.auth.isMember && $store.data.ready">
     <div style="display: contents;">
 
       <header class="app-bar">
