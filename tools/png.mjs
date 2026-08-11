@@ -126,6 +126,33 @@ export function crop(img, x, y, w, h) {
   return { width: w, height: h, channels: img.channels, data: out };
 }
 
+/**
+ * Grow the shorter side so the image is square, centring what is there.
+ *
+ * `resize` scales width and height independently, so handing it a portrait crop
+ * would stretch the figure sideways. Sheets whose cells are not square — the
+ * ones Gemini returns as 16:9 with the exercises laid out freely — go through
+ * here first. The fill is sampled from a corner, so the padding is the same
+ * charcoal as the drawing's own background and the seam is invisible.
+ */
+export function padToSquare(img) {
+  const { width, height, channels, data } = img;
+  if (width === height) return img;
+
+  const size = Math.max(width, height);
+  const out = Buffer.alloc(size * size * channels);
+  const corner = data.subarray(0, channels);
+  for (let i = 0; i < size * size; i++) corner.copy(out, i * channels);
+
+  const dx = Math.floor((size - width) / 2);
+  const dy = Math.floor((size - height) / 2);
+  for (let y = 0; y < height; y++) {
+    const from = y * width * channels;
+    data.copy(out, ((y + dy) * size + dx) * channels, from, from + width * channels);
+  }
+  return { width: size, height: size, channels, data: out };
+}
+
 /** Box-filter downscale. Averaging beats nearest-neighbour on flat art edges. */
 export function resize(img, size) {
   const { width, height, channels } = img;

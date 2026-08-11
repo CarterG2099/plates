@@ -14,12 +14,18 @@
 //   node tools/art.mjs sheet <image> <tl> <tr> <bl> <br>
 //   node tools/art.mjs sheet <image> --cols 3 <left> <middle> <right>
 //   node tools/art.mjs single <image> <slug>
+//   node tools/art.mjs region <image> <slug> <x> <y> <w> <h>
+//
+// `region` is the escape hatch for a sheet that came back malformed — Gemini
+// sometimes ignores the grid and lays the exercises out freely on a 16:9 canvas,
+// or draws two per quadrant. Cutting one figure out by hand beats discarding
+// four good drawings.
 //
 // Slugs are given without the .png. Nothing is written outside docs/img/exercises.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decode, encode, crop, resize } from './png.mjs';
+import { decode, encode, crop, resize, padToSquare } from './png.mjs';
 
 // 512 covers the largest place a drawing renders (about 150px) on a 3× display.
 // The list thumbnail is 44px, so this is already generous.
@@ -71,7 +77,7 @@ function write(image, slug) {
   if (!/^[a-z0-9-]+$/.test(slug)) die(`"${slug}" is not a slug — lowercase, digits and hyphens only.`);
   const file = path.join(OUT_DIR, `${slug}.png`);
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(file, encode(resize(image, SIZE)));
+  fs.writeFileSync(file, encode(resize(padToSquare(image), SIZE)));
   console.log(`${path.relative(ROOT, file)}  ${(fs.statSync(file).size / 1024).toFixed(0)}kB`);
 }
 
@@ -120,6 +126,16 @@ if (command === 'single') {
     // the same framing as its neighbours.
     write(crop(source, col * cellW + pad, row * cellH + pad, cellW - pad * 2, cellH - pad * 2), slug);
   });
+} else if (command === 'region') {
+  const [slug, ...box] = rest;
+  const [x, y, w, h] = box.map(Number);
+  if (box.length !== 4 || [x, y, w, h].some((n) => !Number.isInteger(n))) {
+    die('region takes a slug then four integers: x y w h');
+  }
+  if (x < 0 || y < 0 || x + w > source.width || y + h > source.height) {
+    die(`region ${x},${y} ${w}×${h} falls outside the ${source.width}×${source.height} image`);
+  }
+  write(crop(source, x, y, w, h), slug);
 } else {
-  die(`unknown command "${command}" — expected sheet or single`);
+  die(`unknown command "${command}" — expected sheet, single or region`);
 }
