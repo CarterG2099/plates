@@ -45,6 +45,12 @@ sheets in any order; each one is identified by what it depicts.
 > top-left, top-right, bottom-left, bottom-right, and you must place them in
 > exactly that order.
 >
+> **Three rules about the sheet that matter more than anything else:**
+> 1. The image must be **square** — equal width and height. Never widescreen.
+> 2. Exactly **four** figures, never more. Do not draw a second view, a variation,
+>    or an extra angle of any exercise.
+> 3. One figure per quadrant, and no figure may cross a quadrant boundary.
+>
 > **The test that matters:** each quadrant will be displayed at 44 × 44 pixels.
 > Shapes must be bold and well separated. Anything thin, fussy or fine-detailed
 > disappears at that size, so simplify aggressively.
