@@ -656,3 +656,56 @@ test('going back to an exercise you replaced away from puts it back in the plan'
   assert.ok(row, 'back in the plan');
   assert.equal(row.target_weight_lb, 145, 'at the weight you came back with');
 });
+
+// ---- looking at somebody else's training ------------------------------------
+// RLS already allows this both ways (can_read honours share_grants), so the
+// other person's sessions are in IndexedDB alongside yours. Everything that
+// reads them has to stay owner-scoped on purpose.
+
+const AANA = 'aana@example.com';
+
+test('recentSessions returns one person at a time', async () => {
+  const sessions = [
+    { id: 'a1', owner_email: ME, started_at: '2026-08-09T10:00:00Z', ended_at: '2026-08-09T11:00:00Z' },
+    { id: 'a2', owner_email: ME, started_at: '2026-08-10T10:00:00Z', ended_at: '2026-08-10T11:00:00Z' },
+    { id: 'b1', owner_email: AANA, started_at: '2026-08-10T12:00:00Z', ended_at: '2026-08-10T13:00:00Z' },
+  ];
+
+  assert.deepEqual(workout.recentSessions(sessions, ME).map((s) => s.id), ['a2', 'a1'],
+    'newest first, mine only');
+  assert.deepEqual(workout.recentSessions(sessions, AANA).map((s) => s.id), ['b1']);
+});
+
+test('an unfinished session is nobody\'s history', async () => {
+  const sessions = [
+    { id: 'open', owner_email: AANA, started_at: '2026-08-10T12:00:00Z', ended_at: null },
+    { id: 'gone', owner_email: AANA, started_at: '2026-08-09T12:00:00Z', ended_at: '2026-08-09T13:00:00Z', deleted_at: 'x' },
+  ];
+  assert.deepEqual(workout.recentSessions(sessions, AANA), []);
+});
+
+test('the set index reads another owner\'s session, but priors stay mine', async () => {
+  // bySession is deliberately not owner-filtered, so her session can be opened
+  // and summarised. sessionById is, so her lifts never reach my prefill or PRs.
+  const sets = [
+    { id: 'm1', owner_email: ME, session_id: 'mine', set_index: 0, exercise_id: 'bp',
+      exercise_name: 'Bench', weight_lb: 185, reps: 5, is_warmup: false, completed_at: 'T' },
+    { id: 'h1', owner_email: AANA, session_id: 'hers', set_index: 0, exercise_id: 'bp',
+      exercise_name: 'Bench', weight_lb: 95, reps: 8, is_warmup: false, completed_at: 'T' },
+  ];
+  const sessions = [
+    { id: 'mine', owner_email: ME, started_at: '2026-08-01T10:00:00Z', ended_at: '2026-08-01T11:00:00Z' },
+    { id: 'hers', owner_email: AANA, started_at: '2026-08-02T10:00:00Z', ended_at: '2026-08-02T11:00:00Z' },
+  ];
+
+  const index = workout.buildIndex(sets, sessions, ME);
+
+  assert.equal(workout.setsOf(index, 'hers').length, 1, 'her session can still be read back');
+  assert.equal(index.volumeBySession.get('hers'), 760, 'and summarised');
+
+  assert.deepEqual(index.owned.map((s) => s.id), ['mine'], 'owned is me only');
+
+  const prior = workout.priorForm(index, null);
+  assert.equal(prior.get('bp').best.weight_lb, 185,
+    'her 95 lb bench must not become my last-performance prefill');
+});

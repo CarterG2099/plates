@@ -934,8 +934,18 @@
             </div>
 
             <!-- Past sessions ------------------------------------------------ -->
-            <div x-show="history.length">
+            <div>
               <div class="section-head"><span>History</span></div>
+
+              <!-- Only worth a switch when there is somebody else to switch to. -->
+              <div class="chips" x-show="trainingPeople.length > 1"
+                   style="margin-bottom: var(--space-3)">
+                <template x-for="p in trainingPeople" :key="p.email">
+                  <button class="chip" :class="viewingOwner === p.email && 'is-active'"
+                          @click="historyOwner = p.email" x-text="p.name"></button>
+                </template>
+              </div>
+
               <div class="rows">
                 <template x-for="s in history" :key="s.id">
                   <button class="row" @click="openSession(s)">
@@ -947,6 +957,10 @@
                   </button>
                 </template>
               </div>
+
+              <p class="empty" x-show="!history.length"
+                 x-text="viewingSelf ? 'No finished workouts yet.'
+                   : 'Nothing logged here yet.'"></p>
             </div>
           </div>
         </template>
@@ -962,21 +976,33 @@
               </div>
 
               <div class="chips">
+                <span class="chip" x-show="!pastIsMine" x-text="pastOwnerName"></span>
                 <span class="chip" x-text="sessionDate(past)"></span>
                 <span class="chip" x-show="sessionLength(past)" x-text="sessionLength(past)"></span>
                 <span class="chip" x-text="sessionSummary(past)"></span>
               </div>
 
+              <!-- Tappable only on your own workout. The exercise-history sheet
+                   is built from your sessions, so offering it here would answer
+                   a question nobody asked with somebody else's numbers. -->
               <div class="rows">
                 <template x-for="group in pastGroups" :key="group.key">
-                  <button class="row" @click="openExercise(group.exerciseId, group.name)">
+                  <div class="row">
                     <span class="thumb" x-html="muscleMap(group.exerciseId, group.name)"></span>
-                    <div class="row-text">
-                      <b x-text="group.name"></b>
-                      <small x-text="groupLine(group)"></small>
-                    </div>
-                    <span class="tap">›</span>
-                  </button>
+                    <template x-if="pastIsMine">
+                      <button class="row-text" @click="openExercise(group.exerciseId, group.name)">
+                        <b x-text="group.name"></b>
+                        <small x-text="groupLine(group)"></small>
+                      </button>
+                    </template>
+                    <template x-if="!pastIsMine">
+                      <div class="row-text">
+                        <b x-text="group.name"></b>
+                        <small x-text="groupLine(group)"></small>
+                      </div>
+                    </template>
+                    <span class="tap" x-show="pastIsMine">›</span>
+                  </div>
                 </template>
               </div>
 

@@ -1887,7 +1887,8 @@ Alpine.data('trainPage', () => ({
   get sets() { return this.session ? workout.setsOf(this.data.index, this.session.id) : []; },
   get groups() { return workout.groupByExercise(this.sets); },
   get routines() { return workout.routinesFor(this.data.routines, this.email); },
-  get history() { return workout.recentSessions(this.data.sessions, this.email); },
+  // `history` lives with the past-session code below, since it depends on
+  // historyOwner rather than always meaning "mine".
 
   get elapsed() {
     this.tick;   // read so Alpine re-evaluates each second
@@ -2306,11 +2307,48 @@ Alpine.data('trainPage', () => ({
   },
 
   // ---- past sessions -------------------------------------------------------
+  //
+  // Whose history you are looking at. RLS already allows this both ways — the
+  // policies on sessions and session_sets are can_read(), which honours
+  // share_grants — so the other person's sessions are already in IndexedDB. All
+  // that was missing was somewhere to look at them.
 
-  past: null,   // a finished session being read back
+  past: null,        // a finished session being read back
+  historyOwner: '',  // '' means you; set from the chips below
+
+  /** You first, then anyone whose training you can see. */
+  get trainingPeople() {
+    const me = this.email;
+    const label = (m) => m.display_name || (m.email ?? '').split('@')[0];
+
+    return [
+      { email: me, name: 'You' },
+      ...Alpine.store('auth').members
+        .filter((m) => m.email && m.email.toLowerCase() !== me.toLowerCase())
+        .map((m) => ({ email: m.email, name: label(m) })),
+    ];
+  },
+
+  get viewingOwner() { return this.historyOwner || this.email; },
+  get viewingSelf() { return this.viewingOwner.toLowerCase() === this.email.toLowerCase(); },
+
+  get history() {
+    return workout.recentSessions(this.data.sessions, this.viewingOwner, 20);
+  },
 
   openSession(session) { this.past = session; },
   closeSession() { this.past = null; },
+
+  get pastIsMine() {
+    return (this.past?.owner_email ?? '').toLowerCase() === this.email.toLowerCase();
+  },
+
+  get pastOwnerName() {
+    const person = this.trainingPeople.find(
+      (p) => p.email.toLowerCase() === (this.past?.owner_email ?? '').toLowerCase(),
+    );
+    return person?.name ?? this.past?.owner_email ?? '';
+  },
 
   get pastGroups() {
     if (!this.past) return [];
