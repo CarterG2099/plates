@@ -1115,7 +1115,8 @@
                            set — the value bindings on the same row updated while
                            the class did not, which is the tick appearing to lag
                            behind the numbers. -->
-                      <div class="setrow" :class="rowClasses(set, group)">
+                      <div class="setrow" :class="{ done: !!currentSet(set).completed_at,
+                                        record: isRecord(currentSet(set), group) }">
                         <span class="idx" :class="{ warm: set.is_warmup }" x-text="set.is_warmup ? 'W' : i + 1"></span>
                         <!-- What this set was last time, so you can see the whole
                              progression without opening the history sheet. -->
@@ -1124,17 +1125,17 @@
                              an empty box with a grey suggestion is a box you can
                              tap and type into without clearing anything first. -->
                         <input class="cell num" type="number" inputmode="decimal" step="any"
-                               :value="cellValue(set, 'weight_lb')"
+                               :value="currentSet(set).weight_lb ?? ''"
                                :placeholder="placeholderWeight(group, i)"
                                @change="edit(set, 'weight_lb', $event.target.value)"
                                aria-label="Weight in pounds">
                         <input class="cell num" type="number" inputmode="numeric"
-                               :value="cellValue(set, 'reps')"
+                               :value="currentSet(set).reps ?? ''"
                                :placeholder="placeholderReps(group, i)"
                                @change="edit(set, 'reps', $event.target.value)"
                                aria-label="Reps">
                         <button class="check" @click="toggleDone(set, placeholderFor(group, i))"
-                                :aria-label="live(set).completed_at ? 'Mark set incomplete' : 'Mark set done'"
+                                :aria-label="currentSet(set).completed_at ? 'Mark set incomplete' : 'Mark set done'"
                         >✓</button>
                       </div>
                     </div>

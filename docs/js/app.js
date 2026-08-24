@@ -1911,36 +1911,6 @@ Alpine.data('trainPage', () => ({
     }));
   },
 
-  /**
-   * The row as the store has it now, keyed off the set the template is holding.
-   *
-   * Every binding on a set row must go through this. The x-for scope's `set` is a
-   * plain object out of the unproxied `raw` store, so a binding that reads it
-   * directly — `set.completed_at` — registers no reactive dependency and its
-   * effect never runs a second time. Alpine does not refresh the scope either,
-   * because the :key has not changed. Measured: an in-memory patchSet never
-   * repainted, not once in forty frames, and the tick only caught up when an
-   * unrelated full refresh happened ~450 ms later.
-   *
-   * Reading through `this.data` puts trainVersion in the effect's dependencies,
-   * which is what makes patchSet's bump actually mean something.
-   */
-  live(set) {
-    return this.sets.find((s) => s.id === set.id) ?? set;
-  },
-
-  /** Classes for a set row, off the live row rather than the captured one. */
-  rowClasses(set, group) {
-    const row = this.live(set);
-    return { done: Boolean(row.completed_at), record: this.isRecord(row, group) };
-  },
-
-  /** A cell's value, likewise. Empty string so the placeholder shows through. */
-  cellValue(set, field) {
-    const value = this.live(set)[field];
-    return value == null ? '' : value;
-  },
-
   /** The greyed number in a row: that set last time, else the last one there was. */
   placeholderFor(group, index) {
     const previous = group.previous ?? [];
