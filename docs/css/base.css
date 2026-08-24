@@ -9,6 +9,13 @@ html, body {
   overscroll-behavior-y: none;   /* no rubber-band on a logging screen */
 }
 
+/* Reserved whether or not the page currently scrolls. An open sheet locks the
+   page behind it (see html:has(.sheet-backdrop) in pages.css), which takes the
+   scrollbar away and widens the viewport by its width — shifting every
+   right-aligned thing sideways, in plain view through a backdrop that is only
+   60% opaque. Reserving the gutter permanently means nothing moves either way. */
+html { scrollbar-gutter: stable; }
+
 body {
   background: var(--color-bg);
   color: var(--color-text);

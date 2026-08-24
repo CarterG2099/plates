@@ -106,6 +106,9 @@
   z-index: 15;
   background: var(--color-bg);
   overflow-y: auto;
+  /* Covers the screen, so a chained scroll would move Today invisibly and leave
+     you somewhere else when the panel closes. */
+  overscroll-behavior: contain;
   padding: calc(var(--inset-top) + var(--space-3)) var(--space-4)
            calc(var(--inset-bottom) + var(--space-12));
 }
@@ -325,6 +328,21 @@
 
 /* ---- quantity sheet ------------------------------------------------------- */
 
+/* An open sheet owns the screen, so the page behind it stops being scrollable.
+ *
+ * Without this the page keeps its full scroll range underneath, and every
+ * gesture the sheet cannot use itself falls through to it: a sheet shorter than
+ * its own content box has nothing to scroll, so dragging it scrolled the page
+ * instead — and so did dragging the dimmed strip beside it, which is not a
+ * scroll container at all and never could be fixed with overscroll-behavior.
+ *
+ * :has() rather than a class toggled in JS because all nineteen sheets are
+ * `x-if` guarded: the backdrop is absent from the DOM when closed, so its mere
+ * presence is already the signal, and no open/close path can forget to say so.
+ * The scroll position survives — overflow: hidden on the scrolling element
+ * stops the scroll without discarding scrollTop. */
+html:has(.sheet-backdrop) { overflow: hidden; }
+
 .sheet-backdrop {
   position: fixed;
   inset: 0;
@@ -345,6 +363,9 @@
   gap: var(--space-4);
   max-height: 88vh;
   overflow-y: auto;
+  /* Reaching the end of a sheet is the end of the gesture, not the start of
+     scrolling whatever is behind it. */
+  overscroll-behavior: contain;
 }
 
 /* A sheet you type into cannot hug the bottom of the screen.
@@ -1025,6 +1046,9 @@
   color: var(--color-text-muted);
   max-height: 240px;
   overflow-y: auto;
+  /* Nested two deep: without this, running out of instructions scrolled the
+     sheet, and running out of sheet scrolled the page. */
+  overscroll-behavior: contain;
 }
 
 .how li::marker {
