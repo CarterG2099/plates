@@ -909,9 +909,31 @@
             <div>
               <div class="section-head">
                 <span>Routines</span>
-                <button class="chip" @click="newRoutine()">New</button>
+                <div class="chips">
+                  <!-- `|| reordering` so the way out is never the thing that
+                       disappears. -->
+                  <button class="chip" x-show="routines.length > 1 || reordering"
+                          @click="toggleReorder()"
+                          x-text="reordering ? 'Done' : 'Reorder'"></button>
+                  <button class="chip" x-show="!reordering" @click="newRoutine()">New</button>
+                </div>
               </div>
-              <div class="routine-grid" x-show="routines.length">
+
+              <!-- Reordering: one column at any width, so the drag's single
+                   vertical stride is always the right measurement. -->
+              <div class="cardstack" x-show="reordering" x-ref="routinestack">
+                <template x-for="r in routines" :key="r.id">
+                  <div class="card row-card" data-card :data-key="r.id">
+                    <span class="grip" aria-hidden="true"
+                          x-init="$dragCard($el,
+                                    () => [...$refs.routinestack.querySelectorAll('[data-card]')],
+                                    (to, key) => reorderRoutineTo(key, to))">⠿</span>
+                    <div class="row-text"><b x-text="r.name"></b></div>
+                  </div>
+                </template>
+              </div>
+
+              <div class="routine-grid" x-show="routines.length && !reordering">
                 <template x-for="r in routines" :key="r.id">
                   <button class="routine-card" @click="openRoutine(r)" x-data="{ c: routineCard(r) }">
                     <div class="routine-top">
@@ -1087,7 +1109,14 @@
                     <div class="row-swipe" x-init="$swipeRow($el)">
                       <button class="row-remove" @click="dropSet(set)"
                               :aria-label="`Remove set ${i + 1}`">Remove</button>
-                      <div class="setrow" :class="[set.completed_at && 'done', isRecord(set, group) && 'record']">
+                      <!-- Object form, not an array. The array form left a literal
+                           `false` in the class list and, measured in the browser,
+                           did not reliably re-apply `done` when completed_at was
+                           set — the value bindings on the same row updated while
+                           the class did not, which is the tick appearing to lag
+                           behind the numbers. -->
+                      <div class="setrow"
+                           :class="{ done: !!set.completed_at, record: isRecord(set, group) }">
                         <span class="idx" :class="set.is_warmup && 'warm'" x-text="set.is_warmup ? 'W' : i + 1"></span>
                         <!-- What this set was last time, so you can see the whole
                              progression without opening the history sheet. -->
@@ -1336,9 +1365,13 @@
 
               <template x-if="builder.routine">
                 <div>
-                  <div class="rows">
+                  <div class="rows" x-ref="builderrows">
                     <template x-for="row in builderExercises" :key="row.item.id">
-                      <div class="row">
+                      <div class="row" data-card :data-key="row.item.id">
+                        <span class="grip" aria-hidden="true"
+                              x-init="$dragCard($el,
+                                        () => [...$refs.builderrows.querySelectorAll('[data-card]')],
+                                        (to, key) => reorderRoutineItemTo(key, to))">⠿</span>
                         <span class="thumb" x-html="muscleMap(row.item.exercise_id, row.name)"></span>
                         <div class="row-text"><b x-text="row.name"></b></div>
                         <button class="tap" @click="dropRoutineItem(row.item)"
