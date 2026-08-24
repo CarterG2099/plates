@@ -248,6 +248,18 @@ export function weightReadings(series) {
 }
 
 /**
+ * The gap since the previous weigh-in, in words.
+ *
+ * Lives here rather than in the template because "1 days" is the mistake this
+ * project keeps shipping — it reached production as "1serving" and again as
+ * "2 serving" — and a template string is not somewhere a test can reach.
+ */
+export function gapLabel(days) {
+  if (days == null) return 'First reading';
+  return `${days} day${days === 1 ? '' : 's'} after the one before`;
+}
+
+/**
  * Least squares over (days, lb), reported per week because that is the unit
  * people actually think in.
  *

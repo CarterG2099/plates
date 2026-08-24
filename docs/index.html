@@ -1605,9 +1605,7 @@
               <div class="row">
                 <div class="row-text">
                   <b x-text="weightDate(r.at, { long: true })"></b>
-                  <small x-text="r.daysSincePrevious
-                    ? `${r.daysSincePrevious} days after the one before`
-                    : 'First reading'"></small>
+                  <small x-text="gapLabel(r.daysSincePrevious)"></small>
                 </div>
                 <span class="row-num" x-text="`${r.lb} lb`"></span>
                 <span class="delta"

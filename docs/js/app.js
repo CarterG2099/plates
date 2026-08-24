@@ -2875,6 +2875,7 @@ Alpine.data('statsPage', () => ({
   },
 
   get weightReadings() { return stats.weightReadings(this.weight); },
+  gapLabel(days) { return stats.gapLabel(days); },
   get weightTrend() { return stats.weightTrend(this.weight, { target: this.weightTarget }); },
   get weightWeek() { return stats.weightWindows(this.weight, 7); },
   get weightMonth() { return stats.weightWindows(this.weight, 30); },

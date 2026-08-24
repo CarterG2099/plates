@@ -369,3 +369,9 @@ test('the area path closes back along the baseline', () => {
   assert.ok(plot.area.endsWith('Z'), 'and closes, or the fill leaks');
   assert.ok(plot.area.includes(`L${plot.points[0].x} ${plot.height}`));
 });
+
+test('a one-day gap is not "1 days"', () => {
+  assert.equal(stats.gapLabel(1), '1 day after the one before');
+  assert.equal(stats.gapLabel(13), '13 days after the one before');
+  assert.equal(stats.gapLabel(null), 'First reading');
+});
