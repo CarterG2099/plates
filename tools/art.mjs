@@ -62,6 +62,12 @@ function lineMean(img, index, axis) {
  * A seam runs the full height, so a column mean separates it from artwork
  * cleanly; a figure crossing the boundary only lifts the mean a little.
  */
+// A real divider has been 4 to 34px across, on every sheet so far. Anything
+// wider is not a rule — it is a figure that happens to sit near the boundary,
+// or a strip whose panels are spread out enough to lift the mean on their own.
+// Trimming on that reading cost a swimmer both feet and a hand.
+const MAX_SEAM_RADIUS = 20;
+
 function seamRadius(img, boundary, axis, limit = 40) {
   const away = lineMean(img, boundary - limit * 2, axis);
   const bright = (k) => lineMean(img, k, axis) > away + 8;
@@ -70,7 +76,13 @@ function seamRadius(img, boundary, axis, limit = 40) {
   let lo = boundary, hi = boundary - 1;
   while (lo - 1 > boundary - limit && bright(lo - 1)) lo--;
   while (hi + 1 < boundary + limit && bright(hi + 1)) hi++;
-  return Math.max(boundary - lo, hi - boundary + 1);
+
+  const radius = Math.max(boundary - lo, hi - boundary + 1);
+  if (radius > MAX_SEAM_RADIUS) {
+    console.log(`ignoring a ${radius * 2}px bright band at ${boundary} — too wide to be a divider`);
+    return 0;
+  }
+  return radius;
 }
 
 function write(image, slug) {
