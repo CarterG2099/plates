@@ -103,6 +103,12 @@ button {
 
 .app-main {
   flex: 1;
+  /* The page is swiped sideways to change tab (swipeTabs in app.js), so the
+     browser has to be told to keep vertical panning and hand us the horizontal.
+     Otherwise it can claim the gesture and cancel the pointer, and the swipe
+     silently never fires. The same bargain .row-swipe and .sheet strike, for
+     the same reason. */
+  touch-action: pan-y;
   /* Top padding matters: the app bar above is sticky, so without it the first
      control on every screen sits flush against it — the date arrows on Today,
      the collapse chevron on Train. */

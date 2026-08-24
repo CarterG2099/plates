@@ -2927,7 +2927,68 @@ function trackKeyboardInset() {
   apply();
 }
 
+/**
+ * Swipe sideways to move between Today, Train and Stats.
+ *
+ * Bound once on the document rather than per page, because two of the three tabs
+ * are `x-if` and are not in the DOM to be bound until you are already looking at
+ * them.
+ *
+ * Touch only. A sideways drag with a mouse is how you select text, and a pointer
+ * device already has the tab bar one click away.
+ *
+ * The direction test runs at the end of the gesture rather than during it. A
+ * vertical scroll never reaches that point: the browser fires `pointercancel`
+ * when it claims the gesture for scrolling, which is a more reliable statement
+ * that the finger was going up or down than any coordinate check of ours — the
+ * same reasoning $dragCard uses to tell letting go from being interrupted.
+ */
+function swipeTabs() {
+  const TABS = ['today', 'train', 'stats'];
+  const DISTANCE = 60;   // px before a drag is a swipe
+  const SLOPE = 1.2;     // and how much more sideways than up-and-down it must be
+
+  /* Anything that already means something by a sideways drag, or that changing
+     tab underneath would interrupt. A sheet's backdrop covers the screen, so
+     matching it here is also what stops a swipe behind an open sheet. */
+  const CLAIMED = '.sheet-backdrop, .log-panel, .row-swipe, .grip, input, textarea, select';
+
+  let id = null;
+  let startX = 0;
+  let startY = 0;
+
+  const forget = () => { id = null; };
+
+  document.addEventListener('pointerdown', (e) => {
+    forget();
+    if (e.pointerType !== 'touch' || !e.isPrimary) return;
+    if (e.target?.closest?.(CLAIMED)) return;
+
+    id = e.pointerId;
+    startX = e.clientX;
+    startY = e.clientY;
+  }, { passive: true });
+
+  document.addEventListener('pointercancel', forget, { passive: true });
+
+  document.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== id) return;
+    forget();
+
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (Math.abs(dx) < DISTANCE || Math.abs(dx) < Math.abs(dy) * SLOPE) return;
+
+    const ui = Alpine.store('ui');
+    // Left goes forward, and the ends are ends — no wrapping round, so a swipe
+    // that runs out of tabs does nothing rather than jumping to the far side.
+    const next = TABS[TABS.indexOf(ui.view) + (dx < 0 ? 1 : -1)];
+    if (next) ui.go(next);
+  }, { passive: true });
+}
+
 trackKeyboardInset();
+swipeTabs();
 
 window.Alpine = Alpine;
 
