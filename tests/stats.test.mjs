@@ -375,3 +375,137 @@ test('a one-day gap is not "1 days"', () => {
   assert.equal(stats.gapLabel(13), '13 days after the one before');
   assert.equal(stats.gapLabel(null), 'First reading');
 });
+
+// ---- training, in detail ---------------------------------------------------
+
+const week = (i, volume, sessions) => ({
+  start: new Date(Date.parse('2026-06-01T00:00:00.000Z') + i * 7 * 86_400_000),
+  volume,
+  sessions,
+});
+
+test('volumePlot scales to the tallest week and stays inside the box', () => {
+  const plot = stats.volumePlot([week(0, 10_000, 3), week(1, 40_000, 4), week(2, 0, 0)]);
+
+  assert.equal(plot.max, 40_000);
+  assert.equal(plot.bars.length, 3);
+  assert.equal(plot.bars[1].h, plot.height);            // the tallest fills it
+  assert.equal(plot.bars[1].y, 0);
+  assert.ok(plot.bars[0].h > 0 && plot.bars[0].h < plot.height);
+  for (const bar of plot.bars) {
+    assert.ok(bar.y >= 0 && bar.y + bar.h <= plot.height + 1e-9, 'inside the box');
+    assert.ok(bar.x >= 0 && bar.x + bar.w <= plot.width + 1e-9, 'inside the box');
+  }
+});
+
+test('volumePlot draws a stub for a small week but nothing for an untrained one', () => {
+  const plot = stats.volumePlot([week(0, 400, 1), week(1, 40_000, 5), week(2, 0, 0)]);
+  assert.ok(plot.bars[0].h >= 0.8, 'a trained week is visible');
+  assert.equal(plot.bars[2].h, 0, 'an untrained week draws nothing');
+});
+
+test('volumePlot slots span the width so a pointer maps to a week', () => {
+  const plot = stats.volumePlot([week(0, 1, 1), week(1, 2, 1), week(2, 3, 1), week(3, 4, 1)]);
+  assert.equal(plot.slot, 25);
+  assert.deepEqual(plot.bars.map((b) => b.x), [0, 25, 50, 75]);
+});
+
+test('volumePlot survives an empty history', () => {
+  const plot = stats.volumePlot([]);
+  assert.deepEqual(plot.bars, []);
+  assert.equal(Number.isFinite(plot.slot), true);
+  assert.equal(plot.max, 1);
+});
+
+test('volumeStats averages over weeks trained, not weeks elapsed', () => {
+  const weeks = [week(0, 30_000, 4), week(1, 0, 0), week(2, 20_000, 3)];
+  const s = stats.volumeStats(weeks, { now: weeks[2].start.getTime() + 6 * 86_400_000 });
+
+  assert.equal(s.average, 25_000);        // not 16,667
+  assert.equal(s.weeksTrained, 2);
+  assert.equal(s.weeks, 3);
+  assert.equal(s.sessions, 7);
+});
+
+test('volumeStats reports the current week as partial while it is running', () => {
+  const weeks = [week(0, 30_000, 4), week(1, 12_000, 2)];
+  const start = weeks[1].start.getTime();
+
+  const midweek = stats.volumeStats(weeks, { now: start + 2 * 86_400_000 });
+  assert.equal(midweek.partial, true);
+  assert.equal(midweek.daysIn, 3);
+  assert.equal(midweek.change, -18_000);  // still reported, but flagged as unfair
+
+  const done = stats.volumeStats(weeks, { now: start + 6.5 * 86_400_000 });
+  assert.equal(done.partial, false);
+  assert.equal(done.daysIn, 7);
+});
+
+test('volumeStats picks the best week and needs no previous one', () => {
+  const single = stats.volumeStats([week(0, 9_000, 2)], { now: week(0, 0, 0).start.getTime() });
+  assert.equal(single.previous, null);
+  assert.equal(single.change, null);
+  assert.equal(single.best.volume, 9_000);
+
+  const many = stats.volumeStats([week(0, 9_000, 2), week(1, 44_000, 5), week(2, 12_000, 3)]);
+  assert.equal(many.best.volume, 44_000);
+  assert.equal(many.best.start.getTime(), week(1, 0, 0).start.getTime());
+});
+
+test('volumeStats returns null rather than dividing by no weeks', () => {
+  assert.equal(stats.volumeStats([]), null);
+});
+
+test('sessionSummaries counts what a finished session contained', async () => {
+  await atTime(NOW, () => {
+    const sessions = [
+      { id: 's1', owner_email: ME, name: 'Push A',
+        started_at: '2026-08-10T10:00:00.000Z', ended_at: '2026-08-10T11:05:00.000Z' },
+      { id: 's2', owner_email: ME, started_at: daysAgo(1), ended_at: null },   // running
+    ];
+    const sets = [
+      ...buildSets('s1', 'e1', 'Bench', [{ w: 100, r: 10 }, { w: 100, r: 8 }]),
+      ...buildSets('s1', 'e2', 'Row', [{ w: 50, r: 10 }]),
+    ];
+    const rows = stats.sessionSummaries(workout.buildIndex(sets, sessions, ME));
+
+    assert.equal(rows.length, 1, 'the running session is not history yet');
+    assert.equal(rows[0].name, 'Push A');
+    assert.equal(rows[0].sets, 3);
+    assert.equal(rows[0].exercises, 2);
+    assert.equal(rows[0].minutes, 65);
+    assert.equal(rows[0].volume, 2300);
+  });
+});
+
+test('sessionSummaries refuses a duration from a session left running overnight', async () => {
+  await atTime(NOW, () => {
+    const sessions = [{ id: 's1', owner_email: ME, started_at: '2026-08-10T10:00:00.000Z',
+                        ended_at: '2026-08-11T09:00:00.000Z' }];
+    const rows = stats.sessionSummaries(
+      workout.buildIndex(buildSets('s1', 'e1', 'Bench', [{ w: 100, r: 5 }]), sessions, ME));
+
+    assert.equal(rows[0].minutes, null);
+    assert.equal(rows[0].name, 'Workout');    // unnamed sessions still read as something
+  });
+});
+
+test('sessionSummaries keeps a long but plausible session', async () => {
+  await atTime(NOW, () => {
+    const sessions = [{ id: 's1', owner_email: ME, started_at: '2026-08-10T10:00:00.000Z',
+                        ended_at: '2026-08-10T12:20:00.000Z' }];
+    const rows = stats.sessionSummaries(
+      workout.buildIndex(buildSets('s1', 'e1', 'Bench', [{ w: 100, r: 5 }]), sessions, ME));
+    assert.equal(rows[0].minutes, 140);
+  });
+});
+
+test('sessionSummaries stops at the limit', async () => {
+  await atTime(NOW, () => {
+    const sessions = Array.from({ length: 20 }, (_, i) => ({
+      id: `s${i}`, owner_email: ME, started_at: daysAgo(i + 1), ended_at: daysAgo(i + 1),
+    }));
+    const rows = stats.sessionSummaries(workout.buildIndex([], sessions, ME), 5);
+    assert.equal(rows.length, 5);
+  });
+});
