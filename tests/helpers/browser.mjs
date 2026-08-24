@@ -29,6 +29,10 @@ export function installBrowser() {
 
   installIdb();
 
+  // Used to push work past the paint in the set-row handlers.
+  define('requestAnimationFrame', (fn) => setTimeout(() => fn(performance.now()), 0));
+  define('cancelAnimationFrame', (id) => clearTimeout(id));
+
   define('addEventListener', () => {});
   define('removeEventListener', () => {});
 

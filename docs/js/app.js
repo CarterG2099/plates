@@ -1892,7 +1892,10 @@ Alpine.data('trainPage', () => ({
   get email() { return Alpine.store('auth').email; },
   get data() { return snapshotTraining(); },
 
-  get session() { return workout.activeSession(this.data.sessions, this.email); },
+  // Off the index, which resolved it once when the data was last refreshed.
+  // Deriving it here meant a filter-and-sort over every session you have ever
+  // logged, on every one of the dozens of reads a single render makes.
+  get session() { return this.data.index.active; },
   get sets() { return this.session ? workout.setsOf(this.data.index, this.session.id) : []; },
   /**
    * Cards, each carrying what you did for that exercise last time.
@@ -2150,36 +2153,54 @@ Alpine.data('trainPage', () => ({
    * value — which is the whole point of them being placeholders rather than
    * prefilled text you would have to clear first.
    */
-  async toggleDone(set, fallback = null) {
+  toggleDone(set, fallback = null) {
     const done = Boolean(set.completed_at);
+    const current = this.currentSet(set);
     const next = { completed_at: done ? null : new Date().toISOString() };
 
+    // Adopted in the same object as the checkmark, so the numbers filling in and
+    // the row going green are one patch and therefore one repaint. Setting them
+    // separately showed as two steps.
     if (!done) {
-      const current = this.currentSet(set);
       if (current.weight_lb == null && fallback?.weight_lb != null) next.weight_lb = fallback.weight_lb;
       if (current.reps == null && fallback?.reps != null) next.reps = fallback.reps;
     }
 
-    // Green before the write, for the same reason as edit(): this is the most
-    // repeated interaction in the app and it has to feel like a light switch.
-    const optimistic = { ...this.currentSet(set), ...next };
+    const optimistic = { ...current, ...next };
     Alpine.store('data').patchSet(optimistic);
 
-    if (!done) {
-      this.startRest(workout.DEFAULT_REST_SECONDS);
-      if (navigator.vibrate) navigator.vibrate(30);
-
-      // Told at the moment it happens, not discovered in a stats screen weeks on.
-      const group = this.groups.find((g) => g.sets.some((s) => s.id === optimistic.id));
-      if (group && workout.isRecord(optimistic, this.bestBefore(group))) {
-        Alpine.store('ui').flash(`PR · ${group.name}`);
-        if (navigator.vibrate) navigator.vibrate([60, 50, 60]);
+    // Nothing below this line may run before the browser paints. The tick is the
+    // most repeated interaction in the app and has to feel like a light switch,
+    // so the rest timer, the write and the PR check all wait for the frame.
+    requestAnimationFrame(() => {
+      if (!done) {
+        this.startRest(workout.DEFAULT_REST_SECONDS);
+        if (navigator.vibrate) navigator.vibrate(30);
+        this.announceRecord(optimistic);
       }
-    }
 
-    // Result discarded for the reason given in edit(): a later-resolving write
-    // can carry an older row, and patching it in is what made the tick flicker.
-    await workout.updateSet(set, next);
+      // Result discarded for the reason given in edit(): a later-resolving write
+      // can carry an older row, and patching it in is what made the tick flicker.
+      // Not awaited either — but a failure still has to be said out loud, or the
+      // row on screen quietly stops matching what is stored.
+      workout.updateSet(set, next).catch((error) => {
+        Alpine.store('ui').flash(`Could not save that set · ${error?.message ?? error}`);
+      });
+    });
+  },
+
+  /**
+   * Told at the moment it happens, not discovered in a stats screen weeks on.
+   *
+   * Split out because finding the set's card rebuilds every card, which is far
+   * too much to do between a tap and the frame that answers it.
+   */
+  announceRecord(set) {
+    const group = this.groups.find((g) => g.sets.some((s) => s.id === set.id));
+    if (!group || !workout.isRecord(set, this.bestBefore(group))) return;
+
+    Alpine.store('ui').flash(`PR · ${group.name}`);
+    if (navigator.vibrate) navigator.vibrate([60, 50, 60]);
   },
 
   async dropSet(set) {

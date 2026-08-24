@@ -848,7 +848,13 @@ export function buildIndex(sets, sessions, ownerEmail) {
   const volumeBySession = new Map();
   for (const [id, bucket] of bySession) volumeBySession.set(id, volume(bucket));
 
-  return { bySession, byExercise, sessionById, owned, volumeBySession };
+  // The workout in progress, resolved once here rather than re-derived on every
+  // property read. `session` is reached by a dozen getters and every set row's
+  // bindings, and each call used to filter and sort the whole session list —
+  // hundreds of rows, tens of times per render.
+  const active = owned.find((s) => !s.ended_at) ?? null;
+
+  return { bySession, byExercise, sessionById, owned, volumeBySession, active };
 }
 
 export const setsOf = (index, sessionId) => index.bySession.get(sessionId) ?? [];
