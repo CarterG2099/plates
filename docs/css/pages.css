@@ -393,6 +393,35 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   .sheet-backdrop.is-search .grabber { order: 99; }
 }
 
+/* A search sheet holds its own chrome still and scrolls only its results.
+ *
+ * The whole sheet used to be the scroll region: 3,288px of it against a 668px
+ * window with a full library loaded. So the field being typed into scrolled away
+ * from the results it was filtering, and Cancel sat at the far end of the list
+ * rather than under your thumb. The grabber travelled with them, which disabled
+ * swipe-to-dismiss too, because $swipe only engages at scrollTop 0 — one scroll
+ * of the list and every way out of the sheet was somewhere off-screen.
+ *
+ * Both widths, not just phones: the centred desktop dialog had the same problem,
+ * it was simply less obvious at 82vh. */
+.sheet-backdrop.is-search .sheet { overflow: hidden; }
+
+.sheet-backdrop.is-search .rows {
+  flex: 1;
+  /* Without this a flex item refuses to shrink below its content, so the list
+     grows the sheet instead of scrolling inside it. */
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Everything that is not the list keeps its height while the list takes the
+   slack. */
+.sheet-backdrop.is-search .search,
+.sheet-backdrop.is-search .grabber,
+.sheet-backdrop.is-search .card-label,
+.sheet-backdrop.is-search .btn { flex: none; }
+
 .grabber {
   width: 36px;
   height: 4px;
