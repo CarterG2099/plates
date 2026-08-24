@@ -86,44 +86,100 @@ function streaks(startedAt: string[], todayLocal: string, zone: string) {
 const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
 
 /**
+ * Quotes, attributed — and attributed correctly, which took some checking.
+ *
+ * "We are what we repeatedly do" is the one everyone hands to Aristotle. It is
+ * Will Durant, summarising him in The Story of Philosophy, and it is credited to
+ * Durant here. Anything whose provenance would not survive that kind of look is
+ * left out rather than guessed at, or credited to the tradition it came from.
+ */
+const QUOTES: Array<[string, string]> = [
+  ["Discipline equals freedom.", "Jocko Willink"],
+  ["We are what we repeatedly do. Excellence, then, is not an act, but a habit.", "Will Durant"],
+  ["Take care of your body. It's the only place you have to live.", "Jim Rohn"],
+  ["Motivation is what gets you started. Habit is what keeps you going.", "Jim Rohn"],
+  ["Suffer the pain of discipline or suffer the pain of regret.", "Jim Rohn"],
+  ["Nothing will work unless you do.", "Maya Angelou"],
+  ["You must do the thing you think you cannot do.", "Eleanor Roosevelt"],
+  ["Champions keep playing until they get it right.", "Billie Jean King"],
+  ["Do what you can, with what you have, where you are.", "Theodore Roosevelt"],
+  ["Success is the sum of small efforts repeated day in and day out.", "Robert Collier"],
+  ["Hard choices, easy life. Easy choices, hard life.", "Jerzy Gregorek"],
+  ["Strength does not come from physical capacity. It comes from an indomitable will.", "Mahatma Gandhi"],
+  ["Whether you think you can, or you think you can't — you're right.", "Henry Ford"],
+  ["The last three or four reps is what makes the muscle grow.", "Arnold Schwarzenegger"],
+  ["If you don't find the time, if you don't do the work, you don't get the results.", "Arnold Schwarzenegger"],
+  ["Everybody wants to be a bodybuilder, but nobody wants to lift no heavy-ass weight.", "Ronnie Coleman"],
+  ["It's supposed to be hard. The hard is what makes it great.", "A League of Their Own"],
+  ["Fall seven times, stand up eight.", "Japanese proverb"],
+  ["The only easy day was yesterday.", "Navy SEAL motto"],
+  ["It is not the mountain we conquer, but ourselves.", "Edmund Hillary"],
+  ["A year from now you may wish you had started today.", "Karen Lamb"],
+  ["The successful warrior is the average man, with laser-like focus.", "Bruce Lee"],
+];
+
+/**
+ * The ones about why. Written rather than quoted, because the famous lines on
+ * this subject are mostly greeting cards.
+ */
+const HOME = [
+  "The strongest version of you is the one your family gets.",
+  "Nobody at home needs you to be perfect. Consistent is plenty.",
+  "Look after the body. There are people depending on it.",
+  "You and Aana are on the same routines. Go get yours.",
+  "The habit you keep is the one the people around you copy.",
+  "Thirty years from now, the training is why you can still keep up.",
+];
+
+/**
  * The message.
  *
- * Every candidate is written by hand; the only thing generated is which one gets
- * picked. Lines that know something specific are offered alongside the generic
- * ones rather than instead of them, so a long streak does not produce the same
- * sentence every morning for a month.
+ * Every candidate is written or quoted by hand; the only thing generated is
+ * which one gets picked. It draws from three pools rather than one flat list —
+ * lines that know your training, quotes, and the ones about why you bother —
+ * because a flat list of thirty would bury the personal ones at one-in-thirty
+ * and they are the reason this reads as yours rather than as a quote app.
  */
 function compose(
   s: { dayStreak: number; weekStreak: number; daysSince: number | null; everTrained: boolean },
   last: { name: string | null; weight: number | null; reps: number | null; when: string | null },
   random: () => number,
 ) {
-  const lines: string[] = [
+  if (!s.everTrained) {
+    return "Morning. Nothing logged yet — today is a good day to start.";
+  }
+
+  const personal: string[] = [
     "Morning. The bar is where you left it.",
     "Show up today. That is most of it.",
     "Nobody has ever regretted the session they did.",
     "Small session beats no session.",
   ];
 
-  if (!s.everTrained) {
-    return "Morning. Nothing logged yet — today is a good day to start.";
-  }
   if (s.weekStreak >= 2) {
-    lines.push(`${plural(s.weekStreak, "week")} running. Today makes ${s.weekStreak + 1}.`);
-    lines.push(`You have not missed a week in ${plural(s.weekStreak, "week")}. Keep it.`);
+    personal.push(`${plural(s.weekStreak, "week")} running. Today makes ${s.weekStreak + 1}.`);
+    personal.push(`You have not missed a week in ${plural(s.weekStreak, "week")}. Keep it.`);
   }
   if (s.dayStreak >= 2) {
-    lines.push(`${plural(s.dayStreak, "day")} in a row. Again?`);
+    personal.push(`${plural(s.dayStreak, "day")} in a row. Again?`);
   }
   if (s.daysSince !== null && s.daysSince >= 3) {
-    lines.push(`${plural(s.daysSince, "day")} off. The bar is still there.`);
-    lines.push("Longest part of any break is starting it again. Today?");
+    personal.push(`${plural(s.daysSince, "day")} off. The bar is still there.`);
+    personal.push("Longest part of any break is starting it again. Today?");
   }
   if (last.weight && last.reps && last.name) {
-    lines.push(`You put up ${last.weight} × ${last.reps} on ${last.name}${last.when ? ` ${last.when}` : ""}.`);
+    personal.push(`You put up ${last.weight} × ${last.reps} on ${last.name}${last.when ? ` ${last.when}` : ""}.`);
   }
 
-  return lines[Math.floor(random() * lines.length)];
+  const pick = <T>(list: T[]) => list[Math.floor(random() * list.length)];
+  const roll = random();
+
+  if (roll < 0.40) return pick(personal);
+  if (roll < 0.85) {
+    const [text, who] = pick(QUOTES);
+    return `"${text}" — ${who}`;
+  }
+  return pick(HOME);
 }
 
 Deno.serve(async (req) => {
@@ -169,6 +225,7 @@ Deno.serve(async (req) => {
 
   let sent = 0;
   let pruned = 0;
+  const bodies: string[] = [];
 
   for (const { owner_email } of wanting) {
     const { data: subs } = await db
@@ -216,9 +273,12 @@ Deno.serve(async (req) => {
       }
     }
 
+    const body = compose(s, last, Math.random);
+    bodies.push(body);
+
     const payload = JSON.stringify({
       title: "Plates",
-      body: compose(s, last, Math.random),
+      body,
       tag: `morning-${today}`,
     });
 
@@ -243,5 +303,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  return json({ today, hour, recipients: wanting.length, sent, pruned });
+  // The composed text comes back so a forced test run can be checked without
+  // waiting for the phone. Behind the cron secret, so it discloses nothing.
+  return json({ today, hour, recipients: wanting.length, sent, pruned, bodies });
 });
