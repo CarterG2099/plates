@@ -1094,7 +1094,8 @@
             <!-- data-card: what $dragCard measures and moves. -->
             <div class="cardstack" x-ref="cardstack">
             <template x-for="group in groups" :key="group.key">
-              <div class="card" data-card :data-key="group.key">
+              <div class="card" data-card :data-key="group.key"
+                   :class="isCardioGroup(group) && 'is-cardio'">
                 <div class="readout-head">
                   <div style="display:flex; align-items:center; gap:var(--space-3); min-width:0;">
                     <span class="grip" aria-hidden="true"

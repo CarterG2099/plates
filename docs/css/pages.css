@@ -675,11 +675,12 @@ html:has(.sheet-backdrop) { overflow: hidden; }
    *
    * The weight and reps tracks carry a floor too: as bare fr units they gave up
    * width to the plates until a three-digit weight was clipped to two. */
-  /* Measured rather than guessed, and both are floors so neither column can be
-     squeezed out by the other on the narrowest phone. Prev gets 40: "135x8"
-     measures 36 and an exact fit still ellipsises on sub-pixel rounding, which
-     cost the reps — the half of it you cannot infer from the box alongside. */
-  grid-template-columns: 22px minmax(40px, .7fr) minmax(44px, 1fr) minmax(36px, 1fr) 64px 38px;
+  /* Prev is 40px flat, not a fraction, so a set row reads the same width on
+     every card. "135x8" measures 36, and an exact fit still ellipsises on
+     sub-pixel rounding — which cost the reps, the half you cannot infer from the
+     box alongside. The plate track is 40 too: the chips stack, so it only ever
+     has to hold the widest single one. */
+  grid-template-columns: 22px 40px minmax(44px, 1fr) minmax(36px, 1fr) 40px 38px;
   /* Tighter than it was. Six tracks on a 360px phone, and the gaps were costing
      the Prev column more than the plate chips did. */
   gap: var(--space-1);
@@ -940,20 +941,41 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 /* On the row rather than under it: three of these stacked below the grid read as
    a separate list, and finding the one belonging to your set meant counting down
-   it. Capped so a heavy load wraps to a second line instead of taking width from
-   the weight box, and right-aligned so the chips sit against the checkmark. */
+   it.
+   
+   Stacked, and only ever stacked. Laid out in a line they fitted one load and
+   wrapped the next, so a card showed some rows across and some rows down — the
+   arrangement changing with the weight rather than meaning anything. Down the
+   column every load reads the same way, and the track only has to be as wide as
+   the widest single chip. */
 .setrow .loadout {
   padding-top: 0;
-  justify-content: flex-end;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 2px;
 }
 
 /* Nothing to load on a dumbbell or a machine, so that card gives the track back
-   rather than holding a column of empty space down every row. */
-.card:not(:has(.setrow .loadout b)) .sethead,
-.card:not(:has(.setrow .loadout b)) .setrow {
-  grid-template-columns: 22px minmax(0, 1.15fr) minmax(48px, 1fr) minmax(42px, 1fr) 0 38px;
-  /* Deliberately the wider Prev. With no plates to make room for, this is where
-     cardio prints "3.23 mi · 26:00 · 8:03 /mi". */
+   rather than holding a column of empty space down every row. Prev keeps its 40:
+   the point of a fixed width is that the rows match from card to card. */
+/* :not(.is-cardio) is load-bearing, not decoration. `:not(:has(...))` takes the
+   specificity of its argument, so this selector outweighs the cardio rule below
+   and was overriding it on the one card that rule exists for. */
+.card:not(.is-cardio):not(:has(.setrow .loadout b)) .sethead,
+.card:not(.is-cardio):not(:has(.setrow .loadout b)) .setrow {
+  grid-template-columns: 22px 40px minmax(44px, 1fr) minmax(36px, 1fr) 0 38px;
+}
+
+/* Cardio is the exception, and the only one. Its Prev cell carries a whole line
+   — "3.23 mi · 26:00 · 8:03 /mi" — rather than one number and a rep count, and
+   there are no plates competing for the room. */
+.card.is-cardio .sethead,
+.card.is-cardio .setrow {
+  /* Wider floors than the weight row's: a distance is "3.23", four characters
+     and a point, where a weight is three digits. Giving Prev the slack without
+     raising these clipped the distance box to "3.2". */
+  grid-template-columns: 22px minmax(0, 2.4fr) minmax(56px, 1fr) minmax(48px, 1fr) 0 38px;
 }
 
 .loadout b {
