@@ -167,7 +167,7 @@
         </template>
 
         <template x-for="meal in meals" :key="meal.slot">
-          <div>
+          <div class="stack">
             <div class="section-head">
               <span x-text="mealLabel(meal.slot)"></span>
               <span x-text="round(meal.totals.calories)"></span>
@@ -438,7 +438,7 @@
         <!-- The same search, continued. Your own foods are above; these arrive a
              beat later and never reorder them. -->
         <template x-if="term && (onlineBusy || onlineResults.length || online.error)">
-          <div>
+          <div class="stack">
             <div class="section-head">
               <span x-show="looksLikeBarcode">Open Food Facts</span>
               <span x-show="!looksLikeBarcode">From the internet</span>
@@ -481,7 +481,7 @@
         <div class="notice notice-error" x-show="photoError" x-text="photoError"></div>
 
         <template x-if="combos.length && !term">
-          <div>
+          <div class="stack">
             <div class="section-head"><span>My meals</span></div>
             <div class="rows">
               <template x-for="combo in combos" :key="combo.id">
@@ -609,7 +609,7 @@
                   <!-- Same lookup as the main search. Picking one writes the
                        food, because an item points at a food_id. -->
                   <template x-if="mealTerm && (mealOnlineBusy || mealOnlineResults.length)">
-                    <div>
+                    <div class="stack">
                       <div class="section-head">
                         <span>From the internet</span>
                         <span x-show="mealOnlineBusy" class="spinner" style="width:12px;height:12px"></span>
@@ -906,7 +906,7 @@
 
             <button class="btn btn-primary btn-block" @click="startEmpty()">Start workout</button>
 
-            <div>
+            <div class="stack">
               <div class="section-head">
                 <span>Routines</span>
                 <div class="chips">
@@ -969,7 +969,7 @@
             </div>
 
             <!-- Past sessions ------------------------------------------------ -->
-            <div>
+            <div class="stack">
               <div class="section-head"><span>History</span></div>
 
               <!-- Only worth a switch when there is somebody else to switch to. -->

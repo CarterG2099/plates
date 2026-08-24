@@ -96,10 +96,23 @@ button {
 
 .app-main {
   flex: 1;
-  padding: 0 var(--space-4) var(--space-8);
+  /* Top padding matters: the app bar above is sticky, so without it the first
+     control on every screen sits flush against it — the date arrows on Today,
+     the collapse chevron on Train. */
+  padding: var(--space-3) var(--space-4) var(--space-8);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* A group of related things — usually a section heading and its content.
+   The screens themselves are gapped flex columns; these inner wrappers were
+   plain divs, so a heading's buttons touched whatever followed. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
 /* Centred single-purpose screens: sign-in, access denied, loading. */
