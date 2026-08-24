@@ -73,6 +73,56 @@ export async function isSubscribed() {
 }
 
 /**
+ * Make sure a granted permission is actually backed by a live subscription.
+ *
+ * Permission and subscription are separate things, and only the permission
+ * survives on its own. A subscription can be missing because the browser dropped
+ * it, because the server's key rotated, or — as happened here — because its row
+ * was deleted server-side. Nothing then re-created it: healSubscription only
+ * repairs a subscription that already exists, and enable() only runs from a tap,
+ * so a granted permission sat there with nothing to push to and no notification
+ * ever arrived.
+ *
+ * Silent and safe to call on every load: it never prompts, because it does
+ * nothing at all unless permission is already granted.
+ *
+ * @returns {Promise<'granted-and-subscribed'|'no-permission'|'unsupported'|'failed'>}
+ */
+export async function ensureSubscribed() {
+  if (!isSupported()) return 'unsupported';
+  if (Notification.permission !== 'granted') return 'no-permission';
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const key = await serverKey();
+    const existing = await reg.pushManager.getSubscription();
+
+    // Bound to a key the server no longer signs with: unusable, so replace it.
+    if (existing) {
+      const boundTo = existing.options?.applicationServerKey;
+      if (boundTo && b64(boundTo) !== key) {
+        await db('push_subscriptions').delete().eq('endpoint', existing.endpoint);
+        await existing.unsubscribe();
+      } else {
+        // Upsert regardless — the row may be missing even though the browser
+        // still holds the subscription.
+        await save(existing);
+        return 'granted-and-subscribed';
+      }
+    }
+
+    await save(await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(key),
+    }));
+    return 'granted-and-subscribed';
+  } catch {
+    // Offline, or the key is not published yet. Nothing worth interrupting for.
+    return 'failed';
+  }
+}
+
+/**
  * Re-subscribe if the server's key has moved on.
  *
  * A subscription is bound to the key it was created with, and `subscribe()`

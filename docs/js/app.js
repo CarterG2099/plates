@@ -333,9 +333,16 @@ Alpine.store('auth', {
       sync.start();
       Alpine.store('data').refreshTraining();
       this.verify();                       // deliberately not awaited
+
+      // A granted permission is not a subscription. Re-establishing it here
+      // rather than only from the reminders toggle, because the toggle lives
+      // inside a menu nobody opens twice — and without a subscription row the
+      // idle-workout push has nowhere to go.
+      push.ensureSubscribed();             // silent; never prompts
     } else {
       await this.apply(session);
       this.ready = true;
+      if (this.isMember) push.ensureSubscribed();
     }
 
     supabase.auth.onAuthStateChange((_event, next) => this.apply(next ?? null));
@@ -2379,9 +2386,9 @@ Alpine.data('trainPage', () => ({
     if (!push.isSupported()) { this.reminders = 'unsupported'; return; }
     if (push.permission() === 'denied') { this.reminders = 'blocked'; return; }
 
-    // Silently repairs a subscription bound to a key the server has rotated
-    // away from. Best-effort: offline, this is not worth surfacing.
-    try { await push.healSubscription(); } catch { /* reported by the toggle */ }
+    // Repairs a missing or stale subscription. Best-effort: offline, this is
+    // not worth surfacing.
+    try { await push.ensureSubscribed(); } catch { /* reported by the toggle */ }
 
     this.reminders = (await push.isSubscribed()) ? 'on' : 'off';
   },
