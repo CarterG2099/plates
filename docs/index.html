@@ -1054,11 +1054,12 @@
             <div class="workout-head">
               <!-- An SVG chevron, not `⌄` (U+2304): that glyph's ink is 7px tall
                    and sits 5px below the centre of a 40px button, measured. A
-                   path in a viewBox is centred by construction. -->
+                   path in a viewBox is centred by construction: 9 -> 15 puts the
+                   stroke's midpoint on 12, which is the viewBox centre. -->
               <button class="tap" @click="collapsed = true" aria-label="Hide workout">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                     aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+                     aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
               </button>
               <span class="workout-title" x-text="session.name || 'Workout'"></span>
             </div>
