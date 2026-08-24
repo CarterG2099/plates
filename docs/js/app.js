@@ -21,6 +21,9 @@ import { exerciseArt, exerciseArtPair } from './muscle-map.js';
 import * as stats from './stats.js';
 import * as push from './push.js';
 
+/** Exactly, so a round-trip through miles does not drift the stored metres. */
+const MILE_M = 1609.344;
+
 /**
  * Drag a sheet down to dismiss it.
  *
@@ -1927,20 +1930,21 @@ Alpine.data('trainPage', () => ({
   cardioLine(set) { return workout.cardioLine(set); },
 
   /**
-   * Cardio cells are typed in the units people say out loud — kilometres and
-   * minutes — while the row stores metres and seconds, so a distance is never
-   * ambiguous and pace is a straight division.
+   * Cardio cells are typed in miles and minutes, while the row stores metres and
+   * seconds. A canonical base unit keeps pace a plain division and means a
+   * stored distance is never ambiguous — only the input and the label are
+   * imperial, which is the same split as weight_lb being the stored truth.
    */
   cardioValue(set, field) {
     const row = this.currentSet(set);
-    if (field === 'km') return row.distance_m == null ? '' : +(row.distance_m / 1000).toFixed(2);
+    if (field === 'mi') return row.distance_m == null ? '' : +(row.distance_m / MILE_M).toFixed(2);
     return row.duration_s == null ? '' : +(row.duration_s / 60).toFixed(2);
   },
 
   async editCardio(set, field, value) {
     const raw = value === '' ? null : Number(value);
-    const next = field === 'km'
-      ? { distance_m: raw == null ? null : Math.round(raw * 1000) }
+    const next = field === 'mi'
+      ? { distance_m: raw == null ? null : Math.round(raw * MILE_M) }
       : { duration_s: raw == null ? null : Math.round(raw * 60) };
 
     Alpine.store('data').patchSet({ ...this.currentSet(set), ...next });

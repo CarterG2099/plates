@@ -307,8 +307,9 @@ create table if not exists plates.session_sets (
   -- Cardio: a run is an exercise card like any other, but a set of it records a
   -- distance and a time rather than a load and reps. Null for lifting, exactly as
   -- weight_lb and reps are null for cardio — nothing is crammed into a column
-  -- that means something else. Metres and seconds, so pace is a plain division;
-  -- the inputs are km and minutes because that is how people say it.
+  -- that means something else. Metres and seconds are the stored truth, so pace
+  -- is a plain division and no stored distance is ambiguous; the inputs and
+  -- labels are miles and minutes, the same split as weight_lb being stored in lb.
   distance_m    numeric,
   duration_s    integer,
   -- Stamped on sets left behind when the exercise was replaced mid-workout.

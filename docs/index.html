@@ -1117,7 +1117,7 @@
                 <div class="setgrid">
                   <div class="sethead">
                     <span>#</span><span>Prev</span>
-                    <span x-text="isCardioGroup(group) ? 'km' : 'lb'"></span>
+                    <span x-text="isCardioGroup(group) ? 'mi' : 'lb'"></span>
                     <span x-text="isCardioGroup(group) ? 'min' : 'Reps'"></span>
                     <span></span><span></span>
                   </div>
@@ -1159,12 +1159,12 @@
                         </template>
                         <!-- Typed in km and minutes because that is how people say
                              it; stored as metres and seconds so pace is a plain
-                             division and no distance is ambiguous. -->
+                             division and no stored distance is ambiguous. -->
                         <template x-if="isCardioGroup(group)">
                           <input class="cell num" type="number" inputmode="decimal" step="any"
-                                 :value="cardioValue(set, 'km')"
-                                 @change="editCardio(set, 'km', $event.target.value)"
-                                 aria-label="Distance in kilometres">
+                                 :value="cardioValue(set, 'mi')"
+                                 @change="editCardio(set, 'mi', $event.target.value)"
+                                 aria-label="Distance in miles">
                         </template>
                         <template x-if="isCardioGroup(group)">
                           <input class="cell num" type="number" inputmode="decimal" step="any"

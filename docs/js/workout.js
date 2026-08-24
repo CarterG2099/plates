@@ -802,8 +802,14 @@ function clock(totalSeconds) {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-/** "5.20 km · 26:00 · 5:00 /km" — a cardio set in one line. */
-export function cardioLine(set, { metric = true } = {}) {
+/**
+ * "3.23 mi · 26:00 · 8:03 /mi" — a cardio set in one line.
+ *
+ * Imperial by default, to match weight_lb everywhere else. The flag stays
+ * because plates.members.weight_unit already exists, so a per-person metric
+ * preference has somewhere to plug in without touching call sites.
+ */
+export function cardioLine(set, { metric = false } = {}) {
   const parts = [];
   const metres = Number(set?.distance_m) || 0;
   const seconds = Number(set?.duration_s) || 0;
@@ -817,7 +823,7 @@ export function cardioLine(set, { metric = true } = {}) {
 }
 
 /** Pace, which is the number anyone actually compares runs by. */
-export function pacePer(set, { metric = true } = {}) {
+export function pacePer(set, { metric = false } = {}) {
   const metres = Number(set?.distance_m) || 0;
   const seconds = Number(set?.duration_s) || 0;
   if (!metres || !seconds) return null;

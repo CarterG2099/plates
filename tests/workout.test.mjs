@@ -1037,30 +1037,42 @@ test('lifts whose names start with a cardio word are not cardio', () => {
   assert.equal(workout.isCardio(null, 'Swimmer Press'), false);
 });
 
-test('a cardio line reads distance, time and pace', () => {
+test('a cardio line reads distance, time and pace, in miles by default', () => {
+  // Imperial to match weight_lb; metric is opt-in per call.
   assert.equal(workout.cardioLine({ distance_m: 5200, duration_s: 1560 }),
-    '5.20 km · 26:00 · 5:00 /km');
-  assert.equal(workout.cardioLine({ distance_m: 5200, duration_s: 1560 }, { metric: false }),
     '3.23 mi · 26:00 · 8:03 /mi');
+  assert.equal(workout.cardioLine({ distance_m: 5200, duration_s: 1560 }, { metric: true }),
+    '5.20 km · 26:00 · 5:00 /km');
 });
 
 test('an hour-plus session shows hours, not ninety minutes', () => {
   assert.equal(workout.cardioLine({ distance_m: 40000, duration_s: 5400 }),
-    '40.00 km · 1:30:00 · 2:15 /km');
+    '24.85 mi · 1:30:00 · 3:37 /mi');
 });
 
 test('a half-entered cardio set says only what it knows', () => {
   assert.equal(workout.cardioLine({ duration_s: 1800 }), '30:00', 'no distance, so no pace');
-  assert.equal(workout.cardioLine({ distance_m: 1000 }), '1.00 km');
+  assert.equal(workout.cardioLine({ distance_m: 1609.344 }), '1.00 mi');
   assert.equal(workout.cardioLine({}), '');
   assert.equal(workout.cardioLine(null), '');
 });
 
 test('pace needs both halves and never divides by zero', () => {
-  assert.equal(workout.pacePer({ distance_m: 1000, duration_s: 300 }), '5:00 /km');
+  assert.equal(workout.pacePer({ distance_m: 1609.344, duration_s: 480 }), '8:00 /mi');
+  assert.equal(workout.pacePer({ distance_m: 1000, duration_s: 300 }, { metric: true }), '5:00 /km');
   assert.equal(workout.pacePer({ distance_m: 0, duration_s: 300 }), null);
-  assert.equal(workout.pacePer({ distance_m: 1000, duration_s: 0 }), null);
+  assert.equal(workout.pacePer({ distance_m: 1609.344, duration_s: 0 }), null);
   assert.equal(workout.pacePer({}), null);
+});
+
+test('a mile typed in survives the round trip through stored metres', () => {
+  // What the row does: miles -> metres on the way in, metres -> miles on the way
+  // out. Rounding must not shave a 3.10 mile run down to 3.09.
+  const MILE_M = 1609.344;
+  for (const miles of [0.5, 1, 3.1, 6.2, 13.1, 26.2]) {
+    const stored = Math.round(miles * MILE_M);
+    assert.equal(+(stored / MILE_M).toFixed(2), miles, `${miles} mi`);
+  }
 });
 
 test('a run contributes no tonnage', async () => {
@@ -1091,7 +1103,7 @@ test('distance and duration persist through a set update', async () => {
 
   assert.equal(withTime.distance_m, 5200, 'the earlier write is not lost');
   assert.equal(withTime.duration_s, 1560);
-  assert.equal(workout.cardioLine(withTime), '5.20 km · 26:00 · 5:00 /km');
+  assert.equal(workout.cardioLine(withTime), '3.23 mi · 26:00 · 8:03 /mi');
 });
 
 test('a run does not become a personal record on load', () => {
