@@ -188,6 +188,37 @@ const FROM_NAME = [
   [/press/, 'shoulders'],
 ];
 
+/**
+ * The thirteen muscles rolled up into the six a training split is planned in.
+ *
+ * A different question from workout.js's FAMILY, which sorts muscles by the
+ * movement that trains them — push, pull, legs, core — and is what the routine
+ * coverage bar answers. This one is anatomical: "am I doing enough back work" is
+ * not a question about pulling, because curls are a pull and are not back work.
+ */
+export const MUSCLE_GROUP = {
+  chest: 'chest',
+  lats: 'back', traps: 'back', lowerBack: 'back',
+  shoulders: 'shoulders',
+  biceps: 'arms', triceps: 'arms', forearms: 'arms',
+  quads: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs',
+  core: 'core',
+};
+
+/** Fixed order, so the shape of the chart means the same thing every time. */
+export const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'arms', 'legs', 'core'];
+
+export const MUSCLE_GROUP_LABEL = {
+  chest: 'Chest', back: 'Back', shoulders: 'Shoulders',
+  arms: 'Arms', legs: 'Legs', core: 'Core',
+};
+
+/** Which of the six an exercise trains, or null if the map cannot place it. */
+export function groupFor(exercise, name = '') {
+  const muscle = muscleFor(exercise, name);
+  return muscle ? MUSCLE_GROUP[muscle] ?? null : null;
+}
+
 export function muscleFor(exercise, name = '') {
   const muscle = (exercise?.primary_muscle ?? '').toLowerCase();
   for (const [pattern, key] of FROM_MUSCLE) if (pattern.test(muscle)) return key;

@@ -3105,6 +3105,91 @@ Alpine.data('statsPage', () => ({
   },
 
   /** Pointer x to a week: the slot, not the bar, so an untrained week answers too. */
+  // ---- muscle balance ------------------------------------------------------
+
+  muscleHover: null,
+
+  get muscleBalance() {
+    return stats.muscleVolume(this.data.index, this.data.exercises, { weeks: 12 });
+  },
+
+  get musclePlot() { return stats.radarPlot(this.muscleBalance.groups, { size: 100 }); },
+
+  /** Most and least worked, which is the sentence anyone reads this chart for. */
+  get muscleRanked() {
+    return [...this.muscleBalance.groups].sort((a, b) => b.volume - a.volume);
+  },
+
+  /**
+   * Snap to the nearest spoke by angle. A radar has no slots to divide up, and
+   * asking the reader to land on a 3px vertex would make the numbers unreachable
+   * on a phone — anywhere in a group's wedge is a question about that group.
+   */
+  trackMuscle(event) {
+    const plot = this.musclePlot;
+    if (!plot) return;
+
+    const box = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - box.left) / box.width) * plot.size - plot.cx;
+    const y = ((event.clientY - box.top) / box.height) * plot.size - plot.cy;
+
+    // Same frame the plot is built in: straight up is zero, then clockwise.
+    const turn = Math.PI * 2;
+    const angle = (Math.atan2(y, x) + Math.PI / 2 + turn) % turn;
+    const i = Math.round((angle / turn) * plot.points.length) % plot.points.length;
+    this.muscleHover = plot.points[i];
+  },
+
+  /** Whichever group is being pointed at, else the one you do the most of. */
+  get muscleFocus() {
+    if (this.muscleHover) return this.muscleHover;
+    const top = this.muscleRanked[0];
+    return this.musclePlot?.points.find((p) => p.key === top?.key) ?? null;
+  },
+
+  /**
+   * The radar's marks as a string.
+   *
+   * Not x-for inside the <svg>: a <template> there is parsed in the SVG
+   * namespace and never runs, which tests/markup.test.mjs exists to catch.
+   */
+  get radarMarks() {
+    const plot = this.musclePlot;
+    if (!plot) return '';
+
+    const focus = this.muscleFocus;
+    const el = (tag, attrs, body = '') =>
+      `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ')}${body ? `>${body}</${tag}>` : '/>'}`;
+
+    const rings = plot.rings
+      .map((r) => el('circle', { class: 'radar-ring', cx: plot.cx, cy: plot.cy, r })).join('');
+
+    const spokes = plot.points
+      .map((p) => el('line', { class: 'radar-spoke', x1: plot.cx, y1: plot.cy, x2: p.edgeX, y2: p.edgeY }))
+      .join('');
+
+    const even = el('polygon', { class: 'radar-even', points: plot.even });
+    const shape = el('polygon', { class: 'radar-shape', points: plot.polygon });
+
+    const dots = plot.points.map((p) => el('circle', {
+      class: `radar-dot${focus?.key === p.key ? ' is-on' : ''}`, cx: p.x, cy: p.y, r: 1.7,
+    })).join('');
+
+    const labels = plot.points.map((p) => el('text', {
+      class: 'radar-label', x: p.labelX, y: p.labelY, 'text-anchor': p.anchor,
+    }, p.label)).join('');
+
+    return rings + spokes + even + shape + dots + labels;
+  },
+
+  /** The whole chart as a sentence, for anyone who cannot see the shape. */
+  get muscleAria() {
+    const { groups, sessions } = this.muscleBalance;
+    if (!sessions) return 'Muscle balance: nothing trained in the last 12 weeks.';
+    const parts = groups.map((g) => `${g.label} ${Math.round(g.share * 100)}%`);
+    return `Share of training volume by muscle group over 12 weeks: ${parts.join(', ')}.`;
+  },
+
   trackVolume(event) {
     const plot = this.volumePlot;
     if (!plot.bars.length) return;

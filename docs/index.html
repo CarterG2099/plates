@@ -1634,6 +1634,59 @@
           </div>
         </div>
 
+        <!-- Muscle balance ---------------------------------------------------- -->
+        <div class="card" x-show="muscleBalance.sessions" x-cloak>
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Muscle balance</div>
+              <div class="stat-hero">
+                <span x-text="muscleRanked[0] && Math.round(muscleRanked[0].share * 100)"></span><small>%</small>
+              </div>
+              <div class="stat-sub">
+                <span x-text="muscleRanked[0] && muscleRanked[0].label.toLowerCase()"></span>,
+                your most trained · last 12 weeks
+              </div>
+            </div>
+          </div>
+
+          <!-- One series, so no legend: the spokes are labelled and the shape is
+               the only thing drawn. Hover snaps by angle — see trackMuscle. -->
+          <div class="plot plot-radar" @pointermove="trackMuscle($event)"
+               @pointerleave="muscleHover = null">
+            <!-- Built as a string, not x-for: a <template> inside <svg> is
+                 parsed in the SVG namespace and never runs. The dashed inner
+                 outline is what an even split across six groups would draw, so
+                 the shape is compared against something rather than nothing. -->
+            <svg viewBox="0 0 100 100" role="img" :aria-label="muscleAria">
+              <g x-html="radarMarks"></g>
+            </svg>
+
+            <div class="plot-readout" x-show="muscleFocus" x-cloak>
+              <b x-text="muscleFocus && `${muscleFocus.percent}% ${muscleFocus.label.toLowerCase()}`"></b>
+              <span x-text="muscleFocus && `${muscleFocus.volume.toLocaleString()} lb over 12 weeks`"></span>
+            </div>
+          </div>
+
+          <!-- Every number the shape encodes, in text. A radar's area grows with
+               the square of its radius, so the picture overstates a difference
+               the reader can check here. -->
+          <div class="stat-grid">
+            <template x-for="g in muscleRanked" :key="g.key">
+              <div class="stat-cell">
+                <small x-text="g.label"></small>
+                <b x-text="`${Math.round(g.share * 100)}%`"></b>
+                <span x-text="`${g.volume.toLocaleString()} lb`"></span>
+              </div>
+            </template>
+          </div>
+
+          <p class="plot-note">
+            <span x-text="`Working sets only, across ${count(muscleBalance.sessions, 'workout')}.`"></span>
+            <span x-show="muscleBalance.unplaced"
+                  x-text="` ${muscleBalance.unplaced.toLocaleString()} lb is not counted — the muscle map cannot place those exercises.`"></span>
+          </p>
+        </div>
+
         <!-- Training --------------------------------------------------------- -->
         <div class="card">
           <div class="readout-head">

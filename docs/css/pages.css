@@ -1373,6 +1373,66 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   overflow: visible;
 }
 
+/* ---- muscle balance radar ------------------------------------------------- */
+
+/* Square, so the shape is not skewed by the card's width — a radar read on a
+   stretched canvas says something untrue about which spoke is longest. */
+.plot-radar svg { aspect-ratio: 1; height: auto; }
+
+/* Grid and spokes are scaffolding: present enough to read a magnitude against,
+   quiet enough that the shape is what you see. */
+.radar-ring,
+.radar-spoke {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.radar-even {
+  fill: none;
+  stroke: var(--color-text-dim);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+  opacity: .55;
+}
+
+.radar-shape {
+  fill: var(--color-primary-soft);
+  stroke: var(--color-primary-hover);   /* validated 3:1 against the card */
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.radar-dot {
+  fill: var(--color-primary-hover);
+  stroke: var(--color-surface-raised);  /* the 2px surface ring on an overlap */
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.radar-dot.is-on {
+  fill: var(--color-text);
+  r: 2.4;
+}
+
+/* Text tokens, never the series colour.
+ *
+ * font-size is in viewBox units, so it scales with the card: 5px here rendered
+ * near 19px on a phone and shouldered "Shoulders" off the edge. 3.2 lands around
+ * 11px at a phone's width, which is this page's --text-xs. text-anchor comes
+ * from the plot, per point. */
+.radar-label {
+  fill: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 3.2px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  dominant-baseline: middle;
+}
+
 .plot-readout {
   display: flex;
   align-items: baseline;

@@ -8,7 +8,8 @@
 
 import * as local from './local.js';
 import * as sync from './sync.js';
-import { estimate1RM, historyOf } from './workout.js';
+import { estimate1RM, historyOf, volume as volumeOf } from './workout.js';
+import { groupFor, MUSCLE_GROUPS, MUSCLE_GROUP_LABEL } from './muscle-map.js';
 import { dayBounds, addDays, toDateOnly, fromDateOnly, entriesForDay, sumTotals, currentGoal } from './food.js';
 
 const DAY = 86_400_000;
@@ -122,6 +123,135 @@ export function topLifts(index, limit = 6) {
       };
     })
     .filter(Boolean);
+}
+
+// ---- muscle balance --------------------------------------------------------
+
+/**
+ * How much work each muscle group got, as a share of the total.
+ *
+ * Volume rather than set count, because ten sets of curls is not ten sets of
+ * squats and a chart that says otherwise is worse than no chart. volumeOf
+ * already drops warm-ups, unfinished sets and anything with a distance on it, so
+ * a run contributes nothing here rather than contributing zero tonnage to a
+ * group it was never going to fill.
+ *
+ * Exercises the muscle map cannot place are counted into `unplaced` and left out
+ * of the shape — silently dropping them would make the shares add up to a
+ * different hundred per cent than the reader's training did.
+ */
+export function muscleVolume(index, exercises, { weeks = 12, now = Date.now() } = {}) {
+  const cutoff = now - weeks * 7 * DAY;
+  const byId = new Map((exercises ?? []).map((e) => [e.id, e]));
+
+  const totals = new Map(MUSCLE_GROUPS.map((g) => [g, 0]));
+  let unplaced = 0;
+  let sessions = 0;
+
+  for (const session of index.owned) {
+    if (!session.ended_at) continue;
+    if (new Date(session.started_at).getTime() < cutoff) continue;
+
+    const sets = index.bySession.get(session.id) ?? [];
+    if (!sets.length) continue;
+    sessions += 1;
+
+    // Grouped per exercise so volume() sees a whole exercise at a time, which is
+    // the unit its warm-up and cardio rules are written against.
+    const byKey = new Map();
+    for (const set of sets) {
+      const key = set.exercise_id ?? set.exercise_name;
+      if (!key) continue;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(set);
+    }
+
+    for (const [, group] of byKey) {
+      const load = volumeOf(group);
+      if (!load) continue;
+
+      const first = group[0];
+      const name = first.exercise_name ?? '';
+      const key = groupFor(byId.get(first.exercise_id) ?? null, name);
+      if (key && totals.has(key)) totals.set(key, totals.get(key) + load);
+      else unplaced += load;
+    }
+  }
+
+  const total = [...totals.values()].reduce((a, b) => a + b, 0);
+
+  return {
+    total: Math.round(total),
+    sessions,
+    unplaced: Math.round(unplaced),
+    groups: MUSCLE_GROUPS.map((key) => ({
+      key,
+      label: MUSCLE_GROUP_LABEL[key],
+      volume: Math.round(totals.get(key)),
+      share: total ? totals.get(key) / total : 0,
+    })),
+  };
+}
+
+/**
+ * The radar's geometry, as plain numbers — no SVG here, so it can be tested.
+ *
+ * Radius is proportional to share, which is the honest choice and worth stating:
+ * a radar's *area* grows with the square of its radius, so a group with twice
+ * the volume paints four times the ink. The rings and the readout beside the
+ * chart are what stop that exaggeration being read as fact.
+ *
+ * Scaled against the largest group rather than against 100%, or a balanced split
+ * across six groups would sit at a sixth of the radius and every chart would
+ * look like a dot.
+ */
+export function radarPlot(groups, { size = 100, rings = 3 } = {}) {
+  if (!groups?.length) return null;
+
+  const cx = size / 2;
+  const cy = size / 2;
+  /* 0.30, not 0.36. The labels sit outside the rim and grow outwards, and the
+     longest of them — "Shoulders", on a spoke pointing sideways — is what sets
+     the ceiling: any bigger and it hangs off the edge of the card on a phone. */
+  const radius = size * 0.30;
+  const peak = Math.max(...groups.map((g) => g.share), 0);
+
+  // Straight up, then clockwise, so the first group is where a reader looks.
+  const angleAt = (i) => (i / groups.length) * Math.PI * 2 - Math.PI / 2;
+  const round = (n) => Math.round(n * 100) / 100;
+
+  const at = (i, r) => ({
+    x: round(cx + Math.cos(angleAt(i)) * r),
+    y: round(cy + Math.sin(angleAt(i)) * r),
+  });
+
+  const points = groups.map((g, i) => {
+    const r = peak ? (g.share / peak) * radius : 0;
+    const tip = at(i, r);
+    const edge = at(i, radius);
+    // Pushed past the rim so a label never sits on its own spoke.
+    const label = at(i, radius + size * 0.06);
+
+    /* Anchored by which side of the chart it is on, so a label grows away from
+       the circle instead of across it — centred text on the left and right
+       spokes is what pushed "Shoulders" off the edge of the card. */
+    const across = Math.cos(angleAt(i));
+    const anchor = Math.abs(across) < 0.25 ? 'middle' : (across > 0 ? 'start' : 'end');
+
+    return { ...g, ...tip, edgeX: edge.x, edgeY: edge.y, labelX: label.x, labelY: label.y,
+             anchor, percent: Math.round(g.share * 100) };
+  });
+
+  const polygon = points.map((p) => `${p.x},${p.y}`).join(' ');
+
+  // The shape an even split would draw, as something to compare against.
+  const evenR = peak ? (1 / groups.length / peak) * radius : 0;
+  const even = groups.map((_, i) => { const p = at(i, evenR); return `${p.x},${p.y}`; }).join(' ');
+
+  return {
+    size, cx, cy, radius, polygon, even, points,
+    rings: Array.from({ length: rings }, (_, i) => round((radius * (i + 1)) / rings)),
+  };
 }
 
 // ---- nutrition -------------------------------------------------------------
