@@ -240,3 +240,132 @@ test('barChart emphasises the last bar when asked', () => {
 test('lineChart returns nothing for an empty series', () => {
   assert.equal(stats.lineChart('', { stroke: 'red' }), '');
 });
+
+// ---- weight in detail -------------------------------------------------------
+// Four readings is not a trend. Everything here reports what it had to work
+// with, so the card can be careful rather than confident.
+
+const DAY_MS = 86_400_000;
+const ago = (d) => new Date(NOW.getTime() - d * DAY_MS).toISOString();
+
+/** The real shape as of writing: four weigh-ins across seventeen days. */
+const sparse = [
+  { at: ago(17), lb: 178.4 },
+  { at: ago(11), lb: 177.2 },
+  { at: ago(4), lb: 176.5 },
+  { at: ago(0), lb: 176.1 },
+];
+
+test('readings come back newest first, each with its step', () => {
+  const rows = stats.weightReadings(sparse);
+  assert.deepEqual(rows.map((r) => r.lb), [176.1, 176.5, 177.2, 178.4]);
+  assert.equal(rows[0].delta, -0.4);
+  assert.equal(rows[0].daysSincePrevious, 4);
+  assert.equal(rows.at(-1).delta, null, 'the first reading has nothing to compare to');
+  assert.equal(rows.at(-1).daysSincePrevious, null);
+});
+
+test('a trend needs three readings before it says anything', () => {
+  assert.deepEqual(stats.weightTrend(sparse.slice(0, 2)), { enough: false, points: 2, needed: 3 });
+  assert.equal(stats.weightTrend([]).enough, false);
+  assert.equal(stats.weightTrend(sparse).enough, true);
+});
+
+test('readings all from one day are a scatter, not a slope', () => {
+  // Would otherwise divide by zero and report an infinite rate of loss.
+  const sameDay = [{ at: ago(3), lb: 176 }, { at: ago(3), lb: 177 }, { at: ago(3), lb: 175 }];
+  const trend = stats.weightTrend(sameDay);
+  assert.equal(trend.enough, false);
+  assert.equal(trend.sameDay, true);
+});
+
+test('the trend is reported per week, with a fit to judge it by', () => {
+  const trend = stats.weightTrend(sparse, { target: 170, now: NOW.getTime() });
+  assert.equal(trend.lbPerWeek, -0.9);
+  assert.equal(trend.direction, 'down');
+  assert.ok(trend.r2 > 0.9, 'these readings sit close to the line');
+  assert.equal(trend.noisy, false);
+  assert.equal(trend.spanDays, 17);
+});
+
+test('a scattered series says so instead of looking authoritative', () => {
+  const noisy = [
+    { at: ago(20), lb: 176 }, { at: ago(15), lb: 181 }, { at: ago(10), lb: 174 },
+    { at: ago(5), lb: 180 }, { at: ago(0), lb: 175 },
+  ];
+  const trend = stats.weightTrend(noisy);
+  assert.equal(trend.enough, true);
+  assert.ok(trend.r2 < 0.5);
+  assert.equal(trend.noisy, true, 'a slope through this must not be trusted');
+});
+
+test('a target is only projected when the line points at it', () => {
+  const gaining = [{ at: ago(14), lb: 170 }, { at: ago(7), lb: 173 }, { at: ago(0), lb: 176 }];
+  assert.equal(stats.weightTrend(gaining, { target: 165 }).projectedAt, null,
+    'going the wrong way: no date, rather than one in the past');
+
+  const losing = stats.weightTrend(sparse, { target: 170, now: NOW.getTime() });
+  assert.ok(losing.projectedAt, 'going the right way: a date');
+  assert.ok(losing.weeksAway > 0);
+});
+
+test('a window compares averages, and distinguishes flat from unknown', () => {
+  const week = stats.weightWindows(sparse, 7, NOW.getTime());
+  assert.equal(week.recentCount, 2);
+  assert.equal(week.priorCount, 1);
+  assert.equal(week.change, -0.9);
+
+  // Nothing to compare against is null, not zero — "no change" is a claim.
+  const alone = stats.weightWindows(sparse.slice(-1), 7, NOW.getTime());
+  assert.equal(alone.change, null);
+  assert.equal(alone.prior, null);
+});
+
+test('extremes report the readings a trend line hides', () => {
+  const ends = stats.weightExtremes(sparse);
+  assert.equal(ends.high.lb, 178.4);
+  assert.equal(ends.low.lb, 176.1);
+  assert.equal(ends.range, 2.3);
+  assert.equal(stats.weightExtremes([]), null);
+});
+
+// ---- plot geometry ----------------------------------------------------------
+
+test('the plot puts every point inside the box, left to right', () => {
+  const plot = stats.weightPlot(sparse, { target: 170 });
+  assert.equal(plot.points.length, 4);
+  assert.ok(plot.points.every((p) => p.x >= 0 && p.x <= plot.width));
+  assert.ok(plot.points.every((p) => p.y >= 0 && p.y <= plot.height));
+  assert.ok(plot.points.every((p, i, a) => i === 0 || p.x >= a[i - 1].x), 'x is monotonic');
+});
+
+test('the y-axis frames the data rather than starting at zero', () => {
+  // Two pounds of movement against a value near 180 is invisible from a zero
+  // baseline, and this chart exists to show exactly that movement.
+  const plot = stats.weightPlot(sparse);
+  assert.ok(plot.lo > 170, `floor was ${plot.lo}`);
+  assert.ok(plot.hi < 185, `ceiling was ${plot.hi}`);
+});
+
+test('a target outside the readings pulls the axis to include it', () => {
+  const plot = stats.weightPlot(sparse, { target: 160 });
+  assert.ok(plot.lo <= 160, 'otherwise the target line is drawn off the chart');
+  assert.ok(plot.targetY >= 0 && plot.targetY <= plot.height);
+});
+
+test('a flat or single-reading series does not divide by zero', () => {
+  const one = stats.weightPlot([{ at: ago(0), lb: 176 }]);
+  assert.equal(one.points.length, 1);
+  assert.ok(Number.isFinite(one.points[0].x) && Number.isFinite(one.points[0].y));
+
+  const flat = stats.weightPlot([{ at: ago(5), lb: 176 }, { at: ago(0), lb: 176 }]);
+  assert.ok(flat.points.every((p) => Number.isFinite(p.y)));
+  assert.equal(stats.weightPlot([]), null);
+});
+
+test('the area path closes back along the baseline', () => {
+  const plot = stats.weightPlot(sparse);
+  assert.ok(plot.area.startsWith('M'), 'starts where the line does');
+  assert.ok(plot.area.endsWith('Z'), 'and closes, or the fill leaks');
+  assert.ok(plot.area.includes(`L${plot.points[0].x} ${plot.height}`));
+});

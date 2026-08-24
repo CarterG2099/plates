@@ -1281,6 +1281,139 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   overflow: visible;
 }
 
+/* ---- interactive plot ------------------------------------------------------ */
+/* The older charts here are SVG strings handed to x-html, which cannot carry a
+   hover layer — a picture rather than something you can interrogate. This one
+   renders real elements so a crosshair and a readout can hang off them. */
+
+.plot {
+  position: relative;
+  touch-action: pan-y;      /* tracking the finger must not block scrolling */
+}
+
+.plot svg {
+  display: block;
+  width: 100%;
+  height: auto;             /* aspect preserved: a stretched plot skews the slope */
+  overflow: visible;
+}
+
+/* non-scaling-stroke throughout, or "2px" means two viewBox units and the line
+   thickens with the card. */
+.plot-line {
+  fill: none;
+  stroke: var(--color-primary-hover);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.plot-area { fill: var(--color-primary-soft); stroke: none; }
+
+/* Context, not data, so it stays under the line's weight. */
+.plot-target {
+  stroke: var(--color-success);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: .5;
+  vector-effect: non-scaling-stroke;
+}
+
+.plot-crosshair {
+  stroke: var(--color-text-dim);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.plot-dot {
+  fill: var(--color-primary-hover);
+  /* A ring in the surface colour, so a dot on the line still reads as a dot. */
+  stroke: var(--color-surface-raised);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.plot-dot.is-on {
+  fill: var(--color-text);
+  r: 2.6;
+}
+
+/* Value leads, label follows — the reader has the date and wants the number. */
+.plot-readout {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+}
+
+.plot-readout b { font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+
+.plot-readout span {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.plot-note {
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  margin: 0;
+}
+
+/* ---- stat cells ------------------------------------------------------------ */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+  gap: var(--space-2);
+}
+
+.stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  min-width: 0;
+}
+
+.stat-cell small {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.stat-cell b {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-base);
+}
+
+.stat-cell span {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* Direction is carried by the sign as well as the colour — never colour alone. */
+.delta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  color: var(--color-text-dim);
+  flex: none;
+  min-width: 44px;
+  text-align: right;
+}
+
+.delta.is-down { color: var(--color-success); }
+.delta.is-up   { color: var(--color-warning); }
+
 .chart-axis {
   display: flex;
   justify-content: space-between;

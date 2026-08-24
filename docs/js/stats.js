@@ -224,3 +224,190 @@ export function lineChart(points, { stroke }) {
   return `<polyline points="${points}" fill="none" stroke="${stroke}" stroke-width="2"`
     + ' stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
 }
+
+// ---- body weight, in detail -------------------------------------------------
+// Four readings is not a trend, and the honest thing is to say so rather than
+// draw a confident line through noise. Everything here reports how much it had
+// to work with so the UI can be careful.
+
+/** Every reading, newest first, with the step from the one before it. */
+export function weightReadings(series) {
+  return series
+    .map((point, i) => {
+      const previous = i > 0 ? series[i - 1] : null;
+      return {
+        at: point.at,
+        lb: point.lb,
+        delta: previous ? round1(point.lb - previous.lb) : null,
+        daysSincePrevious: previous
+          ? Math.max(1, Math.round((Date.parse(point.at) - Date.parse(previous.at)) / DAY))
+          : null,
+      };
+    })
+    .reverse();
+}
+
+/**
+ * Least squares over (days, lb), reported per week because that is the unit
+ * people actually think in.
+ *
+ * r2 is carried out deliberately: a slope through scattered weigh-ins looks
+ * exactly as authoritative as a slope through a clean run, and it should not.
+ * Under three readings there is no line worth drawing at all.
+ */
+export function weightTrend(series, { target = null, now = Date.now() } = {}) {
+  if (series.length < 3) {
+    return { enough: false, points: series.length, needed: 3 };
+  }
+
+  const t0 = Date.parse(series[0].at);
+  const xs = series.map((p) => (Date.parse(p.at) - t0) / DAY);
+  const ys = series.map((p) => p.lb);
+  const n = xs.length;
+
+  const meanX = xs.reduce((a, b) => a + b, 0) / n;
+  const meanY = ys.reduce((a, b) => a + b, 0) / n;
+
+  let sxy = 0;
+  let sxx = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (xs[i] - meanX) * (ys[i] - meanY);
+    sxx += (xs[i] - meanX) ** 2;
+  }
+  // Every weigh-in on the same day: a vertical scatter, not a trend.
+  if (sxx === 0) return { enough: false, points: n, needed: 3, sameDay: true };
+
+  const slope = sxy / sxx;                       // lb per day
+  const intercept = meanY - slope * meanX;
+
+  let ssRes = 0;
+  let ssTot = 0;
+  for (let i = 0; i < n; i++) {
+    ssRes += (ys[i] - (intercept + slope * xs[i])) ** 2;
+    ssTot += (ys[i] - meanY) ** 2;
+  }
+  const r2 = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
+
+  const latest = series[series.length - 1];
+  const lbPerWeek = round1(slope * 7);
+
+  // Only project when the line actually points at the target. "142 lb by never"
+  // is the truthful answer to a slope going the wrong way.
+  let projectedAt = null;
+  let weeksAway = null;
+  if (target != null && slope !== 0) {
+    const daysAway = (target - latest.lb) / slope;
+    if (daysAway > 0 && daysAway < 365 * 3) {
+      projectedAt = new Date(Date.parse(latest.at) + daysAway * DAY).toISOString();
+      weeksAway = round1(daysAway / 7);
+    }
+  }
+
+  return {
+    enough: true,
+    points: n,
+    lbPerWeek,
+    direction: lbPerWeek > 0.1 ? 'up' : lbPerWeek < -0.1 ? 'down' : 'flat',
+    r2: Math.round(r2 * 100) / 100,
+    // A line this scattered should be described, not trusted.
+    noisy: r2 < 0.5,
+    spanDays: Math.round((Date.parse(latest.at) - t0) / DAY),
+    projectedAt,
+    weeksAway,
+    now,
+  };
+}
+
+/**
+ * This window against the one before it — the "compared to history" question.
+ *
+ * Averaged rather than compared endpoint-to-endpoint, because day-to-day body
+ * weight swings by more than a week of real change.
+ */
+export function weightWindows(series, days = 7, now = Date.now()) {
+  const inWindow = (from, to) => series.filter((p) => {
+    const at = Date.parse(p.at);
+    return at > from && at <= to;
+  });
+
+  const recent = inWindow(now - days * DAY, now);
+  const prior = inWindow(now - 2 * days * DAY, now - days * DAY);
+  const mean = (rows) => (rows.length ? round1(rows.reduce((a, b) => a + b.lb, 0) / rows.length) : null);
+
+  const recentMean = mean(recent);
+  const priorMean = mean(prior);
+
+  return {
+    days,
+    recent: recentMean,
+    prior: priorMean,
+    recentCount: recent.length,
+    priorCount: prior.length,
+    // Null rather than zero when there is nothing to compare against: "no
+    // change" and "no data" are different answers.
+    change: recentMean != null && priorMean != null ? round1(recentMean - priorMean) : null,
+  };
+}
+
+/** Highest, lowest and the whole range, which a trend line hides. */
+export function weightExtremes(series) {
+  if (!series.length) return null;
+  const high = series.reduce((a, b) => (b.lb > a.lb ? b : a));
+  const low = series.reduce((a, b) => (b.lb < a.lb ? b : a));
+  return { high, low, range: round1(high.lb - low.lb) };
+}
+
+function round1(n) { return Math.round(n * 10) / 10; }
+
+/**
+ * Plot geometry for the weight chart, as data rather than as an SVG string.
+ *
+ * The older charts here build markup and hand it to x-html, which cannot carry a
+ * hover layer — you get a picture, not a chart you can interrogate. This returns
+ * coordinates so the template can render real elements and put a crosshair and a
+ * tooltip on them.
+ *
+ * The y-axis is padded around the data rather than zeroed: body weight varies by
+ * two or three pounds against a value near 180, and a zero baseline flattens
+ * every real movement into a straight line.
+ */
+export function weightPlot(series, { width = 100, height = 46, pad = 3, target = null } = {}) {
+  if (!series.length) return null;
+
+  const lbs = series.map((p) => p.lb);
+  let lo = Math.min(...lbs);
+  let hi = Math.max(...lbs);
+  if (target != null) { lo = Math.min(lo, target); hi = Math.max(hi, target); }
+
+  // A flat series would divide by zero; give it a pound of air either side.
+  if (hi - lo < 1) { lo -= 1; hi += 1; }
+  const headroom = (hi - lo) * 0.15;
+  lo -= headroom;
+  hi += headroom;
+
+  const t0 = Date.parse(series[0].at);
+  const t1 = Date.parse(series[series.length - 1].at);
+  const spanMs = t1 - t0;
+
+  const x = (at) => (spanMs === 0
+    ? width / 2
+    : pad + ((Date.parse(at) - t0) / spanMs) * (width - pad * 2));
+  const y = (lb) => pad + (1 - (lb - lo) / (hi - lo)) * (height - pad * 2);
+
+  const points = series.map((p) => ({
+    at: p.at, lb: p.lb,
+    x: round2(x(p.at)), y: round2(y(p.lb)),
+  }));
+
+  const line = points.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ');
+
+  return {
+    width, height, points, line,
+    // Closed back along the baseline, so the line can carry a soft fill.
+    area: `${line} L${points[points.length - 1].x} ${height} L${points[0].x} ${height} Z`,
+    targetY: target == null ? null : round2(y(target)),
+    lo: round1(lo), hi: round1(hi),
+  };
+}
+
+function round2(n) { return Math.round(n * 100) / 100; }

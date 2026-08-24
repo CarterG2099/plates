@@ -1527,14 +1527,110 @@
             <button class="btn" @click="weighing = true">Log</button>
           </div>
 
-          <!-- One series, so the card title names it and no legend is needed. -->
-          <svg class="chart" viewBox="0 0 100 46" preserveAspectRatio="none"
-               x-show="weight.length > 1" role="img" aria-label="Body weight trend"
-               x-html="weightChart"></svg>
+          <!-- One series, so the heading names it and no legend is needed.
+               preserveAspectRatio is deliberately not "none" here: the old chart
+               stretched, which skews a slope into whatever the card width says. -->
+          <template x-if="weightPlot && weight.length > 1">
+            <div class="plot" @pointermove="trackWeight($event)"
+                 @pointerleave="weightHover = null"
+                 @touchmove.passive="trackWeight($event.touches[0])">
+              <svg :viewBox="`0 0 ${weightPlot.width} ${weightPlot.height}`"
+                   role="img" aria-label="Body weight over time">
+                <!-- Target line, recessive: context, not data. -->
+                <line x-show="weightPlot.targetY !== null" x-cloak
+                      x1="0" :x2="weightPlot.width"
+                      :y1="weightPlot.targetY" :y2="weightPlot.targetY"
+                      class="plot-target"/>
+                <path :d="weightPlot.area" class="plot-area"/>
+                <path :d="weightPlot.line" class="plot-line"/>
+
+                <!-- Crosshair on the snapped reading. -->
+                <line x-show="weightHover" x-cloak
+                      :x1="weightHover && weightHover.x" :x2="weightHover && weightHover.x"
+                      y1="0" :y2="weightPlot.height" class="plot-crosshair"/>
+
+                <template x-for="pt in weightPlot.points" :key="pt.at">
+                  <circle :cx="pt.x" :cy="pt.y" r="1.6" class="plot-dot"
+                          :class="{ 'is-on': weightHover && weightHover.at === pt.at }"/>
+                </template>
+              </svg>
+
+              <!-- Values lead, the date follows. -->
+              <div class="plot-readout" x-show="weightFocus" x-cloak>
+                <b x-text="weightFocus && `${weightFocus.lb} lb`"></b>
+                <span x-text="weightFocus && weightDate(weightFocus.at, { long: true })"></span>
+              </div>
+            </div>
+          </template>
 
           <p class="empty" style="padding:var(--space-3) 0" x-show="weight.length < 2">
             Log your weight a couple of times and a trend appears here.
           </p>
+
+          <!-- Trajectory, in words first. -->
+          <div class="stat-grid" x-show="weight.length > 1" x-cloak>
+            <div class="stat-cell">
+              <small>Trend</small>
+              <b x-text="weightTrend.enough
+                   ? `${signed(weightTrend.lbPerWeek)} lb / wk`
+                   : 'Not yet'"></b>
+            </div>
+            <div class="stat-cell">
+              <small>Last 7 days</small>
+              <b x-text="signed(weightWeek.change, ' lb')"></b>
+            </div>
+            <div class="stat-cell">
+              <small>Last 30 days</small>
+              <b x-text="signed(weightMonth.change, ' lb')"></b>
+            </div>
+            <div class="stat-cell" x-show="weightTrend.weeksAway">
+              <small>At this rate</small>
+              <b x-text="weightTrend.projectedAt ? weightDate(weightTrend.projectedAt) : '—'"></b>
+            </div>
+          </div>
+
+          <p class="plot-note" x-show="weight.length > 1" x-cloak
+             x-text="trendConfidence"></p>
+
+          <button class="btn btn-ghost btn-block" x-show="weightReadings.length" x-cloak
+                  @click="weightOpen = !weightOpen"
+                  x-text="weightOpen ? 'Hide every reading' : `All ${weightReadings.length} readings`"></button>
+
+          <!-- The table view. Also what makes the low-contrast stroke acceptable:
+               every plotted value is readable without hovering anything. -->
+          <div class="rows" x-show="weightOpen" x-cloak>
+            <template x-for="r in weightReadings" :key="r.at">
+              <div class="row">
+                <div class="row-text">
+                  <b x-text="weightDate(r.at, { long: true })"></b>
+                  <small x-text="r.daysSincePrevious
+                    ? `${r.daysSincePrevious} days after the one before`
+                    : 'First reading'"></small>
+                </div>
+                <span class="row-num" x-text="`${r.lb} lb`"></span>
+                <span class="delta"
+                      :class="{ 'is-down': r.delta < 0, 'is-up': r.delta > 0 }"
+                      x-text="signed(r.delta)"></span>
+              </div>
+            </template>
+          </div>
+
+          <div class="stat-grid" x-show="weightOpen && weightExtremes" x-cloak>
+            <div class="stat-cell">
+              <small>Highest</small>
+              <b x-text="weightExtremes && `${weightExtremes.high.lb} lb`"></b>
+              <span x-text="weightExtremes && weightDate(weightExtremes.high.at)"></span>
+            </div>
+            <div class="stat-cell">
+              <small>Lowest</small>
+              <b x-text="weightExtremes && `${weightExtremes.low.lb} lb`"></b>
+              <span x-text="weightExtremes && weightDate(weightExtremes.low.at)"></span>
+            </div>
+            <div class="stat-cell">
+              <small>Range</small>
+              <b x-text="weightExtremes && `${weightExtremes.range} lb`"></b>
+            </div>
+          </div>
         </div>
 
         <!-- Training --------------------------------------------------------- -->

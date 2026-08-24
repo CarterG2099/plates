@@ -2840,6 +2840,79 @@ Alpine.data('statsPage', () => ({
   get weight() { return stats.weightSeries(this.data.weightLog, this.email); },
   get weightSummary() { return stats.weightSummary(this.weight, this.goal); },
 
+  // ---- weight, in detail ---------------------------------------------------
+  //
+  // One series, so no legend — the heading names it. Stroked in
+  // --color-primary-hover rather than --color-primary: the darker blue measures
+  // 2.6:1 against the card and the validator wants 3:1, and the lighter step
+  // clears it.
+
+  weightOpen: false,
+  weightHover: null,     // the reading under the pointer, or null
+
+  get weightTarget() { return Number(this.goal?.target_weight_lb) || null; },
+
+  get weightPlot() {
+    // 100x32 so the preserved aspect ratio lands near 140px tall on a phone.
+    return stats.weightPlot(this.weight, { target: this.weightTarget, height: 32 });
+  },
+
+  get weightReadings() { return stats.weightReadings(this.weight); },
+  get weightTrend() { return stats.weightTrend(this.weight, { target: this.weightTarget }); },
+  get weightWeek() { return stats.weightWindows(this.weight, 7); },
+  get weightMonth() { return stats.weightWindows(this.weight, 30); },
+  get weightExtremes() { return stats.weightExtremes(this.weight); },
+
+  /**
+   * Snap to the nearest reading by x, so the reader aims at a date rather than
+   * at a 2px line. Four weigh-ins across a phone's width are ~90px apart, and
+   * nobody hits that reliably.
+   */
+  trackWeight(event) {
+    const plot = this.weightPlot;
+    if (!plot) return;
+
+    const box = event.currentTarget.getBoundingClientRect();
+    const at = ((event.clientX - box.left) / box.width) * plot.width;
+
+    let nearest = plot.points[0];
+    for (const point of plot.points) {
+      if (Math.abs(point.x - at) < Math.abs(nearest.x - at)) nearest = point;
+    }
+    this.weightHover = nearest;
+  },
+
+  /** Whichever reading is being pointed at, else the most recent. */
+  get weightFocus() {
+    return this.weightHover ?? this.weightPlot?.points?.[this.weightPlot.points.length - 1] ?? null;
+  },
+
+  weightDate(iso, { long = false } = {}) {
+    return new Date(iso).toLocaleDateString(undefined, long
+      ? { weekday: 'short', month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric' });
+  },
+
+  /** "+0.4" / "-1.2" / "—". Signed, because the sign is the whole point. */
+  signed(n, unit = '') {
+    if (n == null) return '—';
+    const value = Number(n);
+    if (!Number.isFinite(value)) return '—';
+    return `${value > 0 ? '+' : ''}${value}${unit}`;
+  },
+
+  /** How much to trust the line, said in words rather than as an r-squared. */
+  get trendConfidence() {
+    const t = this.weightTrend;
+    if (!t.enough) {
+      return t.sameDay
+        ? 'Every reading is from the same day — weigh in across a few days to see a trend.'
+        : `${t.points} of ${t.needed} readings needed before a trend means anything.`;
+    }
+    if (t.noisy) return `Scattered — ${t.points} readings over ${t.spanDays} days, but they jump around.`;
+    return `${t.points} readings over ${t.spanDays} days, closely fitted.`;
+  },
+
   get weightChart() {
     const line = stats.linePoints(this.weight.map((w) => w.lb), { width: 100, height: 46 });
     return stats.lineChart(line.points, { stroke: 'var(--color-protein)' });
