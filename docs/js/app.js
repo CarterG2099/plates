@@ -1961,7 +1961,9 @@ Alpine.data('trainPage', () => ({
   previousLabel(group, index) {
     const set = (group.previous ?? [])[index];
     if (!set) return '';
-    return `${set.weight_lb ?? '—'}lb × ${set.reps ?? '—'}`;
+    // No unit and no spaces: the column it prints into is narrow so the plate
+    // chips can have the room, and the heading above the next column says lb.
+    return `${set.weight_lb ?? '—'}×${set.reps ?? '—'}`;
   },
 
   placeholderWeight(group, index) {

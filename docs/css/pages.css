@@ -675,7 +675,11 @@ html:has(.sheet-backdrop) { overflow: hidden; }
    *
    * The weight and reps tracks carry a floor too: as bare fr units they gave up
    * width to the plates until a three-digit weight was clipped to two. */
-  grid-template-columns: 22px minmax(0, 1.15fr) minmax(48px, 1fr) minmax(42px, 1fr) 46px 38px;
+  /* Measured rather than guessed, and both are floors so neither column can be
+     squeezed out by the other on the narrowest phone. Prev gets 40: "135x8"
+     measures 36 and an exact fit still ellipsises on sub-pixel rounding, which
+     cost the reps — the half of it you cannot infer from the box alongside. */
+  grid-template-columns: 22px minmax(40px, .7fr) minmax(44px, 1fr) minmax(36px, 1fr) 64px 38px;
   /* Tighter than it was. Six tracks on a 360px phone, and the gaps were costing
      the Prev column more than the plate chips did. */
   gap: var(--space-1);
@@ -948,13 +952,17 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 .card:not(:has(.setrow .loadout b)) .sethead,
 .card:not(:has(.setrow .loadout b)) .setrow {
   grid-template-columns: 22px minmax(0, 1.15fr) minmax(48px, 1fr) minmax(42px, 1fr) 0 38px;
+  /* Deliberately the wider Prev. With no plates to make room for, this is where
+     cardio prints "3.23 mi · 26:00 · 8:03 /mi". */
 }
 
 .loadout b {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: 700;
-  padding: 3px 8px;
+  /* Tighter than the old stacked chips: two of them share the track now, and a
+     mixed load only stays on one line if they do. */
+  padding: 3px 4px;
   border-radius: 5px;
   color: var(--color-ink);
   box-shadow: var(--shadow-sm);
