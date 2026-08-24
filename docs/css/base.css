@@ -99,6 +99,12 @@ button {
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--color-text-dim);
+  /* It opens Settings, so it needs a finger-sized target and the button reset. */
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: var(--space-2) 0 var(--space-2) var(--space-3);
+  min-height: 44px;
 }
 
 .app-main {

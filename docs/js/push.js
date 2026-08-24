@@ -213,3 +213,50 @@ async function save(sub) {
 
   if (error) throw error;
 }
+
+// ---- preferences ------------------------------------------------------------
+//
+// What to send, as opposed to whether this browser can be sent to at all. The
+// subscription is per-installed-browser; these are per-person, so they live in
+// Postgres and the Edge Functions read them directly. Not local-first for the
+// same reason as the rest of this file: a preference the server cannot see is a
+// preference the server cannot act on.
+
+/** Server defaults, mirrored so the UI has something to draw before the fetch. */
+export const DEFAULT_PREFS = { idle_workouts: true, morning_quotes: false };
+
+/**
+ * This person's settings, creating the row on first read.
+ *
+ * Upsert rather than select-then-insert: two tabs opening at once would both see
+ * no row and both insert, and the second would collide on the primary key.
+ */
+export async function loadPrefs(ownerEmail) {
+  const { data, error } = await db('notification_prefs')
+    .upsert({ owner_email: ownerEmail, ...DEFAULT_PREFS }, { onConflict: 'owner_email', ignoreDuplicates: true })
+    .select('idle_workouts, morning_quotes')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (data) return data;
+
+  // ignoreDuplicates returns nothing when the row already existed.
+  const { data: existing, error: readError } = await db('notification_prefs')
+    .select('idle_workouts, morning_quotes')
+    .eq('owner_email', ownerEmail)
+    .maybeSingle();
+
+  if (readError) throw readError;
+  return existing ?? { ...DEFAULT_PREFS };
+}
+
+export async function savePrefs(ownerEmail, changes) {
+  const { data, error } = await db('notification_prefs')
+    .upsert({ owner_email: ownerEmail, ...changes, updated_at: new Date().toISOString() },
+      { onConflict: 'owner_email' })
+    .select('idle_workouts, morning_quotes')
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ?? { ...DEFAULT_PREFS, ...changes };
+}

@@ -92,7 +92,8 @@
 
       <header class="app-bar">
         <h1>Plates</h1>
-        <span class="app-bar-meta" x-text="$store.auth.displayName"></span>
+        <button class="app-bar-meta" @click="$store.ui.openSettings()"
+                x-text="$store.auth.displayName" aria-label="Settings"></button>
       </header>
 
       <!-- Today ------------------------------------------------------------ -->
@@ -1268,10 +1269,9 @@
               <div class="grabber"></div>
               <div class="card-label">Options</div>
 
-              <button class="btn btn-block" x-init="loadReminderState()"
-                      :disabled="reminders === 'unsupported' || reminders === 'blocked'"
-                      @click="toggleReminders()">
-                <span x-text="reminderLabel"></span>
+              <button class="btn btn-block"
+                      @click="menu = false; $store.ui.openSettings()">
+                Notification settings
               </button>
 
               <label class="btn btn-block" style="cursor:pointer">
@@ -2048,6 +2048,55 @@
       </nav>
 
       <div class="toast" x-show="$store.ui.toast" x-transition x-cloak x-text="$store.ui.toast"></div>
+
+      <template x-if="$store.ui.settingsOpen">
+        <div class="sheet-backdrop" @click.self="$store.ui.settingsOpen = false">
+          <div class="sheet" x-init="$swipe($el, () => { $store.ui.settingsOpen = false })">
+            <div class="grabber"></div>
+            <div class="sheet-head">
+              <h2>Settings</h2>
+              <button class="tap" @click="$store.ui.settingsOpen = false" aria-label="Close">×</button>
+            </div>
+
+            <div class="card-label">Notifications</div>
+
+            <!-- Permission is the browser's, not ours: once denied it cannot be
+                 asked for again from script, so the row says so rather than
+                 offering a switch that would do nothing. -->
+            <label class="setting" :class="{ 'is-dead': ['unsupported', 'blocked'].includes($store.ui.notifications) }">
+              <span class="setting-text">
+                <b>Push notifications</b>
+                <small x-text="$store.ui.notifications === 'on'
+                  ? 'Forgotten workouts, and anything below you turn on'
+                  : $store.ui.notificationLabel"></small>
+              </span>
+              <input type="checkbox" role="switch"
+                     :checked="$store.ui.notifications === 'on'"
+                     :disabled="['unsupported', 'blocked', 'unknown'].includes($store.ui.notifications)"
+                     @change="await $store.ui.toggleNotifications();
+                              $el.checked = $store.ui.notifications === 'on'">
+            </label>
+
+            <label class="setting" :class="{ 'is-dead': $store.ui.notifications !== 'on' }">
+              <span class="setting-text">
+                <b>Morning motivation</b>
+                <small x-text="$store.ui.notifications === 'on'
+                  ? 'One line at 6:30am, from your own training'
+                  : 'Turn notifications on first'"></small>
+              </span>
+              <input type="checkbox" role="switch"
+                     :checked="$store.ui.prefs.morning_quotes"
+                     :disabled="$store.ui.notifications !== 'on' || $store.ui.prefsBusy"
+                     @change="await $store.ui.toggleMorning();
+                              $el.checked = $store.ui.prefs.morning_quotes">
+            </label>
+
+            <div class="card-label" style="margin-top: var(--space-4)">Account</div>
+            <p class="setting-meta" x-text="$store.auth.email"></p>
+            <button class="btn btn-block" @click="$store.auth.signOut()">Sign out</button>
+          </div>
+        </div>
+      </template>
 
       <!-- Post-workout. Sits at the app root, not inside the Train screen: by the
            time this shows there is no session left for that component to hang off. -->

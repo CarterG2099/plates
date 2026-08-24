@@ -642,6 +642,81 @@ Alpine.store('ui', {
   finished: null,
   celebrate(payload) { this.finished = payload; },
   dismissFinished() { this.finished = null; },
+
+  // ---- settings ------------------------------------------------------------
+  //
+  // Two separate things, and the sheet keeps them separate. Notifications is
+  // whether this browser has a push subscription at all — permission lives in
+  // the browser, not the database, and cannot be re-requested once denied.
+  // Morning motivation is a row in Postgres that an Edge Function reads at
+  // 6:30, and it is meaningless while the first is off.
+
+  settingsOpen: false,
+  notifications: 'unknown',   // unknown | unsupported | off | on | blocked
+  prefs: { ...push.DEFAULT_PREFS },
+  prefsBusy: false,
+
+  openSettings() {
+    this.settingsOpen = true;
+    this.loadSettings();
+  },
+
+  async loadSettings() {
+    if (!push.isSupported()) this.notifications = 'unsupported';
+    else if (push.permission() === 'denied') this.notifications = 'blocked';
+    else {
+      try { await push.ensureSubscribed(); } catch { /* surfaced by the toggle */ }
+      this.notifications = (await push.isSubscribed()) ? 'on' : 'off';
+    }
+
+    const email = Alpine.store('auth').email;
+    if (!email) return;
+    try { this.prefs = await push.loadPrefs(email); } catch { /* keep the defaults */ }
+  },
+
+  /** Must run straight off the click: a prompt with no gesture is ignored. */
+  async toggleNotifications() {
+    if (this.notifications === 'on') {
+      await push.disable();
+      this.notifications = 'off';
+      this.flash('Notifications off');
+      return;
+    }
+
+    const result = await push.enable();
+    if (result === 'granted') {
+      this.notifications = 'on';
+      this.flash('Notifications on');
+    } else if (result === 'denied') {
+      // Not recoverable from script; the browser has to be told directly.
+      this.notifications = 'blocked';
+    }
+  },
+
+  async toggleMorning() {
+    const next = !this.prefs.morning_quotes;
+    this.prefs = { ...this.prefs, morning_quotes: next };   // optimistic
+    this.prefsBusy = true;
+    try {
+      this.prefs = await push.savePrefs(Alpine.store('auth').email, { morning_quotes: next });
+      this.flash(next ? 'Morning motivation on' : 'Morning motivation off');
+    } catch (e) {
+      this.prefs = { ...this.prefs, morning_quotes: !next };  // put it back
+      this.flash(describeError(e));
+    } finally {
+      this.prefsBusy = false;
+    }
+  },
+
+  get notificationLabel() {
+    return {
+      unknown: 'Checking…',
+      unsupported: 'Not supported in this browser',
+      off: 'Off',
+      on: 'On',
+      blocked: 'Blocked in your browser settings',
+    }[this.notifications];
+  },
 });
 
 // ---- today -----------------------------------------------------------------
@@ -2457,54 +2532,6 @@ Alpine.data('trainPage', () => ({
     const sets = workout.setsOf(this.data.index, session.id);
     const groups = workout.groupByExercise(sets);
     return `${groups.length} exercises · ${Math.round(workout.volume(sets)).toLocaleString()} lb`;
-  },
-
-  // ---- idle-workout reminders ----------------------------------------------
-  //
-  // Server-sent, because the app cannot notice this itself: a backgrounded PWA
-  // is suspended within moments, so no timer in the page survives long enough
-  // to fire. See supabase/functions/notify-idle-workouts.
-
-  reminders: 'unknown',   // 'unknown' | 'unsupported' | 'off' | 'on' | 'blocked'
-
-  async loadReminderState() {
-    if (!push.isSupported()) { this.reminders = 'unsupported'; return; }
-    if (push.permission() === 'denied') { this.reminders = 'blocked'; return; }
-
-    // Repairs a missing or stale subscription. Best-effort: offline, this is
-    // not worth surfacing.
-    try { await push.ensureSubscribed(); } catch { /* reported by the toggle */ }
-
-    this.reminders = (await push.isSubscribed()) ? 'on' : 'off';
-  },
-
-  /** Must run from the click: a permission prompt with no gesture is ignored. */
-  async toggleReminders() {
-    if (this.reminders === 'on') {
-      await push.disable();
-      this.reminders = 'off';
-      Alpine.store('ui').flash('Reminders off');
-      return;
-    }
-
-    const result = await push.enable();
-    if (result === 'granted') {
-      this.reminders = 'on';
-      Alpine.store('ui').flash('Reminders on');
-    } else if (result === 'denied') {
-      // Not recoverable from script — the browser has to be told directly.
-      this.reminders = 'blocked';
-    }
-  },
-
-  get reminderLabel() {
-    return {
-      unknown: 'Idle-workout reminders',
-      unsupported: 'Reminders not supported here',
-      off: 'Remind me if I leave a workout running',
-      on: 'Reminders on · tap to turn off',
-      blocked: 'Notifications blocked in browser settings',
-    }[this.reminders];
   },
 
   // ---- past sessions -------------------------------------------------------
