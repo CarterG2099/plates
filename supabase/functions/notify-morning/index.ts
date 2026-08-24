@@ -86,22 +86,27 @@ function streaks(startedAt: string[], todayLocal: string, zone: string) {
 const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
 
 /**
- * Quotes, attributed — and attributed correctly, which took some checking.
+ * Quotes. The motivation is the point; the name under it is a bonus.
  *
- * "We are what we repeatedly do" is the one everyone hands to Aristotle. It is
- * Will Durant, summarising him in The Story of Philosophy, and it is credited to
- * Durant here. Anything whose provenance would not survive that kind of look is
- * left out rather than guessed at, or credited to the tradition it came from —
- * which is why two of these credit a proverb and a motto rather than a person.
+ * That ordering is Carter's, and it is the opposite of where this file started.
+ * A good line is not dropped for having murky provenance — it is credited as
+ * accurately as it can be and kept. So: named where the source holds up, hedged
+ * with "attributed to" where it does not, and credited to a proverb or a motto
+ * where there is no person to name at all.
+ *
+ * "We are what we repeatedly do" still goes to Will Durant rather than Aristotle,
+ * because there the true author is actually known. Being accurate costs nothing
+ * when you have the facts; it is only when you don't that the line matters more.
  *
  * The two Churchill ones are in, hedged. Neither appears anywhere in what he
  * actually wrote, and the Churchill Society says as much — so they are credited
  * as attributed rather than as his. Carter wanted them and they are famous; the
  * fix is to be straight about the provenance, not to drop the line.
  *
- * Ronnie Coleman's is still out. His actual line has a word in it Carter does not
- * want, and quietly editing a quotation to suit is worse than dropping it: the
- * attribution stops being true the moment the words stop being his.
+ * Ronnie Coleman's is out, on the swearing. It went out, came back in his own
+ * words, then went again — his call, and the right one for a line that lands on
+ * a phone at 6:30am. Not paraphrased, though: the words were his or they are
+ * not here at all.
  */
 const QUOTES: Array<[string, string]> = [
   // Discipline and doing the work
