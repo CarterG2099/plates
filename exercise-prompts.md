@@ -252,30 +252,15 @@ before the shared-conversation sheets.
 Redoing the Gemini 52 in ChatGPT is roughly 13 sheets, and would resolve items 4
 and 5 as a side effect, since most of those are Gemini drawings too.
 
----
-
-## Known-wrong, to redo at the end
-
-Noted while identifying each sheet. All are placed and working — this is the
-review list, not a blocker.
-
-**The whole Gemini set — 52 files — is the largest item here.** Once the 47
-outstanding drawings are done, every drawing in the folder except those 52 will
-be in the ChatGPT style. Redoing them is 13 more sheets. Everything below is a
-fault on top of that.
-
-| File | What is wrong |
-|---|---|
-| `chin-up` | Indistinguishable from `pull-up` — same rear view, grip not visibly underhand, biceps not highlighted. Redo with "underhand grip, palms facing the figure, biceps highlighted as well as the lats". |
-| `lat-pulldown-close-grip-cable` | Only a sliver of red visible from that angle; reads as no highlight at 44px. |
-| `pendlay-row` | Highlight landed on the glute rather than the lats. |
-| `bent-over-row-barbell` | Highlight landed on the traps and chest rather than the mid-back. |
-| `iso-lateral-row-machine`, `iso-lateral-low-row` | Cut out of a malformed sheet that drew eight figures instead of four. Both are seated row machines and I could not tell which was which — the two may be swapped. |
-| `sumo-deadlift` | Stance is not noticeably wider than the regular deadlift. |
-| `hip-adduction-machine` | Cannot tell whether the pads are inside or outside the thighs; may actually be abduction. |
-| `bench-press-barbell`, `bench-press-dumbbell` | Flat style from before the shared-conversation sheets — different again from the other 50 Gemini ones. |
+### A note on where the faults came from
 
 Two Gemini sheets came back malformed as 2816 × 1536 with the exercises laid out
 freely rather than in quadrants — one drew each exercise twice, the other drew
-seven figures. Both were salvaged with `art.mjs region`. ChatGPT has not done
-this, which is part of why the remaining sheets go there.
+seven figures. Both were salvaged with `art.mjs region`, which is where the
+possible `iso-lateral-*` swap comes from. ChatGPT has never done this; its
+failure mode is different, and milder — it substitutes a similar exercise rather
+than breaking the grid.
+
+Counting items 1 to 5, **22 of the 91 want redoing**. Nineteen of those are
+Gemini drawings, so the 13 sheets that would replace the Gemini set clear most of
+this list at the same time.
