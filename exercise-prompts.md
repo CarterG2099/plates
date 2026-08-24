@@ -4,7 +4,7 @@
 key has no image quota. Companion to `exercise-art.md`, which explains where the
 files go and why they exist; this file is just the commands.
 
-**68 done, 42 to go — 11 sheets.** Four exercises per image, sliced apart
+**91 done, 19 to go — 5 sheets.** Four exercises per image, sliced apart
 afterwards. A square sheet gives cells well above the 512px target, so nothing is
 lost to the grid, and it is four times fewer requests.
 
@@ -96,7 +96,7 @@ It is worth adding this line when a sheet is mostly one muscle:
 
 ---
 
-## Already done — 68
+## Already done — 91
 
 | Group | Done | Style |
 |---|---|---|
@@ -104,98 +104,56 @@ It is worth adding this line when a sheet is mostly one muscle:
 | Back | 19 of 19 | Gemini |
 | Legs | 17 of 17 | Gemini |
 | Shoulders | 13 of 13 | 4 Gemini, 9 ChatGPT |
-| Arms | 7 of 21 | ChatGPT |
-| Core | 0 of 7 | — |
-| Glutes and calves | 0 of 11 | — |
-| Cardio | 0 of 10 | — |
+| Arms | 13 of 21 | ChatGPT |
+| Core | 4 of 7 | ChatGPT |
+| Glutes and calves | 8 of 11 | ChatGPT |
+| Cardio | 6 of 10 | ChatGPT |
 
 Everything still to draw is in the sheets below; nothing below repeats a drawing
 that already exists.
 
 ---
 
-## Sheet 1 — arms
+## Sheet 1 — arms, biceps
+
+Send with the anti-substitution line: these are four different exercises, not
+four pictures of a curl.
 
 > Top-left: **21s Bicep Curl** — highlight the biceps. Include a straight barbell stopped exactly halfway through the curl, forearms parallel to the floor.
 > Top-right: **Hammer Curl** — highlight the biceps. Include two dumbbells held in a neutral grip, thumbs up, standing, curled to the shoulders.
 > Bottom-left: **Concentration Curl** — highlight the biceps. Include one dumbbell only, seated on a flat bench, the working elbow braced against the inner thigh.
 > Bottom-right: **Reverse Curl (Barbell)** — highlight the biceps and forearms. Include a straight barbell held with an overhand grip, knuckles facing up.
 
-## Sheet 2 — arms
+## Sheet 2 — arms, forearms and dips
 
-> Top-left: **Behind the Back Curl (Cable)** — highlight the biceps. Include a low cable pulley with the cable running behind the body, curled with one arm.
+> Top-left: **Behind the Back Curl (Cable)** — highlight the biceps. Include a low cable pulley with the cable running **behind** the body, curled with one arm.
 > Top-right: **Behind the Back Bicep Wrist Curl (Barbell)** — highlight the forearms. Include a barbell held behind the back at hip level, curled with the wrists only.
-> Bottom-left: **Triceps Pushdown** — highlight the triceps. Include a high cable with a **straight bar**, pressed down to the thighs, elbows pinned to the sides.
-> Bottom-right: **Triceps Kickback (Cable)** — highlight the triceps. Include a low cable with a single handle, torso hinged forward, upper arm held horizontal, forearm extending back.
+> Bottom-left: **Triceps Dip (Weighted)** — highlight the triceps. Include parallel dip bars and a weight plate hanging from a belt, torso upright.
+> Bottom-right: **Seated Dip (Machine)** — highlight the triceps. Include a seated dip machine with handles at the sides and a back pad.
 
-## Sheet 3 — arms
-
-> Top-left: **Triceps Extension (Dumbbell)** — highlight the triceps. Include one dumbbell held overhead with both hands and lowered behind the head.
-> Top-right: **Single Arm Tricep Extension (Dumbbell)** — highlight the triceps. Include one dumbbell held overhead in a single hand, lowered behind the head, other arm at the side.
-> Bottom-left: **Skullcrusher** — highlight the triceps. Include an EZ curl bar lowered toward the forehead while lying on a flat bench.
-> Bottom-right: **Close-Grip Bench Press** — highlight the triceps. Include a straight barbell gripped narrow, hands close together, on a flat bench.
-
-## Sheet 4 — arms, then core
-
-> Top-left: **Triceps Dip (Weighted)** — highlight the triceps. Include parallel dip bars and a weight plate hanging from a belt, torso upright.
-> Top-right: **Seated Dip (Machine)** — highlight the triceps. Include a seated dip machine with handles at the sides and a back pad.
-> Bottom-left: **Plank** — highlight the abdominals. No equipment — forearms on the floor, body held in one straight line.
-> Bottom-right: **Ab Wheel Rollout** — highlight the abdominals. Include an ab wheel, kneeling, extended forward near the floor.
-
-## Sheet 5 — core
+## Sheet 3 — core
 
 > Top-left: **Crunch (Cable)** — highlight the abdominals. Include a high cable with a rope held beside the head, kneeling, spine curled forward.
 > Top-right: **Decline Sit Up** — highlight the abdominals. Include a decline bench with foot rollers, torso curling upward.
-> Bottom-left: **Hanging Leg Raise** — highlight the abdominals. Include an overhead bar with the body hanging and the legs raised to horizontal.
-> Bottom-right: **Leg Raise Parallel Bars (Weighted)** — highlight the abdominals. Include a captain's chair with parallel arm pads and a back rest, legs raised, a weight held between the feet.
+> Bottom-left: **Leg Raise Parallel Bars (Weighted)** — highlight the abdominals. Include a captain's chair with parallel arm pads and a back rest, legs raised, a weight held between the feet.
+> Bottom-right: **Hip Abduction (Machine)** — highlight the gluteus medius on the outer hip. Include a seated abduction machine with the pads on the **outside** of the thighs, knees pressing apart against them.
 
-## Sheet 6 — core, then glutes
+## Sheet 4 — calves
 
-> Top-left: **Russian Twist** — highlight the obliques. Include a weight plate held at the chest, seated on the floor, torso rotated to one side, feet lifted.
-> Top-right: **Hip Thrust** — highlight the glutes. Include a barbell across the hips with the upper back braced against a flat bench.
-> Bottom-left: **Glute Kickback (Machine)** — highlight the glutes. Include a glute kickback machine with a footplate, one leg driving backward.
-> Bottom-right: **Pull Through (Cable)** — highlight the glutes. Include a low cable with a rope passed between the legs, hips hinged then driven forward.
+> Top-left: **Calf Extension (Machine)** — highlight the calves. Include a calf machine with a footplate, rising onto the toes.
+> Top-right: **Calf Press (Machine)** — highlight the calves. Include a leg press sled with only the toes on the bottom edge of the footplate, legs straight.
+> Bottom-left: **Single Leg Standing Calf Raise (Dumbbell)** — highlight the calves. Include one dumbbell held at the side, one foot on a raised step, the other leg lifted.
+> Bottom-right: **Running** — no highlight colour at all; the whole figure stays grey. No equipment, mid-stride at a run, one foot off the ground.
 
-## Sheet 7 — glutes and lower back
+## Sheet 5 — the last three, unaided
 
-> Top-left: **Swing (Kettlebell)** — highlight the glutes and hamstrings. Include a kettlebell swung forward to chest height on straight arms.
-> Top-right: **Hip Abduction (Machine)** — highlight the gluteus medius on the outer hip. Include a seated abduction machine with pads against the **outer** thighs, knees pressing apart.
-> Bottom-left: **Back Extension** — highlight the erector spinae. Include a 45-degree back extension bench with hip and ankle pads.
-> Bottom-right: **Standing Calf Raise** — highlight the calves. Include a standing calf raise machine with shoulder pads and a raised footplate, heels dropped below the toes.
+Three only. Send as a **3 × 1 horizontal strip**. None has a highlighted muscle.
 
-## Sheet 8 — calves
-
-> Top-left: **Seated Calf Raise** — highlight the calves. Include a seated calf raise machine with pads across the thighs and the toes on a block.
-> Top-right: **Calf Extension (Machine)** — highlight the calves. Include a calf machine with a footplate, rising onto the toes.
-> Bottom-left: **Calf Press (Machine)** — highlight the calves. Include a leg press sled with only the toes on the bottom edge of the footplate, legs straight.
-> Bottom-right: **Single Leg Standing Calf Raise (Dumbbell)** — highlight the calves. Include one dumbbell held at the side, one foot on a raised step, the other leg lifted.
-
-## Sheet 9 — cardio machines
-
-None of the cardio sheets has a highlighted muscle — say so explicitly, because
-the model will otherwise pick one.
-
-> Top-left: **Cycling** — no highlight colour at all; the whole figure stays grey. Include a stationary exercise bike, rider seated.
-> Top-right: **Spinning** — no highlight colour; the whole figure stays grey. Include an indoor spin bike with the rider standing out of the saddle.
-> Bottom-left: **Stair Machine (Steps)** — no highlight colour; the whole figure stays grey. Include a stair climber machine with rotating steps and handrails.
-> Bottom-right: **Rowing Machine** — no highlight colour; the whole figure stays grey. Include an indoor rowing erg, seated on the slide, pulling the handle to the chest.
-
-## Sheet 10 — cardio, machine and unaided
-
-> Top-left: **Elliptical** — no highlight colour; the whole figure stays grey. Include an elliptical trainer with foot pedals and long moving handles.
-> Top-right: **Treadmill Running** — no highlight colour; the whole figure stays grey. Include a treadmill with a running deck, side rails and a console.
-> Bottom-left: **Running** — no highlight colour; the whole figure stays grey. No equipment at all, mid-stride at a run, one foot off the ground.
-> Bottom-right: **Walking** — no highlight colour; the whole figure stays grey. No equipment at all, mid-stride walking, upright and relaxed.
-
-## Sheet 11 — the last two
-
-Two only. Send it as a **2 × 1 side-by-side pair**, not a 2 × 2 — an empty
-quadrant tends to get filled with an invention.
-
-> Draw these two as one wide image, side by side, left and right. Neither has a highlighted muscle — the whole figure stays grey in both.
+> Draw these three as one wide image, a single row of three equal panels, left to right. None of them has a highlighted muscle — the whole figure stays entirely grey in all three, no red anywhere.
 >
-> Left: **Swimming** — mid-stroke front crawl, one arm extended forward and one recovering overhead, body horizontal. No water, no pool, no scenery — just the figure against the black background.
-> Right: **Hiking** — walking uphill with a backpack and a pair of trekking poles. No hill, no scenery — the uphill lean and the poles carry it.
+> Left: **Walking** — no equipment, mid-stride walking, upright and relaxed.
+> Middle: **Swimming** — mid-stroke front crawl, one arm extended forward and one recovering overhead, body horizontal. No water, no pool, no scenery.
+> Right: **Hiking** — walking uphill with a backpack and a pair of trekking poles. No hill and no scenery; the uphill lean and the poles carry it.
 
 ---
 
@@ -229,6 +187,72 @@ two drawings apart.
 |---|---|
 | `straight-arm-lat-pulldown-cable.png` | `straight-arm-pulldown-rope.png` |
 | `triceps-pushdown.png` | `triceps-pushdown-rope.png` |
+
+## Review of all 91 placed — what needs redoing
+
+Every drawing was checked side by side on a contact sheet, not one at a time, so
+the comparisons below are against their actual neighbours in the list.
+
+### 1. Cardio is highlighted when it should not be — 6
+
+The whole point of these six is that no single muscle is worked, and every one
+came back with quads or calves in red. They read as leg exercises.
+
+`cycling` · `spinning` · `elliptical` · `treadmill-running` ·
+`stair-machine-steps` · `rowing-machine`
+
+The prompt does say "no highlight colour at all" — it was ignored. Worth putting
+the instruction *first* in the line rather than after the exercise name, and
+adding "no red anywhere in this image".
+
+### 2. Wrong muscle highlighted — 5
+
+| File | Lit | Should be |
+|---|---|---|
+| `back-extension` | glutes | erector spinae, the lower back |
+| `seated-leg-curl` | top of the thigh | hamstrings, the underside |
+| `swing-kettlebell` | calves | glutes and hamstrings |
+| `pendlay-row` | glute | latissimus dorsi |
+| `bent-over-row-barbell` | traps and chest | rhomboids and mid-back |
+
+### 3. Wrong equipment — 3
+
+| File | Drew | Should be |
+|---|---|---|
+| `glute-kickback-machine` | standing with dumbbells | a glute kickback machine |
+| `triceps-kickback-cable` | a barbell | a low cable with a single handle |
+| `triceps-pushdown` | a rope | a **straight bar** — as drawn it is a duplicate of `triceps-pushdown-rope`, and those two exist precisely to show the difference |
+
+### 4. Wrong or ambiguous exercise — 4
+
+| File | Problem |
+|---|---|
+| `chin-up` | Overhand grip and no biceps highlight, so it is indistinguishable from `pull-up` |
+| `hip-adduction-machine` | Pads read as being on the outside of the thighs, which is abduction |
+| `iso-lateral-row-machine`, `iso-lateral-low-row` | Salvaged from a malformed sheet; the two may be swapped |
+| `sumo-deadlift` | Stance no wider than `deadlift` |
+
+### 5. Highlight too small to read at 44px — 4
+
+Side-on views where the lit muscle is edge-on and reduces to a sliver. These are
+the ones to redraw **from a different perspective** — three-quarter from behind
+rather than pure profile:
+
+`lat-pulldown-close-grip-cable` · `seated-cable-row-v-grip-cable` ·
+`row-dumbbell` · `lat-pulldown`
+
+### 6. Style — 52 files
+
+The Gemini set is flat vector art on charcoal; the ChatGPT set is a 3D render on
+black. Side by side in the list the difference is unmissable, and it is the
+largest visual problem in the folder — bigger than any single wrong drawing.
+`bench-press-barbell` and `bench-press-dumbbell` are a third style again, from
+before the shared-conversation sheets.
+
+Redoing the Gemini 52 in ChatGPT is roughly 13 sheets, and would resolve items 4
+and 5 as a side effect, since most of those are Gemini drawings too.
+
+---
 
 ## Known-wrong, to redo at the end
 
