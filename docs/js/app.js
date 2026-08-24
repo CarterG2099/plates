@@ -2915,7 +2915,10 @@ Alpine.data('statsPage', () => ({
     if (n == null) return '—';
     const value = Number(n);
     if (!Number.isFinite(value)) return '—';
-    return `${value > 0 ? '+' : ''}${value}${unit}`;
+    // Always one decimal: a column mixing "-1" and "-0.8" reads as though the
+    // first were less precise rather than rounder, and tabular-nums cannot
+    // align what has a different number of digits.
+    return `${value > 0 ? '+' : ''}${value.toFixed(1)}${unit}`;
   },
 
   /** How much to trust the line, said in words rather than as an r-squared. */

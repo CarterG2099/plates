@@ -1533,7 +1533,13 @@
           <template x-if="weightPlot && weight.length > 1">
             <div class="plot" @pointermove="trackWeight($event)"
                  @pointerleave="weightHover = null">
-              <svg :viewBox="`0 0 ${weightPlot.width} ${weightPlot.height}`"
+              <!-- viewBox is set imperatively, not with :viewBox. The HTML parser
+                   lowercases attribute names, so :viewBox arrives as :viewbox and
+                   Alpine sets "viewbox" — which SVG, being case-sensitive, ignores
+                   entirely. The result is an SVG with no viewBox at all: it takes
+                   the default 100%x150px while the paths stay in 100x32 user units,
+                   drawing the whole chart as a sliver in the top-left corner. -->
+              <svg x-effect="$el.setAttribute('viewBox', `0 0 ${weightPlot.width} ${weightPlot.height}`)"
                    role="img" aria-label="Body weight over time">
                 <!-- Target line, recessive: context, not data. -->
                 <line x-show="weightPlot.targetY !== null" x-cloak
@@ -1571,11 +1577,11 @@
                    ? `${signed(weightTrend.lbPerWeek)} lb / wk`
                    : 'Not yet'"></b>
             </div>
-            <div class="stat-cell">
+            <div class="stat-cell" x-show="weightWeek.change !== null">
               <small>Last 7 days</small>
               <b x-text="signed(weightWeek.change, ' lb')"></b>
             </div>
-            <div class="stat-cell">
+            <div class="stat-cell" x-show="weightMonth.change !== null">
               <small>Last 30 days</small>
               <b x-text="signed(weightMonth.change, ' lb')"></b>
             </div>
