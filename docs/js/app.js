@@ -2912,15 +2912,7 @@ Alpine.data('statsPage', () => ({
   },
 
   /** "+0.4" / "-1.2" / "—". Signed, because the sign is the whole point. */
-  signed(n, unit = '') {
-    if (n == null) return '—';
-    const value = Number(n);
-    if (!Number.isFinite(value)) return '—';
-    // Always one decimal: a column mixing "-1" and "-0.8" reads as though the
-    // first were less precise rather than rounder, and tabular-nums cannot
-    // align what has a different number of digits.
-    return `${value > 0 ? '+' : ''}${value.toFixed(1)}${unit}`;
-  },
+  signed(n, unit = '', decimals = 1) { return stats.signed(n, unit, decimals); },
 
   /** How much to trust the line, said in words rather than as an r-squared. */
   get trendConfidence() {
@@ -3014,27 +3006,76 @@ Alpine.data('statsPage', () => ({
 
   get lifts() { return stats.topLifts(this.data.index); },
 
+  // Which lift's history is open, by name — the id can be null on rows that
+  // came in from the Hevy import with a name and nothing else.
+  liftOpen: null,
+
+  toggleLift(lift) {
+    this.liftOpen = this.liftOpen === lift.name ? null : lift.name;
+  },
+
+  /** Only the open one is computed: this walks every set of every session. */
+  get liftDetail() {
+    if (!this.liftOpen) return null;
+    const lift = this.lifts.find((l) => l.name === this.liftOpen);
+    return lift ? stats.liftDetail(this.data.index, lift) : null;
+  },
+
+  /** The 1RM line, in the same markup form as the other charts. */
+  get liftLine() {
+    const plot = this.liftDetail?.plot;
+    if (!plot || !plot.line) return '';
+    return `<path d="${plot.area}" class="plot-area"/><path d="${plot.line}" class="plot-line"/>`
+      + plot.points.map((pt) =>
+        `<circle cx="${pt.x}" cy="${pt.y}" r="1.4" class="plot-dot"/>`).join('');
+  },
+
   // ---- nutrition -----------------------------------------------------------
 
   get days() { return stats.calorieDays(this.data.log, this.data.goals, this.email); },
   get calorieSummary() { return stats.calorieSummary(this.days); },
 
-  get dayChart() {
-    const days = this.days;
-    const bars = stats.barGeometry(days.map((d) => d.kcal)).map((bar, i) => ({
-      ...bar,
-      logged: days[i].logged,
-      tip: `${bar.value.toLocaleString()} kcal`,
-    }));
-    return stats.barChart(bars, { fill: 'var(--color-carbs)', dimUnlogged: true });
+  calorieOpen: false,
+  calorieHover: null,
+
+  get caloriePlot() { return stats.caloriePlot(this.days, { height: 40 }); },
+  get adherence() { return stats.calorieAdherence(this.days); },
+  get streak() { return stats.loggingStreak(this.days); },
+
+  /**
+   * Bars in the carbs yellow, kept from the old chart: this card is about food,
+   * and the macro list already reads that hue as intake. A day over target is
+   * outlined rather than recoloured — the danger red is reserved for status, and
+   * "over" on a bulk is not an error.
+   */
+  get calorieBars() {
+    const plot = this.caloriePlot;
+    const on = this.calorieHover?.i;
+
+    return plot.bars.map((bar) => {
+      if (!bar.h) return '';
+      const lit = bar.i === on || (on == null && bar.i === plot.bars.length - 1);
+      const stroke = bar.over
+        ? ' stroke="var(--color-carbs)" stroke-width="0.6" vector-effect="non-scaling-stroke"'
+        : '';
+      return `<rect x="${bar.x.toFixed(2)}" y="${bar.y.toFixed(2)}"`
+        + ` width="${bar.w.toFixed(2)}" height="${bar.h.toFixed(2)}" rx="1"`
+        + ` fill="var(--color-carbs)" opacity="${lit ? 1 : 0.5}"${stroke}/>`;
+    }).join('');
   },
 
-  /** Where the target sits on the same scale as the bars. */
-  get targetLine() {
-    const target = this.calorieSummary?.target;
-    if (!target) return null;
-    const max = Math.max(...this.days.map((d) => d.kcal), target, 1);
-    return 60 - (target / max) * 60;
+  trackCalories(event) {
+    const plot = this.caloriePlot;
+    if (!plot.bars.length) return;
+
+    const box = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - box.left) / box.width) * plot.width;
+    const i = Math.min(plot.bars.length - 1, Math.max(0, Math.floor(x / plot.slot)));
+    this.calorieHover = plot.bars[i];
+  },
+
+  get calorieFocus() {
+    return this.calorieHover ?? this.caloriePlot.bars[this.caloriePlot.bars.length - 1] ?? null;
   },
 
   round(n) { return Math.round(Number(n) || 0); },

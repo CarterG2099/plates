@@ -1366,9 +1366,42 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 /* ---- stat cells ------------------------------------------------------------ */
 
+/* A row that opens something. .row already sets width and text-align, so this
+   only has to undo the button defaults and mark it as tappable. */
+.row-tap {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.row-tap[aria-expanded="true"] {
+  border-color: var(--color-primary-hover);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Hangs off the bottom of its row rather than floating apart from it. */
+.lift-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary-hover);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.plot-mini {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
   gap: var(--space-2);
 }
 

@@ -505,7 +505,253 @@ test('sessionSummaries stops at the limit', async () => {
     const sessions = Array.from({ length: 20 }, (_, i) => ({
       id: `s${i}`, owner_email: ME, started_at: daysAgo(i + 1), ended_at: daysAgo(i + 1),
     }));
-    const rows = stats.sessionSummaries(workout.buildIndex([], sessions, ME), 5);
+    const sets = sessions.flatMap((x) => buildSets(x.id, 'e1', 'Bench', [{ w: 100, r: 5 }]));
+    const rows = stats.sessionSummaries(workout.buildIndex(sets, sessions, ME), 5);
     assert.equal(rows.length, 5);
+  });
+});
+
+test('sessionSummaries drops a session with nothing checked off', async () => {
+  await atTime(NOW, () => {
+    const sessions = [
+      { id: 'empty', owner_email: ME, started_at: daysAgo(1), ended_at: daysAgo(1) },
+      { id: 'real', owner_email: ME, started_at: daysAgo(2), ended_at: daysAgo(2) },
+    ];
+    const sets = [
+      // Present but never completed — the mis-tap case.
+      { id: 'x1', session_id: 'empty', exercise_id: 'e1', exercise_name: 'Bench',
+        set_index: 0, weight_lb: 100, reps: 5, completed_at: null },
+      ...buildSets('real', 'e1', 'Bench', [{ w: 100, r: 5 }]),
+    ];
+    const rows = stats.sessionSummaries(workout.buildIndex(sets, sessions, ME));
+    assert.deepEqual(rows.map((r) => r.id), ['real']);
+  });
+});
+
+test('sessionSummaries keeps a cardio-only session, which has no tonnage', async () => {
+  await atTime(NOW, () => {
+    const sessions = [{ id: 'run', owner_email: ME, name: 'Easy run',
+                        started_at: daysAgo(1), ended_at: daysAgo(1) }];
+    const sets = [{ id: 'r1', session_id: 'run', exercise_id: 'c1', exercise_name: 'Running',
+                    set_index: 0, weight_lb: null, reps: null,
+                    distance_m: 5000, duration_s: 1500, completed_at: daysAgo(1) }];
+    const rows = stats.sessionSummaries(workout.buildIndex(sets, sessions, ME));
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].volume, 0);
+    assert.equal(rows[0].sets, 1);
+  });
+});
+
+// ---- nutrition, in detail --------------------------------------------------
+
+const day = (i, kcal, target, logged = true) => ({
+  date: new Date(Date.parse('2026-08-01T12:00:00.000Z') + i * 86_400_000),
+  label: 'W',
+  kcal,
+  target,
+  logged,
+});
+
+test('caloriePlot gives an unlogged day no bar, not a zero bar', () => {
+  const plot = stats.caloriePlot([day(0, 2000, 2100), day(1, 0, 2100, false), day(2, 2400, 2100)]);
+  assert.ok(plot.bars[0].h > 0);
+  assert.equal(plot.bars[1].h, 0, 'a gap, not a zero');
+  assert.equal(plot.bars[1].logged, false);
+  assert.ok(plot.bars[2].h > 0);
+});
+
+test('caloriePlot puts the target on the same scale as the bars', () => {
+  const plot = stats.caloriePlot([day(0, 1000, 2000)], { height: 40 });
+  assert.equal(plot.max, 2000);                 // the target, being the taller of the two
+  assert.equal(plot.targetY, 0);                // so it sits at the top
+  assert.equal(plot.bars[0].h, 20);             // and the bar is half of it
+});
+
+test('caloriePlot marks which days went over', () => {
+  const plot = stats.caloriePlot([day(0, 2400, 2100), day(1, 1800, 2100)]);
+  assert.equal(plot.bars[0].over, true);
+  assert.equal(plot.bars[1].over, false);
+});
+
+test('caloriePlot with no target still draws', () => {
+  const plot = stats.caloriePlot([day(0, 2000, null), day(1, 1800, null)]);
+  assert.equal(plot.targetY, null);
+  assert.equal(plot.max, 2000);
+  assert.ok(plot.bars.every((b) => b.y >= 0 && b.y + b.h <= plot.height + 1e-9));
+});
+
+test('caloriePlot survives an empty window', () => {
+  const plot = stats.caloriePlot([]);
+  assert.deepEqual(plot.bars, []);
+  assert.equal(Number.isFinite(plot.slot), true);
+});
+
+test('calorieAdherence counts near-target days as on target', () => {
+  const a = stats.calorieAdherence([
+    day(0, 2100, 2100),      // exact
+    day(1, 2140, 2100),      // 40 over, inside the slack
+    day(2, 2400, 2100),      // over
+    day(3, 1500, 2100),      // under
+  ]);
+  assert.equal(a.on, 2);
+  assert.equal(a.over, 1);
+  assert.equal(a.under, 1);
+  assert.equal(a.days, 4);
+});
+
+test('calorieAdherence ignores unlogged days but reports how many there were', () => {
+  const a = stats.calorieAdherence([
+    day(0, 2100, 2100),
+    day(1, 0, 2100, false),
+    day(2, 0, 2100, false),
+  ]);
+  assert.equal(a.days, 1);
+  assert.equal(a.unlogged, 2);
+});
+
+test('calorieAdherence names the biggest miss in either direction', () => {
+  const over = stats.calorieAdherence([day(0, 2400, 2100), day(1, 1200, 2100)]);
+  assert.equal(over.biggest.delta, -900);       // under by more than the day over
+
+  const under = stats.calorieAdherence([day(0, 3500, 2100), day(1, 1900, 2100)]);
+  assert.equal(under.biggest.delta, 1400);
+});
+
+test('calorieAdherence returns null when no logged day has a target', () => {
+  assert.equal(stats.calorieAdherence([]), null);
+  assert.equal(stats.calorieAdherence([day(0, 2000, null)]), null);
+  assert.equal(stats.calorieAdherence([day(0, 0, 2100, false)]), null);
+});
+
+test('loggingStreak counts only a run that reaches today', () => {
+  const broken = stats.loggingStreak([
+    day(0, 2000, 2100), day(1, 2000, 2100), day(2, 0, 2100, false),
+  ]);
+  assert.equal(broken.current, 0, 'it ended yesterday, so it is not current');
+  assert.equal(broken.best, 2);
+
+  const running = stats.loggingStreak([
+    day(0, 2000, 2100), day(1, 0, 2100, false), day(2, 2000, 2100), day(3, 2000, 2100),
+  ]);
+  assert.equal(running.current, 2);
+  assert.equal(running.best, 2);
+});
+
+test('loggingStreak of nothing is zero, not NaN', () => {
+  assert.deepEqual(stats.loggingStreak([]), { current: 0, best: 0 });
+});
+
+test('signed carries the precision the domain needs', () => {
+  // Weight: a column of "-1" beside "-0.8" reads as coarser, not rounder.
+  assert.equal(stats.signed(-1, ' lb'), '-1.0 lb');
+  assert.equal(stats.signed(-0.8, ' lb'), '-0.8 lb');
+  assert.equal(stats.signed(0.4, ' lb'), '+0.4 lb');
+  // Calories: no tenth of a calorie was ever measured.
+  assert.equal(stats.signed(300, '', 0), '+300');
+  assert.equal(stats.signed(-912, '', 0), '-912');
+  assert.equal(stats.signed(0, '', 0), '0');
+});
+
+test('signed refuses a missing or unusable number', () => {
+  assert.equal(stats.signed(null), '—');
+  assert.equal(stats.signed(undefined), '—');
+  assert.equal(stats.signed(NaN), '—');
+  assert.equal(stats.signed('nope'), '—');
+  // Number(null) is 0 and finite, which is how a null macro once became zero.
+  assert.notEqual(stats.signed(null), '0.0');
+});
+
+// ---- a lift, in detail -----------------------------------------------------
+
+test('liftDetail plots one point per session, newest last', async () => {
+  await atTime(NOW, () => {
+    const sessions = [
+      { id: 's1', owner_email: ME, started_at: '2026-08-01T10:00:00.000Z', ended_at: '2026-08-01T11:00:00.000Z' },
+      { id: 's2', owner_email: ME, started_at: '2026-08-08T10:00:00.000Z', ended_at: '2026-08-08T11:00:00.000Z' },
+      { id: 's3', owner_email: ME, started_at: '2026-08-15T10:00:00.000Z', ended_at: '2026-08-15T11:00:00.000Z' },
+    ];
+    // Each session has a warm-up and two working sets; only the top working set counts.
+    const sets = [
+      ...buildSets('s1', 'e1', 'Bench', [{ w: 95, r: 10, warmup: true }, { w: 185, r: 5 }, { w: 175, r: 5 }]),
+      ...buildSets('s2', 'e1', 'Bench', [{ w: 95, r: 10, warmup: true }, { w: 195, r: 5 }]),
+      ...buildSets('s3', 'e1', 'Bench', [{ w: 205, r: 5 }]),
+    ];
+    const index = workout.buildIndex(sets, sessions, ME);
+    const detail = stats.liftDetail(index, { id: 'e1', name: 'Bench' });
+
+    assert.equal(detail.series.length, 3, 'one point per session, not per set');
+    assert.deepEqual(detail.series.map((p) => p.at.slice(0, 10)),
+      ['2026-08-01', '2026-08-08', '2026-08-15'], 'oldest first, so the line reads left to right');
+    assert.ok(detail.series[2].lb > detail.series[0].lb);
+    assert.equal(detail.latest, detail.series[2].lb);
+    assert.equal(detail.best, detail.series[2].lb);
+    assert.equal(detail.change, detail.series[2].lb - detail.series[0].lb);
+    assert.equal(detail.sessions, 3);
+  });
+});
+
+test('liftDetail hands back a plot inside its own box', async () => {
+  await atTime(NOW, () => {
+    const sessions = [
+      { id: 's1', owner_email: ME, started_at: '2026-08-01T10:00:00.000Z', ended_at: '2026-08-01T11:00:00.000Z' },
+      { id: 's2', owner_email: ME, started_at: '2026-08-08T10:00:00.000Z', ended_at: '2026-08-08T11:00:00.000Z' },
+    ];
+    const sets = [...buildSets('s1', 'e1', 'Bench', [{ w: 185, r: 5 }]),
+                  ...buildSets('s2', 'e1', 'Bench', [{ w: 195, r: 5 }])];
+    const detail = stats.liftDetail(workout.buildIndex(sets, sessions, ME), { id: 'e1', name: 'Bench' });
+
+    assert.equal(detail.plot.points.length, 2);
+    for (const pt of detail.plot.points) {
+      assert.ok(pt.x >= 0 && pt.x <= detail.plot.width);
+      assert.ok(pt.y >= 0 && pt.y <= detail.plot.height);
+    }
+  });
+});
+
+test('liftDetail reports the heaviest single set, which need not be the best 1RM', async () => {
+  await atTime(NOW, () => {
+    const sessions = [
+      { id: 's1', owner_email: ME, started_at: '2026-08-01T10:00:00.000Z', ended_at: '2026-08-01T11:00:00.000Z' },
+      { id: 's2', owner_email: ME, started_at: '2026-08-08T10:00:00.000Z', ended_at: '2026-08-08T11:00:00.000Z' },
+    ];
+    // 225x1 is heavier but 200x8 estimates higher.
+    const sets = [...buildSets('s1', 'e1', 'Bench', [{ w: 225, r: 1 }]),
+                  ...buildSets('s2', 'e1', 'Bench', [{ w: 200, r: 8 }])];
+    const detail = stats.liftDetail(workout.buildIndex(sets, sessions, ME), { id: 'e1', name: 'Bench' });
+
+    assert.equal(detail.heaviest.best.weight_lb, 225);
+    assert.ok(detail.best > 225, 'the estimate can exceed anything actually lifted');
+  });
+});
+
+test('liftDetail keeps the last six sessions, newest first, for the list', async () => {
+  await atTime(NOW, () => {
+    const sessions = Array.from({ length: 9 }, (_, i) => ({
+      id: `s${i}`, owner_email: ME,
+      started_at: `2026-0${i < 4 ? 6 : 7}-0${(i % 4) + 1}T10:00:00.000Z`,
+      ended_at: `2026-0${i < 4 ? 6 : 7}-0${(i % 4) + 1}T11:00:00.000Z`,
+    }));
+    const sets = sessions.flatMap((x, i) => buildSets(x.id, 'e1', 'Bench', [{ w: 100 + i, r: 5 }]));
+    const detail = stats.liftDetail(workout.buildIndex(sets, sessions, ME), { id: 'e1', name: 'Bench' });
+
+    assert.equal(detail.recent.length, 6);
+    const dates = detail.recent.map((r) => Date.parse(r.at));
+    assert.deepEqual(dates, [...dates].sort((a, b) => b - a), 'newest first');
+  });
+});
+
+test('liftDetail returns null for a lift with no estimable set', async () => {
+  await atTime(NOW, () => {
+    const sessions = [{ id: 's1', owner_email: ME,
+                        started_at: '2026-08-01T10:00:00.000Z', ended_at: '2026-08-01T11:00:00.000Z' }];
+    // A cardio row: no weight, no reps, so no 1RM to plot.
+    const sets = [{ id: 'r1', session_id: 's1', exercise_id: 'c1', exercise_name: 'Running',
+                    set_index: 0, weight_lb: null, reps: null,
+                    distance_m: 5000, duration_s: 1500, completed_at: '2026-08-01T10:30:00.000Z' }];
+    const index = workout.buildIndex(sets, sessions, ME);
+
+    assert.equal(stats.liftDetail(index, { id: 'c1', name: 'Running' }), null);
+    assert.equal(stats.liftDetail(index, { id: 'nope', name: 'Never Done' }), null);
   });
 });

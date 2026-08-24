@@ -1715,13 +1715,58 @@
           <div class="card-label">Best lifts · estimated 1RM</div>
           <div class="rows">
             <template x-for="lift in lifts" :key="lift.name">
-              <div class="row">
-                <div class="row-text">
-                  <b x-text="lift.name"></b>
-                  <small><span x-text="lift.sessions"></span> sessions</small>
-                </div>
-                <span class="pill" x-show="lift.isBest">PR</span>
-                <span class="row-num"><span x-text="lift.best"></span> lb</span>
+              <div>
+                <!-- The whole row is the control: a lift with two years behind it
+                     should not need a chevron explaining that it opens. -->
+                <button class="row row-tap" @click="toggleLift(lift)"
+                        :aria-expanded="liftOpen === lift.name">
+                  <div class="row-text">
+                    <b x-text="lift.name"></b>
+                    <small><span x-text="lift.sessions"></span> sessions</small>
+                  </div>
+                  <span class="pill" x-show="lift.isBest">PR</span>
+                  <span class="row-num"><span x-text="lift.best"></span> lb</span>
+                </button>
+
+                <template x-if="liftOpen === lift.name && liftDetail">
+                  <div class="lift-detail">
+                    <svg class="plot-mini"
+                         x-effect="$el.setAttribute('viewBox', `0 0 ${liftDetail.plot.width} ${liftDetail.plot.height}`)"
+                         role="img" :aria-label="`Estimated 1RM for ${liftDetail.name} over time`"
+                         x-html="liftLine"></svg>
+
+                    <div class="stat-grid">
+                      <div class="stat-cell">
+                        <small>Latest</small>
+                        <b x-text="`${liftDetail.latest} lb`"></b>
+                      </div>
+                      <div class="stat-cell" x-show="liftDetail.change !== null">
+                        <small>Over <span x-text="liftDetail.sessions"></span> sessions</small>
+                        <b x-text="signed(liftDetail.change, ' lb', 0)"></b>
+                      </div>
+                      <div class="stat-cell" x-show="liftDetail.heaviest && liftDetail.heaviest.best">
+                        <small>Heaviest set</small>
+                        <b x-text="liftDetail.heaviest && liftDetail.heaviest.best
+                             ? `${liftDetail.heaviest.best.weight_lb} × ${liftDetail.heaviest.best.reps}`
+                             : '—'"></b>
+                        <span x-text="liftDetail.heaviest && weightDate(liftDetail.heaviest.date)"></span>
+                      </div>
+                    </div>
+
+                    <div class="rows">
+                      <template x-for="h in liftDetail.recent" :key="h.at">
+                        <div class="row">
+                          <div class="row-text">
+                            <b x-text="weightDate(h.at, { long: true })"></b>
+                            <small x-text="`${h.weight ?? '—'} × ${h.reps ?? '—'} · ${h.sets} ${
+                              h.sets === 1 ? 'set' : 'sets'}`"></small>
+                          </div>
+                          <span class="row-num" x-text="`${h.oneRm} lb`"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
               </div>
             </template>
           </div>
@@ -1743,12 +1788,71 @@
             </div>
           </div>
 
-          <svg class="chart" viewBox="0 0 100 60" preserveAspectRatio="none"
-               role="img" aria-label="Daily calories over the last 14 days"
-               x-html="dayChart"></svg>
-          <div class="chart-axis">
-            <span>14 days ago</span>
-            <span>target <span x-text="calorieSummary && calorieSummary.target"></span></span>
+          <div class="plot" @pointermove="trackCalories($event)"
+               @pointerleave="calorieHover = null">
+            <svg x-effect="$el.setAttribute('viewBox', `0 0 ${caloriePlot.width} ${caloriePlot.height}`)"
+                 role="img" aria-label="Daily calories over the last 14 days">
+              <line x-show="caloriePlot.targetY !== null" x-cloak
+                    x1="0" :x2="caloriePlot.width"
+                    :y1="caloriePlot.targetY" :y2="caloriePlot.targetY"
+                    class="plot-target"/>
+              <g x-html="calorieBars"></g>
+            </svg>
+
+            <div class="plot-readout" x-show="calorieFocus" x-cloak>
+              <b x-text="calorieFocus && (calorieFocus.logged
+                   ? `${calorieFocus.kcal.toLocaleString()} kcal`
+                   : 'Not logged')"></b>
+              <span x-text="calorieFocus && `${weightDate(calorieFocus.date.toISOString(), { long: true })}${
+                calorieFocus.logged && calorieFocus.target
+                  ? ` · ${signed(calorieFocus.kcal - calorieFocus.target, '', 0)} vs target`
+                  : ''}`"></span>
+            </div>
+          </div>
+
+          <div class="stat-grid" x-show="adherence" x-cloak>
+            <div class="stat-cell">
+              <small>On target</small>
+              <b x-text="adherence && `${adherence.on} / ${adherence.days}`"></b>
+              <span x-text="adherence && `within ${adherence.slack}`"></span>
+            </div>
+            <div class="stat-cell">
+              <small>Over · under</small>
+              <b x-text="adherence && `${adherence.over} · ${adherence.under}`"></b>
+            </div>
+            <div class="stat-cell">
+              <small>Logged streak</small>
+              <b x-text="streak.current"></b>
+              <span x-text="`best ${streak.best}`"></span>
+            </div>
+            <div class="stat-cell" x-show="adherence && adherence.biggest">
+              <small>Biggest miss</small>
+              <b x-text="adherence && signed(adherence.biggest.delta, '', 0)"></b>
+              <span x-text="adherence && weightDate(adherence.biggest.date.toISOString())"></span>
+            </div>
+          </div>
+
+          <p class="plot-note" x-show="adherence && adherence.unlogged" x-cloak
+             x-text="adherence && `${adherence.unlogged} of the ${adherence.unlogged + adherence.days} days aren't logged, so they count for nothing here.`"></p>
+
+          <button class="btn btn-ghost btn-block" @click="calorieOpen = !calorieOpen"
+                  x-text="calorieOpen ? 'Hide days' : 'Every day'"></button>
+
+          <div class="rows" x-show="calorieOpen" x-cloak>
+            <template x-for="d in [...caloriePlot.bars].reverse()" :key="d.i">
+              <div class="row">
+                <div class="row-text">
+                  <b x-text="weightDate(d.date.toISOString(), { long: true })"></b>
+                  <small x-text="d.logged
+                    ? (d.target ? `target ${d.target.toLocaleString()}` : 'no target set')
+                    : 'nothing logged'"></small>
+                </div>
+                <span class="row-num" x-text="d.logged ? d.kcal.toLocaleString() : '—'"></span>
+                <span class="delta" x-show="d.logged && d.target"
+                      :class="{ 'is-down': d.kcal < d.target, 'is-up': d.kcal > d.target }"
+                      x-text="d.logged && d.target ? signed(d.kcal - d.target, '', 0) : ''"></span>
+              </div>
+            </template>
           </div>
         </div>
 

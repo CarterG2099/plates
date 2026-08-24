@@ -248,6 +248,21 @@ export function weightReadings(series) {
 }
 
 /**
+ * A number with its sign shown, for a column where the direction is the point.
+ *
+ * `decimals` is explicit because the right precision is per-domain, not
+ * universal: weight wants one, so that a column of "-1.0" and "-0.8" aligns
+ * under tabular-nums, and calories want none, because "+300.0 kcal" claims a
+ * tenth of a calorie nobody measured.
+ */
+export function signed(n, unit = '', decimals = 1) {
+  if (n == null) return '\u2014';
+  const value = Number(n);
+  if (!Number.isFinite(value)) return '\u2014';
+  return `${value > 0 ? '+' : ''}${value.toFixed(decimals)}${unit}`;
+}
+
+/**
  * The gap since the previous weigh-in, in words.
  *
  * Lives here rather than in the template because "1 days" is the mistake this
@@ -519,6 +534,12 @@ export function sessionSummaries(index, limit = 12) {
 
     const sets = (index.bySession.get(session.id) ?? []).filter((s) => !s.deleted_at);
     const done = sets.filter((s) => s.completed_at);
+
+    // Started, ended, nothing checked off. It is a mis-tap, not a workout, and
+    // it read as "Workout · 0 sets · 0 exercises". Tested on completed sets
+    // rather than on volume, so a run — which has no tonnage by design — stays.
+    if (!done.length) continue;
+
     const minutes = Math.round(
       (Date.parse(session.ended_at) - Date.parse(session.started_at)) / 60_000);
 
@@ -534,4 +555,144 @@ export function sessionSummaries(index, limit = 12) {
   }
 
   return out;
+}
+
+// ---- nutrition, in detail ---------------------------------------------------
+
+/**
+ * Bars for the calorie chart, plus where the target sits on the same scale.
+ *
+ * An unlogged day is not a zero-calorie day, so it gets no bar at all rather
+ * than a bar of height zero — the gap is the honest mark for "we don't know".
+ */
+export function caloriePlot(days, { width = 100, height = 40, gap = 1.4 } = {}) {
+  const slot = width / Math.max(days.length, 1);
+  const target = days.reduce((t, d) => t ?? d.target, null) ?? null;
+  const max = Math.max(...days.map((d) => d.kcal), target ?? 0, 1);
+
+  return {
+    width,
+    height,
+    slot,
+    max,
+    targetY: target ? height - (target / max) * height : null,
+    target,
+    bars: days.map((day, i) => {
+      const h = day.logged && day.kcal > 0 ? Math.max(0.8, (day.kcal / max) * height) : 0;
+      return {
+        i,
+        x: i * slot,
+        w: Math.max(slot - gap, 0.5),
+        y: height - h,
+        h,
+        kcal: day.kcal,
+        date: day.date,
+        label: day.label,
+        logged: day.logged,
+        target: day.target ?? null,
+        over: day.target ? day.kcal > day.target : null,
+      };
+    }),
+  };
+}
+
+/**
+ * How the logged days sat against their targets.
+ *
+ * Counted only over days that were logged, and `unlogged` is reported so the
+ * card can admit its own gaps instead of implying fourteen clean days. A day
+ * within `slack` of target counts as on it: nobody eats to the calorie, and
+ * "6 over" is not a miss worth colouring.
+ */
+export function calorieAdherence(days, { slack = 50 } = {}) {
+  const logged = days.filter((d) => d.logged && d.target);
+  if (!logged.length) return null;
+
+  let over = 0;
+  let under = 0;
+  let on = 0;
+  for (const day of logged) {
+    const delta = day.kcal - day.target;
+    if (Math.abs(delta) <= slack) on += 1;
+    else if (delta > 0) over += 1;
+    else under += 1;
+  }
+
+  const worst = logged.reduce((top, d) =>
+    (top && Math.abs(top.kcal - top.target) >= Math.abs(d.kcal - d.target) ? top : d), null);
+
+  return {
+    days: logged.length,
+    unlogged: days.length - days.filter((d) => d.logged).length,
+    over,
+    under,
+    on,
+    slack,
+    biggest: worst ? { date: worst.date, kcal: worst.kcal, delta: worst.kcal - worst.target } : null,
+  };
+}
+
+/**
+ * The longest run of consecutive logged days ending today, and the best run in
+ * the window. A streak that ended yesterday is not a current streak.
+ */
+export function loggingStreak(days) {
+  let current = 0;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (!days[i].logged) break;
+    current += 1;
+  }
+
+  let best = 0;
+  let run = 0;
+  for (const day of days) {
+    run = day.logged ? run + 1 : 0;
+    if (run > best) best = run;
+  }
+
+  return { current, best };
+}
+
+// ---- a lift, in detail ------------------------------------------------------
+
+/**
+ * One lift's estimated 1RM over time, as a line plus the numbers around it.
+ *
+ * Built from historyOf, so it is one point per session — the best working set
+ * of that day, not every set — because a session's 1RM is what its top set
+ * says, and plotting all of them draws the warm-up ramp as a sawtooth.
+ *
+ * Reuses weightPlot for the geometry: the shape is identical (a value against a
+ * date, an axis framed to the data), and there is no reason for two of them.
+ */
+export function liftDetail(index, lift, { limit = 30 } = {}) {
+  const history = historyOf(index, lift.id, lift.name, limit)
+    .filter((h) => h.oneRm)
+    .reverse();                                   // historyOf is newest-first
+
+  if (!history.length) return null;
+
+  const series = history.map((h) => ({ at: h.date, lb: Math.round(h.oneRm) }));
+  const first = series[0];
+  const latest = series[series.length - 1];
+
+  return {
+    name: lift.name,
+    series,
+    plot: weightPlot(series, { height: 26 }),
+    sessions: history.length,
+    best: Math.max(...series.map((p) => p.lb)),
+    latest: latest.lb,
+    // Over the window shown, not over all time — the card says how long it is.
+    change: series.length > 1 ? latest.lb - first.lb : null,
+    heaviest: history.reduce((top, h) => (
+      top && (top.best?.weight_lb ?? 0) >= (h.best?.weight_lb ?? 0) ? top : h), null),
+    recent: history.slice(-6).reverse().map((h) => ({
+      at: h.date,
+      oneRm: Math.round(h.oneRm),
+      weight: h.best?.weight_lb ?? null,
+      reps: h.best?.reps ?? null,
+      sets: h.sets.filter((s) => s.completed_at && !s.is_warmup).length,
+    })),
+  };
 }
