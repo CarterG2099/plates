@@ -13,12 +13,33 @@
 import { db, supabase } from './supabase.js';
 
 /**
- * The VAPID public key, which identifies this application to the push service.
- * Public by design — it is the counterpart of a private key held only in the
- * Edge Function's secrets, and on its own it grants nothing.
+ * The VAPID public key, read from the server rather than hardcoded.
+ *
+ * It identifies this application to the push service and is public by design —
+ * the private half lives in plates.app_config where only the service role can
+ * see it. Fetched rather than pinned because the Edge Function generates the
+ * pair itself: hardcoding the public half meant that if the private half was
+ * ever lost, every existing subscription became undeliverable with nothing in
+ * the app able to notice.
  */
-const VAPID_PUBLIC_KEY =
-  'BLiq_z-L2IL1vk34HFy48E9h1jjFzRdC_FIcoYViHB3LOJE-5SsdDCMm7Onf9MLIHf7UiDi6ndMsPvmUf4Pic2k';
+let cachedKey = null;
+
+async function serverKey() {
+  if (cachedKey) return cachedKey;
+
+  const { data, error } = await db('app_config')
+    .select('value')
+    .eq('key', 'vapid_public_key')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.value) {
+    throw new Error('Reminders are not set up on the server yet. Try again in a few minutes.');
+  }
+
+  cachedKey = data.value;
+  return cachedKey;
+}
 
 function urlBase64ToUint8Array(base64) {
   const padded = (base64 + '='.repeat((4 - (base64.length % 4)) % 4))
@@ -52,6 +73,36 @@ export async function isSubscribed() {
 }
 
 /**
+ * Re-subscribe if the server's key has moved on.
+ *
+ * A subscription is bound to the key it was created with, and `subscribe()`
+ * throws rather than replacing one made with a different key — so a rotated
+ * keypair would otherwise leave a subscription that can never be delivered to
+ * and no way to notice. Silent: permission is already granted, so there is no
+ * prompt and nothing to tell the user about.
+ */
+export async function healSubscription() {
+  if (!isSupported() || Notification.permission !== 'granted') return false;
+
+  const reg = await navigator.serviceWorker.ready;
+  const existing = await reg.pushManager.getSubscription();
+  if (!existing) return false;
+
+  const current = await serverKey();
+  const boundTo = existing.options?.applicationServerKey;
+  if (boundTo && b64(boundTo) === current) return false;
+
+  await db('push_subscriptions').delete().eq('endpoint', existing.endpoint);
+  await existing.unsubscribe();
+  await save(await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(current),
+  }));
+
+  return true;
+}
+
+/**
  * Ask, subscribe, and record the endpoint.
  *
  * Must be called from a user gesture — browsers ignore a permission request
@@ -71,7 +122,7 @@ export async function enable() {
       // Required by Chrome: every push must result in something the user sees.
       // Which is true here anyway — this exists to show one notification.
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      applicationServerKey: urlBase64ToUint8Array(await serverKey()),
     });
 
   await save(sub);

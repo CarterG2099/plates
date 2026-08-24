@@ -2360,6 +2360,11 @@ Alpine.data('trainPage', () => ({
   async loadReminderState() {
     if (!push.isSupported()) { this.reminders = 'unsupported'; return; }
     if (push.permission() === 'denied') { this.reminders = 'blocked'; return; }
+
+    // Silently repairs a subscription bound to a key the server has rotated
+    // away from. Best-effort: offline, this is not worth surfacing.
+    try { await push.healSubscription(); } catch { /* reported by the toggle */ }
+
     this.reminders = (await push.isSubscribed()) ? 'on' : 'off';
   },
 

@@ -11,7 +11,7 @@
 // with a user JWT — see the shared-secret check below — so no RLS is bypassed
 // on anyone's behalf.
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { sendPush } from "./webpush.ts";
+import { sendPush, bytesToB64url } from "./webpush.ts";
 
 /** How long a session must be untouched before it counts as forgotten. */
 const IDLE_MINUTES = 20;
@@ -22,26 +22,87 @@ const RENOTIFY_HOURS = 6;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
+/**
+ * Everything this needs, from plates.app_config rather than a dashboard.
+ *
+ * Nothing here is set by hand. The VAPID keypair is generated on the first run
+ * that finds none and stored straight away — a key that was written down in a
+ * temp file once already got lost, taking the only copy of the private half with
+ * it. The browser reads the public row to subscribe; the private row never
+ * leaves the server, because only the service role can see a non-public row.
+ */
+async function loadConfig(db: SupabaseLike) {
+  const { data, error } = await db.from("app_config").select("key, value");
+  if (error) throw new Error(`app_config unreadable: ${error.message}`);
+
+  return Object.fromEntries((data ?? []).map((r) => [r.key, r.value]));
+}
+
+/**
+ * Mint the keypair if there isn't one, and hand back the config either way.
+ *
+ * Deliberately after the caller has been authenticated: this writes, and an
+ * unauthenticated request should not be able to make the server do anything but
+ * read. Generating only when absent means a second call is a no-op, so the pair
+ * is stable once it exists — which subscriptions depend on.
+ */
+async function ensureKeys(db: SupabaseLike, config: Record<string, string>) {
+  if (config.vapid_public_key && config.vapid_private_key) return config;
+
+  const keys = await generateVapidKeys();
+  const { error } = await db.from("app_config").upsert([
+    { key: "vapid_public_key", value: keys.publicKey, is_public: true, updated_at: new Date().toISOString() },
+    { key: "vapid_private_key", value: keys.privateKey, is_public: false, updated_at: new Date().toISOString() },
+  ], { onConflict: "key" });
+  if (error) throw new Error(`could not store vapid keys: ${error.message}`);
+
+  return { ...config, vapid_public_key: keys.publicKey, vapid_private_key: keys.privateKey };
+}
+
+/** A P-256 pair in the shape webpush.ts wants: raw public point, scalar private. */
+async function generateVapidKeys() {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
+  const jwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+
+  return { publicKey: bytesToB64url(raw), privateKey: jwk.d as string };
+}
+
+// deno-lint-ignore no-explicit-any
+type SupabaseLike = any;
+
 Deno.serve(async (req) => {
-  // Only the scheduler may call this. It runs as service role and reports on
-  // every member, so it must not be invocable by anyone who finds the URL.
-  const expected = Deno.env.get("CRON_SECRET");
-  if (!expected || req.headers.get("x-cron-secret") !== expected) {
-    return json({ error: "forbidden" }, 403);
-  }
-
-  const vapid = {
-    publicKey: Deno.env.get("VAPID_PUBLIC_KEY") ?? "",
-    privateKey: Deno.env.get("VAPID_PRIVATE_KEY") ?? "",
-    subject: Deno.env.get("VAPID_SUBJECT") ?? "mailto:plates@cartergividen.com",
-  };
-  if (!vapid.publicKey || !vapid.privateKey) return json({ error: "vapid keys not configured" }, 500);
-
   const db = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { db: { schema: "plates" } },
   );
+
+  let config: Record<string, string>;
+  try {
+    config = await loadConfig(db);
+  } catch (e) {
+    return json({ error: String((e as Error).message ?? e) }, 500);
+  }
+
+  // Only the scheduler may call this. It runs as service role and reports on
+  // every member, so it must not be invocable by anyone who finds the URL.
+  const expected = config.cron_secret;
+  if (!expected || req.headers.get("x-cron-secret") !== expected) {
+    return json({ error: "forbidden" }, 403);
+  }
+
+  try {
+    config = await ensureKeys(db, config);
+  } catch (e) {
+    return json({ error: String((e as Error).message ?? e) }, 500);
+  }
+
+  const vapid = {
+    publicKey: config.vapid_public_key,
+    privateKey: config.vapid_private_key,
+    subject: config.vapid_subject ?? "mailto:carter@cartergividen.com",
+  };
 
   const now = Date.now();
   const idleBefore = new Date(now - IDLE_MINUTES * 60_000).toISOString();
