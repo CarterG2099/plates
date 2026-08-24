@@ -2954,17 +2954,63 @@ Alpine.data('statsPage', () => ({
 
   get weeks() { return stats.weeklyTraining(this.data.index); },
 
-  get weekChart() {
-    const weeks = this.weeks;
-    const bars = stats.barGeometry(weeks.map((w) => w.volume)).map((bar, i) => ({
-      ...bar,
-      tip: `${weeks[i].start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}: `
-         + `${Math.round(bar.value).toLocaleString()} lb · ${weeks[i].sessions} sessions`,
-    }));
-    return stats.barChart(bars, { fill: 'var(--color-protein)', emphasiseLast: true });
+  get thisWeek() { return this.weeks[this.weeks.length - 1] ?? { volume: 0, sessions: 0 }; },
+
+  // The bars are real elements now, so the week under the pointer can be named.
+  volumeOpen: false,
+  volumeHover: null,
+
+  get volumePlot() { return stats.volumePlot(this.weeks, { height: 40 }); },
+  get volumeStats() { return stats.volumeStats(this.weeks); },
+  get sessions() { return stats.sessionSummaries(this.data.index, 12); },
+
+  /**
+   * The bars, as markup for the same reason stats.js builds its charts that way
+   * — x-for cannot clone a <template> parsed into the SVG namespace.
+   */
+  get volumeBars() {
+    const plot = this.volumePlot;
+    const on = this.volumeHover?.i;
+    const last = plot.bars.length - 1;
+
+    return plot.bars.map((bar) => {
+      const lit = bar.i === on || (on == null && bar.i === last);
+      return `<rect x="${bar.x.toFixed(2)}" y="${bar.y.toFixed(2)}"`
+        + ` width="${bar.w.toFixed(2)}" height="${bar.h.toFixed(2)}" rx="1"`
+        + ` fill="var(--color-primary-hover)" opacity="${lit ? 1 : 0.55}"/>`;
+    }).join('');
   },
 
-  get thisWeek() { return this.weeks[this.weeks.length - 1] ?? { volume: 0, sessions: 0 }; },
+  /** Pointer x to a week: the slot, not the bar, so an untrained week answers too. */
+  trackVolume(event) {
+    const plot = this.volumePlot;
+    if (!plot.bars.length) return;
+
+    const box = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - box.left) / box.width) * plot.width;
+    const i = Math.min(plot.bars.length - 1, Math.max(0, Math.floor(x / plot.slot)));
+    this.volumeHover = plot.bars[i];
+  },
+
+  /** Whichever week is being pointed at, else the one in progress. */
+  get volumeFocus() {
+    return this.volumeHover ?? this.volumePlot.bars[this.volumePlot.bars.length - 1] ?? null;
+  },
+
+  /** "Aug 18" — the Monday a week is anchored to. */
+  weekOf(start) {
+    return start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  },
+
+  /**
+   * Duration in the unit that reads, which is not always minutes: 140 min is a
+   * number you have to convert in your head, 2h 20m is not.
+   */
+  duration(minutes) {
+    if (minutes == null) return '';
+    if (minutes < 90) return `${minutes} min`;
+    return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
+  },
 
   get lifts() { return stats.topLifts(this.data.index); },
 

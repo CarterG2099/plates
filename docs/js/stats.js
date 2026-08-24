@@ -423,3 +423,115 @@ export function weightPlot(series, { width = 100, height = 46, pad = 3, target =
 }
 
 function round2(n) { return Math.round(n * 100) / 100; }
+
+// ---- training, in detail ----------------------------------------------------
+
+/**
+ * Bars for the weekly-volume chart, as geometry rather than markup.
+ *
+ * The old chart was an SVG string with `preserveAspectRatio="none"`, which both
+ * stretched the bars and left nothing for a pointer to interrogate. These are
+ * real coordinates in a real aspect ratio, and `slot` is carried out so the
+ * hover layer can turn a pointer x into a week index — a zero-volume week has
+ * no rectangle to hit but is still a week you can ask about.
+ */
+export function volumePlot(weeks, { width = 100, height = 40, gap = 1.4 } = {}) {
+  const slot = width / Math.max(weeks.length, 1);
+  const max = Math.max(...weeks.map((w) => w.volume), 1);
+
+  return {
+    width,
+    height,
+    slot,
+    max,
+    bars: weeks.map((week, i) => {
+      // A trained week always draws something: 400 lb against a 40k week
+      // rounds to nothing, and "no bar" already means "no session".
+      const h = week.volume > 0 ? Math.max(0.8, (week.volume / max) * height) : 0;
+      return {
+        i,
+        x: i * slot,
+        w: Math.max(slot - gap, 0.5),
+        y: height - h,
+        h,
+        volume: week.volume,
+        sessions: week.sessions,
+        start: week.start,
+      };
+    }),
+  };
+}
+
+/**
+ * The numbers around the chart.
+ *
+ * Averaged over weeks that were actually trained, matching calorieSummary's
+ * reasoning that a blank day is not a zero — twelve weeks of history that only
+ * contains nine weeks of training should not report a quarter less volume than
+ * was lifted.
+ *
+ * `partial` matters: the current week is compared against a finished one, so
+ * the UI has to be able to say the comparison is not yet fair.
+ */
+export function volumeStats(weeks, { now = Date.now() } = {}) {
+  if (!weeks.length) return null;
+
+  const current = weeks[weeks.length - 1];
+  const previous = weeks.length > 1 ? weeks[weeks.length - 2] : null;
+  const trained = weeks.filter((w) => w.sessions > 0);
+
+  const best = trained.reduce((top, w) => (top && top.volume >= w.volume ? top : w), null);
+  const daysIn = Math.min(7, Math.floor((now - current.start.getTime()) / DAY) + 1);
+
+  return {
+    current: current.volume,
+    previous: previous ? previous.volume : null,
+    change: previous ? current.volume - previous.volume : null,
+    average: trained.length
+      ? Math.round(trained.reduce((sum, w) => sum + w.volume, 0) / trained.length)
+      : 0,
+    best: best ? { volume: best.volume, start: best.start } : null,
+    sessions: weeks.reduce((sum, w) => sum + w.sessions, 0),
+    weeksTrained: trained.length,
+    weeks: weeks.length,
+    perWeek: trained.length
+      ? round1(weeks.reduce((sum, w) => sum + w.sessions, 0) / trained.length)
+      : 0,
+    partial: daysIn < 7,
+    daysIn,
+  };
+}
+
+/**
+ * Finished sessions, newest first, with what each one actually contained.
+ *
+ * Duration comes from the timestamps rather than a stored field, so a session
+ * left running and ended later reads as however long it was open. Past six
+ * hours that is a forgotten timer rather than a workout — which is a thing this
+ * app already sends a notification about — and no duration beats a wrong one.
+ */
+export function sessionSummaries(index, limit = 12) {
+  const out = [];
+
+  for (const session of index.owned) {
+    if (!session.ended_at) continue;
+    if (out.length >= limit) break;
+
+    const sets = (index.bySession.get(session.id) ?? []).filter((s) => !s.deleted_at);
+    const done = sets.filter((s) => s.completed_at);
+    const minutes = Math.round(
+      (Date.parse(session.ended_at) - Date.parse(session.started_at)) / 60_000);
+
+    out.push({
+      id: session.id,
+      at: session.started_at,
+      name: session.name || 'Workout',
+      volume: Math.round(index.volumeBySession.get(session.id) ?? 0),
+      sets: done.length,
+      exercises: new Set(done.map((s) => s.exercise_id ?? s.exercise_name)).size,
+      minutes: minutes > 0 && minutes <= 6 * 60 ? minutes : null,
+    });
+  }
+
+  return out;
+}

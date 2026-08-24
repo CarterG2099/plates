@@ -1647,10 +1647,67 @@
             </div>
           </div>
 
-          <svg class="chart" viewBox="0 0 100 60" preserveAspectRatio="none"
-               role="img" aria-label="Training volume by week, last 12 weeks"
-               x-html="weekChart"></svg>
-          <div class="chart-axis"><span>12 weeks ago</span><span>this week</span></div>
+          <!-- Bars as elements rather than an x-html string, so a pointer has
+               something to interrogate. Hover snaps by slot, not by rectangle:
+               an untrained week has no bar to hit and is still a week you can
+               ask about. -->
+          <div class="plot" @pointermove="trackVolume($event)"
+               @pointerleave="volumeHover = null">
+            <svg x-effect="$el.setAttribute('viewBox', `0 0 ${volumePlot.width} ${volumePlot.height}`)"
+                 role="img" aria-label="Training volume by week, last 12 weeks">
+              <g x-html="volumeBars"></g>
+            </svg>
+
+            <div class="plot-readout" x-show="volumeFocus" x-cloak>
+              <b x-text="volumeFocus && `${volumeFocus.volume.toLocaleString()} lb`"></b>
+              <span x-text="volumeFocus && `week of ${weekOf(volumeFocus.start)} · ${
+                volumeFocus.sessions} ${volumeFocus.sessions === 1 ? 'session' : 'sessions'}`"></span>
+            </div>
+          </div>
+
+          <div class="stat-grid" x-show="volumeStats" x-cloak>
+            <div class="stat-cell" x-show="volumeStats && volumeStats.change !== null">
+              <small>Vs last week</small>
+              <b x-text="volumeStats && signed(volumeStats.change / 1000, 'k lb')"></b>
+            </div>
+            <div class="stat-cell">
+              <small>Weekly average</small>
+              <b x-text="volumeStats && thousands(volumeStats.average) + ' lb'"></b>
+            </div>
+            <div class="stat-cell" x-show="volumeStats && volumeStats.best">
+              <small>Best week</small>
+              <b x-text="volumeStats && thousands(volumeStats.best.volume) + ' lb'"></b>
+              <span x-text="volumeStats && weekOf(volumeStats.best.start)"></span>
+            </div>
+            <div class="stat-cell">
+              <small>Sessions / wk</small>
+              <b x-text="volumeStats && volumeStats.perWeek"></b>
+            </div>
+          </div>
+
+          <!-- The comparison is against a finished week, so say when it isn't fair. -->
+          <p class="plot-note" x-show="volumeStats" x-cloak
+             x-text="volumeStats && (volumeStats.partial
+               ? `This week is ${volumeStats.daysIn} ${volumeStats.daysIn === 1 ? 'day' : 'days'} old — the comparison catches up as it fills.`
+               : `Averaged over the ${volumeStats.weeksTrained} of ${volumeStats.weeks} weeks you trained.`)"></p>
+
+          <button class="btn btn-ghost btn-block" x-show="sessions.length" x-cloak
+                  @click="volumeOpen = !volumeOpen"
+                  x-text="volumeOpen ? 'Hide sessions' : `Last ${sessions.length} sessions`"></button>
+
+          <div class="rows" x-show="volumeOpen" x-cloak>
+            <template x-for="s in sessions" :key="s.id">
+              <div class="row">
+                <div class="row-text">
+                  <b x-text="s.name"></b>
+                  <small x-text="`${weightDate(s.at, { long: true })} · ${s.sets} sets · ${
+                    s.exercises} ${s.exercises === 1 ? 'exercise' : 'exercises'}${
+                    s.minutes ? ` · ${duration(s.minutes)}` : ''}`"></small>
+                </div>
+                <span class="row-num" x-text="s.volume ? `${thousands(s.volume)} lb` : '—'"></span>
+              </div>
+            </template>
+          </div>
         </div>
 
         <!-- Top lifts -------------------------------------------------------- -->
