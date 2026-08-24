@@ -4,7 +4,8 @@
 key has no image quota. Companion to `exercise-art.md`, which explains where the
 files go and why they exist; this file is just the commands.
 
-**91 done, 19 to go — 5 sheets.** Four exercises per image, sliced apart
+**All 110 drawn.** Nothing outstanding. What remains is the review list at the
+bottom — the drawings that are placed and working but want redoing. Four exercises per image, sliced apart
 afterwards. A square sheet gives cells well above the 512px target, so nothing is
 lost to the grid, and it is four times fewer requests.
 
@@ -96,7 +97,7 @@ It is worth adding this line when a sheet is mostly one muscle:
 
 ---
 
-## Already done — 91
+## Coverage — 110 of 110
 
 | Group | Done | Style |
 |---|---|---|
@@ -104,56 +105,25 @@ It is worth adding this line when a sheet is mostly one muscle:
 | Back | 19 of 19 | Gemini |
 | Legs | 17 of 17 | Gemini |
 | Shoulders | 13 of 13 | 4 Gemini, 9 ChatGPT |
-| Arms | 13 of 21 | ChatGPT |
-| Core | 4 of 7 | ChatGPT |
-| Glutes and calves | 8 of 11 | ChatGPT |
-| Cardio | 6 of 10 | ChatGPT |
+| Arms | 21 of 21 | ChatGPT |
+| Core | 7 of 7 | ChatGPT |
+| Glutes and calves | 11 of 11 | ChatGPT |
+| Cardio | 10 of 10 | ChatGPT |
 
 Everything still to draw is in the sheets below; nothing below repeats a drawing
 that already exists.
 
 ---
 
-## Sheet 1 — arms, biceps
+## Sheets
 
-Send with the anti-substitution line: these are four different exercises, not
-four pictures of a curl.
+All sent and placed. The last five went four-for-four with no substitutions and
+no malformed grids — the anti-substitution line and the three sheet rules are
+what changed, so keep them if you send more.
 
-> Top-left: **21s Bicep Curl** — highlight the biceps. Include a straight barbell stopped exactly halfway through the curl, forearms parallel to the floor.
-> Top-right: **Hammer Curl** — highlight the biceps. Include two dumbbells held in a neutral grip, thumbs up, standing, curled to the shoulders.
-> Bottom-left: **Concentration Curl** — highlight the biceps. Include one dumbbell only, seated on a flat bench, the working elbow braced against the inner thigh.
-> Bottom-right: **Reverse Curl (Barbell)** — highlight the biceps and forearms. Include a straight barbell held with an overhand grip, knuckles facing up.
-
-## Sheet 2 — arms, forearms and dips
-
-> Top-left: **Behind the Back Curl (Cable)** — highlight the biceps. Include a low cable pulley with the cable running **behind** the body, curled with one arm.
-> Top-right: **Behind the Back Bicep Wrist Curl (Barbell)** — highlight the forearms. Include a barbell held behind the back at hip level, curled with the wrists only.
-> Bottom-left: **Triceps Dip (Weighted)** — highlight the triceps. Include parallel dip bars and a weight plate hanging from a belt, torso upright.
-> Bottom-right: **Seated Dip (Machine)** — highlight the triceps. Include a seated dip machine with handles at the sides and a back pad.
-
-## Sheet 3 — core
-
-> Top-left: **Crunch (Cable)** — highlight the abdominals. Include a high cable with a rope held beside the head, kneeling, spine curled forward.
-> Top-right: **Decline Sit Up** — highlight the abdominals. Include a decline bench with foot rollers, torso curling upward.
-> Bottom-left: **Leg Raise Parallel Bars (Weighted)** — highlight the abdominals. Include a captain's chair with parallel arm pads and a back rest, legs raised, a weight held between the feet.
-> Bottom-right: **Hip Abduction (Machine)** — highlight the gluteus medius on the outer hip. Include a seated abduction machine with the pads on the **outside** of the thighs, knees pressing apart against them.
-
-## Sheet 4 — calves
-
-> Top-left: **Calf Extension (Machine)** — highlight the calves. Include a calf machine with a footplate, rising onto the toes.
-> Top-right: **Calf Press (Machine)** — highlight the calves. Include a leg press sled with only the toes on the bottom edge of the footplate, legs straight.
-> Bottom-left: **Single Leg Standing Calf Raise (Dumbbell)** — highlight the calves. Include one dumbbell held at the side, one foot on a raised step, the other leg lifted.
-> Bottom-right: **Running** — no highlight colour at all; the whole figure stays grey. No equipment, mid-stride at a run, one foot off the ground.
-
-## Sheet 5 — the last three, unaided
-
-Three only. Send as a **3 × 1 horizontal strip**. None has a highlighted muscle.
-
-> Draw these three as one wide image, a single row of three equal panels, left to right. None of them has a highlighted muscle — the whole figure stays entirely grey in all three, no red anywhere.
->
-> Left: **Walking** — no equipment, mid-stride walking, upright and relaxed.
-> Middle: **Swimming** — mid-stroke front crawl, one arm extended forward and one recovering overhead, body horizontal. No water, no pool, no scenery.
-> Right: **Hiking** — walking uphill with a backpack and a pair of trekking poles. No hill and no scenery; the uphill lean and the poles carry it.
+To redraw one, take its line out of the review below and send it with "Draw this
+one alone, as a single square image." To redraw a batch, group four into a sheet
+in the same format as before.
 
 ---
 
@@ -188,7 +158,7 @@ two drawings apart.
 | `straight-arm-lat-pulldown-cable.png` | `straight-arm-pulldown-rope.png` |
 | `triceps-pushdown.png` | `triceps-pushdown-rope.png` |
 
-## Review of all 91 placed — what needs redoing
+## Review of all 110 — what needs redoing
 
 Every drawing was checked side by side on a contact sheet, not one at a time, so
 the comparisons below are against their actual neighbours in the list.
@@ -205,7 +175,7 @@ The prompt does say "no highlight colour at all" — it was ignored. Worth putti
 the instruction *first* in the line rather than after the exercise name, and
 adding "no red anywhere in this image".
 
-### 2. Wrong muscle highlighted — 5
+### 2. Wrong muscle highlighted — 7
 
 | File | Lit | Should be |
 |---|---|---|
@@ -214,6 +184,8 @@ adding "no red anywhere in this image".
 | `swing-kettlebell` | calves | glutes and hamstrings |
 | `pendlay-row` | glute | latissimus dorsi |
 | `bent-over-row-barbell` | traps and chest | rhomboids and mid-back |
+| `triceps-dip-weighted` | the deltoid | the triceps |
+| `seated-dip-machine` | the deltoid | the triceps |
 
 ### 3. Wrong equipment — 3
 
@@ -223,7 +195,7 @@ adding "no red anywhere in this image".
 | `triceps-kickback-cable` | a barbell | a low cable with a single handle |
 | `triceps-pushdown` | a rope | a **straight bar** — as drawn it is a duplicate of `triceps-pushdown-rope`, and those two exist precisely to show the difference |
 
-### 4. Wrong or ambiguous exercise — 4
+### 4. Wrong or ambiguous exercise — 5
 
 | File | Problem |
 |---|---|
@@ -231,8 +203,9 @@ adding "no red anywhere in this image".
 | `hip-adduction-machine` | Pads read as being on the outside of the thighs, which is abduction |
 | `iso-lateral-row-machine`, `iso-lateral-low-row` | Salvaged from a malformed sheet; the two may be swapped |
 | `sumo-deadlift` | Stance no wider than `deadlift` |
+| `calf-extension-machine`, `standing-calf-raise` | Both drawn as the same standing calf machine from behind; near-indistinguishable in the list |
 
-### 5. Highlight too small to read at 44px — 4
+### 5. Perspective — 5
 
 Side-on views where the lit muscle is edge-on and reduces to a sliver. These are
 the ones to redraw **from a different perspective** — three-quarter from behind
@@ -240,6 +213,10 @@ rather than pure profile:
 
 `lat-pulldown-close-grip-cable` · `seated-cable-row-v-grip-cable` ·
 `row-dumbbell` · `lat-pulldown`
+
+`swimming` is a different perspective problem: the figure is horizontal and seen
+from above, so at 44px it reads as someone lying flat rather than swimming. A
+side-on view with one arm clearly out of the water would carry better.
 
 ### 6. Style — 52 files
 
@@ -261,6 +238,12 @@ possible `iso-lateral-*` swap comes from. ChatGPT has never done this; its
 failure mode is different, and milder — it substitutes a similar exercise rather
 than breaking the grid.
 
-Counting items 1 to 5, **22 of the 91 want redoing**. Nineteen of those are
+Counting items 1 to 5, **25 of the 110 want redoing**. Nineteen of those are
 Gemini drawings, so the 13 sheets that would replace the Gemini set clear most of
-this list at the same time.
+this list at the same time; the remaining six are ChatGPT drawings that need
+individual re-runs.
+
+The last five sheets were the cleanest of the whole run — 19 for 19 on the right
+exercise, no substitutions, no malformed grids, and the four unaided cardio
+drawings correctly came back with no highlight at all. Whatever changed between
+the arm sheets and these is worth keeping.
