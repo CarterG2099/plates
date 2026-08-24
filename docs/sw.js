@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v64';
+const CACHE_VERSION = 'plates-v65';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -137,7 +137,12 @@ self.addEventListener('fetch', (event) => {
 async function networkFirst(request, indexFallback = false) {
   const cache = await caches.open(CACHE_VERSION);
   try {
-    const response = await fetch(request);
+    // `no-store`, or this is network-first in name only. GitHub Pages serves our
+    // code with max-age=600, and a plain fetch() here is happily answered from
+    // the browser's HTTP cache — so a deploy could take ten minutes to land even
+    // though this function looks like it always asks the network. Measured: a
+    // page loaded minutes after a deploy was still running the previous build.
+    const response = await fetch(request.url, { cache: 'no-store' });
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch {
