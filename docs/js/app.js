@@ -3054,7 +3054,7 @@ Alpine.data('statsPage', () => ({
   get gridCells() {
     const on = this.gridHover?.key;
     return this.grid.map((column, x) => column.cells.map((cell, y) => {
-      const fill = cell.trained ? 'var(--color-primary-hover)' : 'var(--color-surface-raised)';
+      const fill = cell.trained ? 'var(--color-primary-hover)' : 'var(--color-ink)';
       const opacity = cell.future ? 0.35 : 1;
       const ring = cell.key === on
         ? ' stroke="var(--color-text)" stroke-width="0.5" vector-effect="non-scaling-stroke"'
