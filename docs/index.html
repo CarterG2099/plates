@@ -883,6 +883,19 @@
       <template x-if="$store.ui.view === 'train'">
       <main class="app-main" x-data="trainPage">
 
+        <!-- Folded away. First thing on the tab, and the whole bar reopens it. -->
+        <template x-if="session && collapsed">
+          <button class="running-bar" @click="collapsed = false">
+            <span class="running-caret" aria-hidden="true">›</span>
+            <span class="running-name" x-text="session.name || 'Workout'"></span>
+            <span class="running-meta">
+              <span x-text="elapsed"></span> ·
+              <span x-text="`${volume.toLocaleString()} lb`"></span>
+            </span>
+            <span class="running-open">Open</span>
+          </button>
+        </template>
+
         <!-- Nothing running, or running but folded away ---------------------- -->
         <template x-if="!session || collapsed">
           <div style="display: contents;">
@@ -1012,22 +1025,15 @@
           </div>
         </template>
 
-        <!-- Folded away: one bar, so the routines and history below are reachable -->
-        <template x-if="session && collapsed">
-          <button class="running-bar" @click="collapsed = false">
-            <span class="dot dot-pending" aria-hidden="true"></span>
-            <span class="running-name" x-text="session.name || 'Workout'"></span>
-            <span class="running-meta">
-              <span x-text="elapsed"></span> ·
-              <span x-text="`${volume.toLocaleString()} lb`"></span>
-            </span>
-            <span class="tap" aria-hidden="true">▾</span>
-          </button>
-        </template>
-
         <!-- Workout in progress --------------------------------------------- -->
         <template x-if="session && !collapsed">
           <div style="display: contents;">
+
+            <div class="workout-head">
+              <button class="tap" @click="collapsed = true"
+                      aria-label="Hide workout">⌄</button>
+              <span class="workout-title" x-text="session.name || 'Workout'"></span>
+            </div>
 
             <div class="timer">
               <div>
@@ -1042,8 +1048,6 @@
                 <b class="num" x-text="volume.toLocaleString()"></b>
                 <small>lb volume</small>
               </div>
-              <button class="tap" @click="collapsed = true"
-                      aria-label="Collapse workout">▴</button>
             </div>
 
             <div class="chips" x-show="restEndsAt">

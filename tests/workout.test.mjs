@@ -28,8 +28,10 @@ async function seedSets(specs) {
       exercise_id: spec.id ?? null,
       exercise_name: spec.name,
       set_index: i,
-      weight_lb: spec.weight ?? 100,
-      reps: spec.reps ?? 5,
+      // `in`, not ??, so a test can seed a genuinely empty set — `null ?? 100`
+      // silently handed back 100 and made "untouched set" untestable.
+      weight_lb: 'weight' in spec ? spec.weight : 100,
+      reps: 'reps' in spec ? spec.reps : 5,
       is_warmup: spec.warmup ?? false,
       completed_at: spec.done ?? null,
     }, ME));
@@ -816,4 +818,53 @@ test('the running session is excluded from previous', () => {
 test('an exercise with no history has no previous, rather than throwing', () => {
   const index = workout.buildIndex([], [], ME);
   assert.equal(workout.priorForm(index, null).size, 0);
+});
+
+test('a later-resolving write can carry an older row', async () => {
+  // Why app.js renders from its optimistic patches and throws these results
+  // away. The change's write merges reps into a row whose completed_at is still
+  // null, so patching its result in after the click's optimistic patch flicked
+  // the tick off and straight back on again — visible as a glitch.
+  const [set] = await seedSets([{ id: 'bp', name: 'Bench', reps: null }]);
+
+  const [fromChange, fromClick] = await Promise.all([
+    workout.updateSet(set, { reps: 7 }),
+    workout.updateSet(set, { completed_at: 'T' }),
+  ]);
+
+  assert.equal(fromChange.reps, 7);
+  assert.equal(fromChange.completed_at, null, 'older than what the UI already showed');
+  assert.equal(fromClick.completed_at, 'T');
+
+  // Storage still converges, which is what lets the UI ignore both of them.
+  const stored = await local.get('session_sets', set.id);
+  assert.deepEqual([stored.reps, stored.completed_at], [7, 'T']);
+});
+
+test('checking an untouched set adopts the placeholder it was showing', async () => {
+  // The row renders empty with last session's numbers greyed in. Checking it
+  // without typing means "yes, that again", so those become the value.
+  const [set] = await seedSets([{ id: 'bp', name: 'Bench', weight: null, reps: null }]);
+
+  const saved = await workout.updateSet(set, {
+    completed_at: 'T', weight_lb: 205, reps: 8,
+  });
+
+  assert.deepEqual([saved.weight_lb, saved.reps], [205, 8]);
+});
+
+test('a set you did type into is not overwritten by its placeholder', async () => {
+  const [set] = await seedSets([{ id: 'bp', name: 'Bench', weight: null, reps: null }]);
+  await workout.updateSet(set, { reps: 5 });
+
+  // toggleDone only fills what is still null, so the 5 stands and only the
+  // weight is adopted.
+  const current = await local.get('session_sets', set.id);
+  const fill = {};
+  if (current.weight_lb == null) fill.weight_lb = 205;
+  if (current.reps == null) fill.reps = 8;
+
+  const saved = await workout.updateSet(set, { ...fill, completed_at: 'T' });
+  assert.equal(saved.reps, 5, 'what you typed wins');
+  assert.equal(saved.weight_lb, 205, 'what you left blank is adopted');
 });

@@ -685,6 +685,44 @@
   flex: none;
 }
 
+/* Points the way the bar opens, and pairs with the ⌄ that folded it. */
+.running-caret {
+  flex: none;
+  color: var(--color-primary);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+/* Said in words as well as shape: a bar that only looked tappable was a bar
+   nobody could see how to get back into. */
+.running-open {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+/* Top-left, like the chevron that folds a panel away anywhere else. */
+.workout-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.workout-title {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A finished set goes green edge to edge. Mid-set, from a few feet away and out
  * of breath, "which ones have I done" has to be answerable without reading —
  * and the tick alone was too small a signal to carry that.

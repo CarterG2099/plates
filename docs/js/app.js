@@ -2130,8 +2130,16 @@ Alpine.data('trainPage', () => ({
     // Painted from memory first, persisted after. Three IndexedDB round trips
     // and a sync nudge sit inside updateSet, and none of them are the reason a
     // number appears in a box.
+    //
+    // What updateSet returns is deliberately thrown away. Its row is a snapshot
+    // from whenever its own write ran, which can predate a later change: typing
+    // reps and then checking the set made this one resolve holding
+    // completed_at: null, and patching that in flicked the tick off and back on.
+    // Memory is advanced only by the optimistic patches, which run synchronously
+    // in event order and so can never go backwards; the serialised writes make
+    // storage converge on the same thing.
     Alpine.store('data').patchSet({ ...this.currentSet(set), ...next });
-    Alpine.store('data').patchSet(await workout.updateSet(set, next));
+    await workout.updateSet(set, next);
   },
 
   /**
@@ -2169,7 +2177,9 @@ Alpine.data('trainPage', () => ({
       }
     }
 
-    Alpine.store('data').patchSet(await workout.updateSet(set, next));
+    // Result discarded for the reason given in edit(): a later-resolving write
+    // can carry an older row, and patching it in is what made the tick flicker.
+    await workout.updateSet(set, next);
   },
 
   async dropSet(set) {
