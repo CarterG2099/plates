@@ -2339,6 +2339,31 @@ Alpine.data('trainPage', () => ({
 
   plateColour(size) { return workout.PLATE_COLOURS[size] ?? 'var(--color-text-muted)'; },
 
+  /**
+   * Plates as one chip per size rather than one per plate: 45,45,45,45 reads
+   * "45x4". Four separate chips did not fit beside the weight box on a phone —
+   * they wrapped into a column and squeezed the input until 225 showed as "22".
+   */
+  plateGroups(group, set) {
+    const load = this.loadout(group, this.currentSet(set));
+    if (!load) return [];
+
+    const groups = [];
+    for (const size of load.plates) {
+      const last = groups[groups.length - 1];
+      if (last && last.size === size) last.count += 1;
+      else groups.push({ size, count: 1 });
+    }
+    return groups;
+  },
+
+  /** The load in words. The row shows it as colour and number, which a screen
+   *  reader cannot read out, and the "Per side" caption went with the stack. */
+  loadLabel(group, set) {
+    const load = this.loadout(group, this.currentSet(set));
+    return load ? `Per side: ${load.plates.join(' + ')} lb` : null;
+  },
+
   // ---- rest timer ----------------------------------------------------------
 
   startRest(seconds) {

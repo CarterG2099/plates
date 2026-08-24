@@ -1069,6 +1069,18 @@
                 <div class="t" x-text="elapsed"></div>
                 <small>Elapsed</small>
               </div>
+
+              <!-- Inside the bar, not under it: a row that appeared on its own
+                   pushed every exercise card down at the exact moment you were
+                   reading them. -->
+              <div class="rest-controls" x-show="restEndsAt">
+                <button class="chip" @click="addRest(-30)"
+                        aria-label="Thirty seconds less rest">−30</button>
+                <button class="chip" @click="addRest(30)"
+                        aria-label="Thirty seconds more rest">+30</button>
+                <button class="chip" @click="endRest()" aria-label="Skip rest">Skip</button>
+              </div>
+
               <div class="rest" x-show="restEndsAt">
                 <b x-text="restClock"></b>
                 <small>Rest</small>
@@ -1077,12 +1089,6 @@
                 <b class="num" x-text="volume.toLocaleString()"></b>
                 <small>lb volume</small>
               </div>
-            </div>
-
-            <div class="chips" x-show="restEndsAt">
-              <button class="chip" @click="addRest(30)">+30s</button>
-              <button class="chip" @click="addRest(-30)">−30s</button>
-              <button class="chip" @click="endRest()">Skip rest</button>
             </div>
 
             <!-- data-card: what $dragCard measures and moves. -->
@@ -1110,7 +1116,8 @@
 
                 <div class="setgrid">
                   <div class="sethead">
-                    <span>#</span><span>Previous</span><span>lb</span><span>Reps</span><span></span>
+                    <span>#</span><span>Prev</span><span>lb</span><span>Reps</span>
+                    <span></span><span></span>
                   </div>
                   <template x-for="(set, i) in group.sets" :key="set.id">
                     <div class="row-swipe" x-init="$swipeRow($el)">
@@ -1141,6 +1148,15 @@
                                :placeholder="placeholderReps(group, i)"
                                @change="edit(set, 'reps', $event.target.value)"
                                aria-label="Reps">
+                        <!-- What to hang on the bar for THIS set, on its own row.
+                             Stacked underneath, three of these read as a separate
+                             list and you had to count down it to find your set. -->
+                        <div class="loadout" :aria-label="loadLabel(group, set)">
+                          <template x-for="(p, i) in plateGroups(group, set)" :key="i">
+                            <b :style="`background: ${plateColour(p.size)}`"
+                               x-text="p.count > 1 ? `${p.size}×${p.count}` : p.size"></b>
+                          </template>
+                        </div>
                         <button class="check" @click="toggleDone(set, placeholderFor(group, i))"
                                 :aria-label="currentSet(set).completed_at ? 'Mark set incomplete' : 'Mark set done'"
                         >✓</button>
@@ -1148,16 +1164,6 @@
                     </div>
                   </template>
                 </div>
-
-                <template x-for="set in group.sets.filter(s => !s.completed_at && loadout(group, s))"
-                          :key="`load-${set.id}`">
-                  <div class="loadout">
-                    <span class="lbl">Per side</span>
-                    <template x-for="(size, i) in loadout(group, set).plates" :key="i">
-                      <b :style="`background: ${plateColour(size)}`" x-text="size"></b>
-                    </template>
-                  </div>
-                </template>
 
                 <button class="btn btn-ghost btn-block" @click="addSetTo(group)">Add set</button>
               </div>

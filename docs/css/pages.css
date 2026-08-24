@@ -515,7 +515,7 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -526,9 +526,40 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 .timer .t {
   font-family: var(--font-mono);
-  font-size: var(--text-2xl);
+  /* Sized to the viewport, not fixed. Three chips and two clocks share this row,
+     and past an hour the elapsed readout gains a whole field — enough to push
+     the rest clock out of the bar on a small phone. Scaling by width keeps the
+     worst case inside without ever changing height for a reason the user did
+     something, so nothing shifts. */
+  font-size: clamp(var(--text-lg), 5.2vw, var(--text-2xl));
   letter-spacing: -.03em;
   font-variant-numeric: tabular-nums;
+}
+
+/* The rest controls live in the timer bar. They are shorter than the elapsed
+   readout beside them, so showing them changes nothing about the bar's height —
+   which is the whole point, since they appear the instant a set is checked and
+   anything that moved would move the cards being read. */
+.timer .rest-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* Never wrap. A second line of chips would grow the bar and put the shift
+     straight back. */
+  flex-wrap: nowrap;
+  flex: none;
+  /* The bar aligns on the baseline for the numbers either side; chips have no
+     number to sit on and would hang below it. */
+  align-self: center;
+}
+
+/* Tighter than a normal chip. Three of these share the row with two readouts,
+   and the elapsed clock grows a whole field wide once a workout passes an hour —
+   the uppercase tracking alone was costing more than the gap between them. */
+.timer .rest-controls .chip {
+  white-space: nowrap;
+  padding: var(--space-2) var(--space-2);
+  letter-spacing: 0;
 }
 
 .timer .rest { text-align: right; }
@@ -536,7 +567,7 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 .timer .rest b {
   display: block;
   font-family: var(--font-mono);
-  font-size: var(--text-xl);
+  font-size: clamp(var(--text-lg), 4.2vw, var(--text-xl));
   font-variant-numeric: tabular-nums;
   color: var(--color-carbs);      /* the only thing counting down */
 }
@@ -623,11 +654,31 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 /* Four tracks, not five: the remove button is gone and a left swipe reveals it
    instead, so nothing sits to the right of the checkmark any more. */
+/* Headings are labels, not content: one that outgrows its column should back
+   down rather than run across the next one — "PREVIOUS" was printing over "LB". */
+.sethead span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sethead,
 .setrow {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1.15fr) 1fr 1fr 38px;
-  gap: var(--space-2);
+  /* The fifth track is the plate maths.
+   *
+   * A fixed width, not `auto`. The header and every row are separate grids, so
+   * `auto` resolved separately in each: the labels drifted off their columns and
+   * a row showing "45" sat a dozen pixels wide of one showing "45x4". A load
+   * needing two different plate sizes wraps inside the track instead, which
+   * costs that one row some height and keeps every column true.
+   *
+   * The weight and reps tracks carry a floor too: as bare fr units they gave up
+   * width to the plates until a three-digit weight was clipped to two. */
+  grid-template-columns: 22px minmax(0, 1.15fr) minmax(48px, 1fr) minmax(42px, 1fr) 46px 38px;
+  /* Tighter than it was. Six tracks on a 360px phone, and the gaps were costing
+     the Prev column more than the plate chips did. */
+  gap: var(--space-1);
   align-items: center;
   padding: var(--space-2) var(--space-2);
 }
@@ -883,13 +934,20 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   padding-top: var(--space-1);
 }
 
-.loadout .lbl {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  margin-right: var(--space-1);
+/* On the row rather than under it: three of these stacked below the grid read as
+   a separate list, and finding the one belonging to your set meant counting down
+   it. Capped so a heavy load wraps to a second line instead of taking width from
+   the weight box, and right-aligned so the chips sit against the checkmark. */
+.setrow .loadout {
+  padding-top: 0;
+  justify-content: flex-end;
+}
+
+/* Nothing to load on a dumbbell or a machine, so that card gives the track back
+   rather than holding a column of empty space down every row. */
+.card:not(:has(.setrow .loadout b)) .sethead,
+.card:not(:has(.setrow .loadout b)) .setrow {
+  grid-template-columns: 22px minmax(0, 1.15fr) minmax(48px, 1fr) minmax(42px, 1fr) 0 38px;
 }
 
 .loadout b {
