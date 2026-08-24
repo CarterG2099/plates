@@ -401,6 +401,9 @@ export function personalBests(history) {
 export function volume(sets) {
   return sets
     .filter((s) => !s.deleted_at && !s.is_warmup && s.completed_at)
+    // A run contributes no tonnage. It already would not, since weight_lb is
+    // null, but saying so stops anyone "fixing" that into distance later.
+    .filter((s) => s.distance_m == null && s.duration_s == null)
     .reduce((total, s) => total + (Number(s.weight_lb) || 0) * (Number(s.reps) || 0), 0);
 }
 
@@ -763,6 +766,66 @@ export function usesBarbell(exercise, name = '') {
   const haystack = `${exercise?.equipment ?? ''} ${exercise?.name ?? ''} ${name}`.toLowerCase();
   if (/dumbbell|machine|cable|smith|bodyweight|band/.test(haystack)) return false;
   return /barbell|bench press|squat|deadlift|overhead press|row|curl|hip thrust/.test(haystack);
+}
+
+/**
+ * Whether this exercise is measured in distance and time rather than load.
+ *
+ * `category` is the authority — set to 'cardio' on the shared exercise rows. The
+ * name check is a fallback for anything imported from Hevy, which arrives with
+ * no category at all; "Cycling" was already sitting in the library like that.
+ */
+const CARDIO_NAMES = new Set([
+  'running', 'treadmill running', 'cycling', 'indoor cycling', 'outdoor cycling',
+  'walking', 'swimming', 'hiking', 'elliptical', 'rowing (machine)',
+  'stair machine (steps)', 'stair machine',
+]);
+
+export function isCardio(exercise, name = '') {
+  if (exercise?.category === 'cardio') return true;
+
+  // Whole names, not a pattern. A prefix match made "Walking Lunge" cardio,
+  // and a substring match would take every Row and Curl with it.
+  const candidates = [exercise?.name, name]
+    .filter(Boolean)
+    .map((n) => n.trim().toLowerCase());
+  return candidates.some((n) => CARDIO_NAMES.has(n));
+}
+
+/** h:mm:ss once there is an hour to show, m:ss below that. */
+function clock(totalSeconds) {
+  const t = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/** "5.20 km · 26:00 · 5:00 /km" — a cardio set in one line. */
+export function cardioLine(set, { metric = true } = {}) {
+  const parts = [];
+  const metres = Number(set?.distance_m) || 0;
+  const seconds = Number(set?.duration_s) || 0;
+
+  if (metres) parts.push(metric ? `${(metres / 1000).toFixed(2)} km` : `${(metres / 1609.344).toFixed(2)} mi`);
+  if (seconds) parts.push(clock(seconds));
+
+  const pace = pacePer(set, { metric });
+  if (pace) parts.push(pace);
+  return parts.join(' · ');
+}
+
+/** Pace, which is the number anyone actually compares runs by. */
+export function pacePer(set, { metric = true } = {}) {
+  const metres = Number(set?.distance_m) || 0;
+  const seconds = Number(set?.duration_s) || 0;
+  if (!metres || !seconds) return null;
+
+  const per = metric ? seconds / (metres / 1000) : seconds / (metres / 1609.344);
+  if (!Number.isFinite(per) || per <= 0) return null;
+  // Pace is always minutes per unit, so m:ss even for a slow walk.
+  return `${clock(per)} /${metric ? 'km' : 'mi'}`;
 }
 
 /** Plate face colours, so the loadout reads as plates rather than as a sum. */

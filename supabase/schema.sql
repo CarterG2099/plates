@@ -304,6 +304,13 @@ create table if not exists plates.session_sets (
   rpe           numeric,
   is_warmup     boolean not null default false,
   completed_at  timestamptz,
+  -- Cardio: a run is an exercise card like any other, but a set of it records a
+  -- distance and a time rather than a load and reps. Null for lifting, exactly as
+  -- weight_lb and reps are null for cardio — nothing is crammed into a column
+  -- that means something else. Metres and seconds, so pace is a plain division;
+  -- the inputs are km and minutes because that is how people say it.
+  distance_m    numeric,
+  duration_s    integer,
   -- Stamped on sets left behind when the exercise was replaced mid-workout.
   -- They still count for volume, history and records — you lifted them — but
   -- "update the routine from this session" leaves the card out, because a

@@ -1010,3 +1010,92 @@ test('a set you did type into is not overwritten by its placeholder', async () =
   assert.equal(saved.reps, 5, 'what you typed wins');
   assert.equal(saved.weight_lb, 205, 'what you left blank is adopted');
 });
+
+// ---- cardio as an exercise --------------------------------------------------
+// A run is a card in the session like any other; what differs is what a set
+// records. distance_m and duration_s are null for lifting and weight_lb/reps are
+// null for cardio, so nothing is stored in a column that means something else.
+
+test('category is what marks an exercise as cardio', () => {
+  assert.equal(workout.isCardio({ category: 'cardio', name: 'Anything' }), true);
+  assert.equal(workout.isCardio({ category: 'pull', name: 'Row (Dumbbell)' }), false);
+});
+
+test('a Hevy import with no category is recognised by name', () => {
+  // "Cycling" was already in the library with category null.
+  assert.equal(workout.isCardio(null, 'Cycling'), true);
+  assert.equal(workout.isCardio({ name: 'Running', category: null }), true);
+  assert.equal(workout.isCardio(null, 'Rowing (Machine)'), true);
+});
+
+test('lifts whose names start with a cardio word are not cardio', () => {
+  // A prefix match made this one cardio, and a substring match would have taken
+  // every Row and Curl with it.
+  assert.equal(workout.isCardio(null, 'Walking Lunge'), false);
+  assert.equal(workout.isCardio(null, 'Row (Dumbbell)'), false);
+  assert.equal(workout.isCardio(null, 'Runner\'s Stretch'), false);
+  assert.equal(workout.isCardio(null, 'Swimmer Press'), false);
+});
+
+test('a cardio line reads distance, time and pace', () => {
+  assert.equal(workout.cardioLine({ distance_m: 5200, duration_s: 1560 }),
+    '5.20 km · 26:00 · 5:00 /km');
+  assert.equal(workout.cardioLine({ distance_m: 5200, duration_s: 1560 }, { metric: false }),
+    '3.23 mi · 26:00 · 8:03 /mi');
+});
+
+test('an hour-plus session shows hours, not ninety minutes', () => {
+  assert.equal(workout.cardioLine({ distance_m: 40000, duration_s: 5400 }),
+    '40.00 km · 1:30:00 · 2:15 /km');
+});
+
+test('a half-entered cardio set says only what it knows', () => {
+  assert.equal(workout.cardioLine({ duration_s: 1800 }), '30:00', 'no distance, so no pace');
+  assert.equal(workout.cardioLine({ distance_m: 1000 }), '1.00 km');
+  assert.equal(workout.cardioLine({}), '');
+  assert.equal(workout.cardioLine(null), '');
+});
+
+test('pace needs both halves and never divides by zero', () => {
+  assert.equal(workout.pacePer({ distance_m: 1000, duration_s: 300 }), '5:00 /km');
+  assert.equal(workout.pacePer({ distance_m: 0, duration_s: 300 }), null);
+  assert.equal(workout.pacePer({ distance_m: 1000, duration_s: 0 }), null);
+  assert.equal(workout.pacePer({}), null);
+});
+
+test('a run contributes no tonnage', async () => {
+  const sets = [
+    { weight_lb: 100, reps: 10, is_warmup: false, completed_at: 'T' },
+    { distance_m: 5000, duration_s: 1500, is_warmup: false, completed_at: 'T' },
+  ];
+  assert.equal(workout.volume(sets), 1000, 'the lift only');
+});
+
+test('cardio sets group, order and reorder like any other', async () => {
+  await seedSets([
+    { id: 'run', name: 'Running', weight: null, reps: null },
+    { id: 'bp', name: 'Bench', weight: 185, reps: 5 },
+  ]);
+  assert.deepEqual(await cards(), [['Running', 1], ['Bench', 1]]);
+
+  const ordered = workout.orderGroups(workout.groupByExercise(await liveSets()), 'bp', 0);
+  await workout.reindexSets(ordered.flatMap((g) => g.sets));
+  assert.deepEqual(await cards(), [['Bench', 1], ['Running', 1]]);
+});
+
+test('distance and duration persist through a set update', async () => {
+  const [set] = await seedSets([{ id: 'run', name: 'Running', weight: null, reps: null }]);
+
+  await workout.updateSet(set, { distance_m: 5200 });
+  const withTime = await workout.updateSet(set, { duration_s: 1560 });
+
+  assert.equal(withTime.distance_m, 5200, 'the earlier write is not lost');
+  assert.equal(withTime.duration_s, 1560);
+  assert.equal(workout.cardioLine(withTime), '5.20 km · 26:00 · 5:00 /km');
+});
+
+test('a run does not become a personal record on load', () => {
+  // estimate1RM has nothing to work with, and a PR flash on a run is nonsense.
+  const run = { distance_m: 5000, duration_s: 1500, is_warmup: false, completed_at: 'T' };
+  assert.equal(workout.isRecord(run, null), false);
+});

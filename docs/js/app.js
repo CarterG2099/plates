@@ -1918,6 +1918,35 @@ Alpine.data('trainPage', () => ({
     }));
   },
 
+  /** Distance and time, rather than load and reps. */
+  isCardioGroup(group) {
+    return workout.isCardio(this.exerciseById(group.exerciseId), group.name);
+  },
+
+  /** "5.20 km · 26:00 · 5:00 /km" for the PREVIOUS column and the history line. */
+  cardioLine(set) { return workout.cardioLine(set); },
+
+  /**
+   * Cardio cells are typed in the units people say out loud — kilometres and
+   * minutes — while the row stores metres and seconds, so a distance is never
+   * ambiguous and pace is a straight division.
+   */
+  cardioValue(set, field) {
+    const row = this.currentSet(set);
+    if (field === 'km') return row.distance_m == null ? '' : +(row.distance_m / 1000).toFixed(2);
+    return row.duration_s == null ? '' : +(row.duration_s / 60).toFixed(2);
+  },
+
+  async editCardio(set, field, value) {
+    const raw = value === '' ? null : Number(value);
+    const next = field === 'km'
+      ? { distance_m: raw == null ? null : Math.round(raw * 1000) }
+      : { duration_s: raw == null ? null : Math.round(raw * 60) };
+
+    Alpine.store('data').patchSet({ ...this.currentSet(set), ...next });
+    await workout.updateSet(set, next);
+  },
+
   /** The greyed number in a row: that set last time, else the last one there was. */
   placeholderFor(group, index) {
     const previous = group.previous ?? [];
@@ -2188,6 +2217,8 @@ Alpine.data('trainPage', () => ({
     if (!done) {
       if (current.weight_lb == null && fallback?.weight_lb != null) next.weight_lb = fallback.weight_lb;
       if (current.reps == null && fallback?.reps != null) next.reps = fallback.reps;
+      if (current.distance_m == null && fallback?.distance_m != null) next.distance_m = fallback.distance_m;
+      if (current.duration_s == null && fallback?.duration_s != null) next.duration_s = fallback.duration_s;
     }
 
     const optimistic = { ...current, ...next };
