@@ -1190,8 +1190,9 @@
         <!-- Exercise picker -------------------------------------------------- -->
         <!-- is-nested: this also opens from inside the routine builder, which
              sits later in the document and would otherwise paint over it. -->
-        <!-- is-search: anchored to the top of the screen, because the keyboard
-             opens over the bottom — see the rule in pages.css. -->
+        <!-- is-search: the field and Cancel stay put while the list scrolls —
+             see the rule in pages.css. The keyboard is handled for every sheet
+             by trackKeyboardInset() in app.js, not by this one specially. -->
         <template x-if="picker">
           <div class="sheet-backdrop is-nested is-search" @click.self="closePicker()">
             <div class="sheet" x-init="$swipe($el, () =&gt; { closePicker() })">

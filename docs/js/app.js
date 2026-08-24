@@ -2894,6 +2894,41 @@ document.addEventListener('alpine:initialized', () => {
   setTimeout(() => boot.remove(), 200);
 });
 
+/**
+ * Publish how much of the screen the on-screen keyboard is covering.
+ *
+ * A sheet sits at the bottom, which is exactly where the keyboard opens. The
+ * keyboard resizes the *visual* viewport and leaves the layout viewport alone,
+ * so `vh` — and a `position: fixed` backdrop — never learn about it, and a sheet
+ * you are typing into ends up behind the thing you are typing on.
+ *
+ * visualViewport is the only thing that does know. The bottom inset is whatever
+ * the layout viewport has that the visual one does not, once the browser's own
+ * scroll to reveal the focused field is accounted for; the backdrop pads by it
+ * and the sheet, sized as a percentage of that backdrop, shortens to match.
+ *
+ * No feature detection beyond the null check: browsers without visualViewport
+ * leave the property at its 0px fallback and behave exactly as before.
+ */
+function trackKeyboardInset() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+
+  const apply = () => {
+    const covered = window.innerHeight - vv.height - vv.offsetTop;
+    document.documentElement.style.setProperty(
+      '--keyboard-inset', `${Math.max(0, Math.round(covered))}px`);
+  };
+
+  vv.addEventListener('resize', apply);
+  // The browser scrolls the visual viewport to bring a focused field into view;
+  // without this the inset is right only while nothing has moved.
+  vv.addEventListener('scroll', apply);
+  apply();
+}
+
+trackKeyboardInset();
+
 window.Alpine = Alpine;
 
 // Console handle for poking at things during development. The client only ever

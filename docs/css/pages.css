@@ -350,6 +350,10 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   display: flex;
   align-items: flex-end;
   z-index: 20;
+  /* The keyboard covers the bottom of the screen, which is where sheets live.
+     Published by trackKeyboardInset() in app.js; 0 whenever no keyboard is up,
+     and on any browser without visualViewport. */
+  padding-bottom: var(--keyboard-inset, 0px);
 }
 
 .sheet {
@@ -361,36 +365,13 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-height: 88vh;
+  /* Percentage of the backdrop rather than vh, so the keyboard padding above
+     shortens the sheet instead of pushing its bottom off the screen. */
+  max-height: 88%;
   overflow-y: auto;
   /* Reaching the end of a sheet is the end of the gesture, not the start of
      scrolling whatever is behind it. */
   overscroll-behavior: contain;
-}
-
-/* A sheet you type into cannot hug the bottom of the screen.
- *
- * The keyboard opens over exactly that space, and because it resizes the visual
- * viewport rather than the layout viewport, `vh` never learns about it — so a
- * bottom-anchored sheet stays put underneath. A short result list ended up
- * entirely behind the keyboard, which is the case where you most need to see it.
- *
- * Anchoring to the top instead puts the field and the first results in the part
- * of the screen the keyboard cannot reach, with no viewport arithmetic to get
- * wrong. Phones only: the wide layout centres its dialogs and has no keyboard. */
-@media (max-width: 899px) {
-  .sheet-backdrop.is-search { align-items: flex-start; }
-
-  .sheet-backdrop.is-search .sheet {
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    border-top: 0;
-    border-bottom: 1px solid var(--color-border);
-    padding-top: calc(var(--space-4) + var(--inset-top));
-    padding-bottom: var(--space-4);
-  }
-
-  /* Below the content, where a top sheet's drag handle belongs. */
-  .sheet-backdrop.is-search .grabber { order: 99; }
 }
 
 /* A search sheet holds its own chrome still and scrolls only its results.
@@ -1027,7 +1008,7 @@ html:has(.sheet-backdrop) { overflow: hidden; }
     border-radius: var(--radius-lg);
     border: 1px solid var(--color-border);
     box-shadow: var(--shadow-lg);
-    max-height: 82vh;
+    max-height: 82%;
   }
 
   .grabber { display: none; }
