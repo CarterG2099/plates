@@ -2857,6 +2857,23 @@ Alpine.data('statsPage', () => ({
     return stats.weightPlot(this.weight, { target: this.weightTarget, height: 32 });
   },
 
+  /**
+   * The dots are built as markup rather than with x-for, because an x-for
+   * <template> written inside <svg> is parsed into the SVG namespace, where it
+   * is a plain SVGElement with no .content for Alpine to clone — the loop
+   * silently never runs and the literal <circle> sits there unbound. Setting
+   * innerHTML on a <g> parses in the SVG namespace, which is the thing we need.
+   */
+  get weightDots() {
+    const plot = this.weightPlot;
+    if (!plot) return '';
+    const on = this.weightHover?.at;
+    return plot.points.map((pt) => {
+      const cls = pt.at === on ? 'plot-dot is-on' : 'plot-dot';
+      return `<circle cx="${Number(pt.x)}" cy="${Number(pt.y)}" r="1.6" class="${cls}"/>`;
+    }).join('');
+  },
+
   get weightReadings() { return stats.weightReadings(this.weight); },
   get weightTrend() { return stats.weightTrend(this.weight, { target: this.weightTarget }); },
   get weightWeek() { return stats.weightWindows(this.weight, 7); },

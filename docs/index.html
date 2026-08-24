@@ -1532,8 +1532,7 @@
                stretched, which skews a slope into whatever the card width says. -->
           <template x-if="weightPlot && weight.length > 1">
             <div class="plot" @pointermove="trackWeight($event)"
-                 @pointerleave="weightHover = null"
-                 @touchmove.passive="trackWeight($event.touches[0])">
+                 @pointerleave="weightHover = null">
               <svg :viewBox="`0 0 ${weightPlot.width} ${weightPlot.height}`"
                    role="img" aria-label="Body weight over time">
                 <!-- Target line, recessive: context, not data. -->
@@ -1549,10 +1548,7 @@
                       :x1="weightHover && weightHover.x" :x2="weightHover && weightHover.x"
                       y1="0" :y2="weightPlot.height" class="plot-crosshair"/>
 
-                <template x-for="pt in weightPlot.points" :key="pt.at">
-                  <circle :cx="pt.x" :cy="pt.y" r="1.6" class="plot-dot"
-                          :class="{ 'is-on': weightHover && weightHover.at === pt.at }"/>
-                </template>
+                <g x-html="weightDots"></g>
               </svg>
 
               <!-- Values lead, the date follows. -->
