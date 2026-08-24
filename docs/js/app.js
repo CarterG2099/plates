@@ -1911,6 +1911,36 @@ Alpine.data('trainPage', () => ({
     }));
   },
 
+  /**
+   * The row as the store has it now, keyed off the set the template is holding.
+   *
+   * Every binding on a set row must go through this. The x-for scope's `set` is a
+   * plain object out of the unproxied `raw` store, so a binding that reads it
+   * directly — `set.completed_at` — registers no reactive dependency and its
+   * effect never runs a second time. Alpine does not refresh the scope either,
+   * because the :key has not changed. Measured: an in-memory patchSet never
+   * repainted, not once in forty frames, and the tick only caught up when an
+   * unrelated full refresh happened ~450 ms later.
+   *
+   * Reading through `this.data` puts trainVersion in the effect's dependencies,
+   * which is what makes patchSet's bump actually mean something.
+   */
+  live(set) {
+    return this.sets.find((s) => s.id === set.id) ?? set;
+  },
+
+  /** Classes for a set row, off the live row rather than the captured one. */
+  rowClasses(set, group) {
+    const row = this.live(set);
+    return { done: Boolean(row.completed_at), record: this.isRecord(row, group) };
+  },
+
+  /** A cell's value, likewise. Empty string so the placeholder shows through. */
+  cellValue(set, field) {
+    const value = this.live(set)[field];
+    return value == null ? '' : value;
+  },
+
   /** The greyed number in a row: that set last time, else the last one there was. */
   placeholderFor(group, index) {
     const previous = group.previous ?? [];
@@ -1934,6 +1964,22 @@ Alpine.data('trainPage', () => ({
     return p?.reps == null ? '' : String(p.reps);
   },
   get routines() { return workout.routinesFor(this.data.routines, this.email); },
+
+  /**
+   * Reordering is a mode rather than a permanent grip on every card.
+   *
+   * The routine grid goes multi-column above 700px, and $dragCard measures a
+   * single vertical stride — so the drag is only honest in a one-column list.
+   * The mode is what guarantees one, at any width.
+   */
+  reordering: false,
+
+  toggleReorder() { this.reordering = !this.reordering; },
+
+  async reorderRoutineTo(id, toIndex) {
+    await workout.reindexRoutines(workout.orderRoutines(this.routines, id, toIndex));
+    await Alpine.store('data').refreshTraining();
+  },
   // `history` lives with the past-session code below, since it depends on
   // historyOwner rather than always meaning "mine".
 
@@ -2014,6 +2060,7 @@ Alpine.data('trainPage', () => ({
     if (name) {
       await workout.saveSessionAsRoutine({
         name, session: this.session, sets: this.data.sessionSets, ownerEmail: this.email,
+        routines: this.data.routines,
       });
     }
     if (rewriting) {
@@ -2574,7 +2621,7 @@ Alpine.data('trainPage', () => ({
     if (!name) return;
 
     const routine = await workout.upsertRoutine(
-      { id: this.builder.routine?.id, name }, this.email,
+      { id: this.builder.routine?.id, name }, this.email, this.data.routines,
     );
     this.builder.routine = routine;
     await Alpine.store('data').refreshTraining();
@@ -2599,6 +2646,12 @@ Alpine.data('trainPage', () => ({
     await workout.updateRoutineExercise(item, {
       [field]: value === '' ? null : (field === 'target_reps' ? value : Number(value)),
     });
+    await Alpine.store('data').refreshTraining();
+  },
+
+  async reorderRoutineItemTo(id, toIndex) {
+    const items = this.builderExercises.map((row) => row.item);
+    await workout.reindexRoutineExercises(workout.orderRoutineExercises(items, id, toIndex));
     await Alpine.store('data').refreshTraining();
   },
 
