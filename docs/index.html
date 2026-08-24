@@ -2077,16 +2077,20 @@
                               $el.checked = $store.ui.notifications === 'on'">
             </label>
 
-            <label class="setting" :class="{ 'is-dead': $store.ui.notifications !== 'on' }">
+            <label class="setting"
+                   :class="{ 'is-dead': $store.ui.notifications !== 'on' && !$store.ui.prefs.morning_quotes }">
               <span class="setting-text">
                 <b>Morning motivation</b>
                 <small x-text="$store.ui.notifications === 'on'
                   ? 'One line at 6:30am, from your own training'
-                  : 'Turn notifications on first'"></small>
+                  : $store.ui.prefs.morning_quotes
+                    ? 'On for your account — this browser is not subscribed'
+                    : 'Turn notifications on first'"></small>
               </span>
               <input type="checkbox" role="switch"
                      :checked="$store.ui.prefs.morning_quotes"
-                     :disabled="$store.ui.notifications !== 'on' || $store.ui.prefsBusy"
+                     :disabled="$store.ui.prefsBusy ||
+                                ($store.ui.notifications !== 'on' && !$store.ui.prefs.morning_quotes)"
                      @change="await $store.ui.toggleMorning();
                               $el.checked = $store.ui.prefs.morning_quotes">
             </label>
