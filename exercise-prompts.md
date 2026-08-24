@@ -4,8 +4,9 @@
 key has no image quota. Companion to `exercise-art.md`, which explains where the
 files go and why they exist; this file is just the commands.
 
-**All 110 drawn.** Nothing outstanding. What remains is the review list at the
-bottom — the drawings that are placed and working but want redoing. Four exercises per image, sliced apart
+**All 110 drawn.** Nothing outstanding. 27 of them want redoing — the
+copy-and-paste commands for those are under **Fix sheets** below, and the reasons
+are in the review after it. Four exercises per image, sliced apart
 afterwards. A square sheet gives cells well above the 512px target, so nothing is
 lost to the grid, and it is four times fewer requests.
 
@@ -157,6 +158,84 @@ two drawings apart.
 |---|---|
 | `straight-arm-lat-pulldown-cable.png` | `straight-arm-pulldown-rope.png` |
 | `triceps-pushdown.png` | `triceps-pushdown-rope.png` |
+
+## Fix sheets — copy and paste these
+
+27 drawings to redo, as 7 sheets. Same conversation and same house style as the
+rest; if you are starting fresh, paste the style primer at the top of this file
+first.
+
+Each line says what was wrong as well as what to draw, because these are
+corrections — the model got the exercise right and the detail wrong, so the
+detail is what needs the emphasis.
+
+Twelve of the 27 are Gemini drawings, so redoing them converts them to the
+ChatGPT style at the same time.
+
+---
+
+### Fix sheet 1 — cardio, no highlight anywhere
+
+The single most common fault: all six cardio machines came back with legs in red.
+
+> For all four of these: **use no highlight colour at all. The entire figure stays grey. There must be no red anywhere in this image.** These are cardio machines and no single muscle is worked.
+>
+> Top-left: **Cycling** — an upright stationary exercise bike, rider seated and pedalling.
+> Top-right: **Spinning** — an indoor spin bike with a heavy flywheel, rider standing out of the saddle.
+> Bottom-left: **Elliptical** — an elliptical trainer with foot pedals and long moving handles.
+> Bottom-right: **Treadmill Running** — a treadmill with a running deck, side rails and a console.
+
+### Fix sheet 2 — the rest of the cardio (three, as a strip)
+
+Send as a **3 × 1 horizontal strip**.
+
+> Draw these three as one wide image, a single row of three equal panels, left to right. For all three: **use no highlight colour at all — the entire figure stays grey, no red anywhere.**
+>
+> Left: **Stair Machine (Steps)** — a stair climber with rotating steps and handrails.
+> Middle: **Rowing Machine** — an indoor rowing erg, seated on the slide, pulling the handle to the chest.
+> Right: **Swimming** — front crawl, seen **from the side** with the body just below a waterline, one arm reaching forward and the other clearly lifted out and above the water. Previously drawn flat and from above, which read as a person lying on the floor.
+
+### Fix sheet 3 — back, wrong muscle and unreadable grip
+
+> Top-left: **Chin-Up** — hanging from an overhead bar with an **underhand grip, palms facing the figure**. Highlight the **latissimus dorsi and the biceps**. Draw it from a three-quarter front angle so the underhand grip and the biceps are both visible — a rear view makes this identical to a pull-up.
+> Top-right: **Pendlay Row** — a barbell rowed from the floor, back flat and horizontal. Highlight the **latissimus dorsi, the broad muscles down the sides of the back** — not the glutes.
+> Bottom-left: **Bent Over Row (Barbell)** — a barbell, torso hinged near parallel. Highlight the **rhomboids and mid-back, between and below the shoulder blades** — not the traps and not the chest.
+> Bottom-right: **Row (Dumbbell)** — one dumbbell, one knee and one hand braced on a flat bench. Draw it from **three-quarter behind** so the working lat is facing the viewer; a pure side view hides the highlight almost completely.
+
+### Fix sheet 4 — back, highlight hidden by the angle
+
+Every one of these was drawn in pure profile, which turns the lit muscle
+edge-on until it disappears at thumbnail size.
+
+> All four: draw from **three-quarter behind**, so the back is turned toward the viewer and the highlighted muscle is broad and clearly visible. Do not draw these in pure side profile.
+>
+> Top-left: **Lat Pulldown** — a lat pulldown machine, wide bar overhead, thigh pad. Highlight the latissimus dorsi.
+> Top-right: **Lat Pulldown - Close Grip (Cable)** — a pulldown machine with a close-grip V handle, hands together. Highlight the latissimus dorsi.
+> Bottom-left: **Seated Cable Row - V Grip (Cable)** — a seated cable row with a close V handle. Highlight the latissimus dorsi.
+> Bottom-right: **Iso-Lateral Row (Machine)** — a plate-loaded row machine with two independent handles and a chest pad, handles pulled back **level with the chest**. Highlight the latissimus dorsi.
+
+### Fix sheet 5 — one row, and three lower-body faults
+
+> Top-left: **Iso-Lateral Low Row** — a plate-loaded low row machine, seated, chest against a pad, handles pulled **low and back toward the hips** rather than to the chest. Highlight the latissimus dorsi. Draw from three-quarter behind. This must look clearly different from a normal chest-height row machine.
+> Top-right: **Back Extension** — a 45-degree back extension bench with hip and ankle pads. Highlight the **erector spinae, the two columns running up either side of the lower spine** — not the glutes.
+> Bottom-left: **Seated Leg Curl** — a seated leg curl machine with a thigh pad and an ankle pad. Highlight the **hamstrings, the back of the thigh, underneath** — not the top of the thigh.
+> Bottom-right: **Sumo Deadlift** — a barbell with a **very wide stance, feet far outside shoulder width and toes turned out, hands gripping inside the knees**. Highlight the hamstrings and glutes. The wide stance is the entire difference from a normal deadlift and must be obvious.
+
+### Fix sheet 6 — glutes and calves, wrong muscle or wrong machine
+
+> Top-left: **Swing (Kettlebell)** — a kettlebell swung forward to **chest height on straight arms**, at the top of the swing. Highlight the **glutes and hamstrings** — not the calves.
+> Top-right: **Glute Kickback (Machine)** — a **glute kickback machine**: an upright frame with a chest pad, handles to hold, and a footplate that one leg drives backward against. Not a standing dumbbell exercise. Highlight the glutes.
+> Bottom-left: **Hip Adduction (Machine)** — a seated adduction machine with the pads on the **inside** of the thighs and the knees squeezing **together**. Highlight the **adductors, the inner thigh**. This is the opposite of the abduction machine; the pads must clearly be between the legs.
+> Bottom-right: **Calf Extension (Machine)** — a **seated** calf machine, knees bent at ninety degrees with pads across the thighs and toes on a block. Highlight the calves. It must not look like a standing calf machine.
+
+### Fix sheet 7 — triceps, wrong muscle and wrong equipment
+
+> Top-left: **Triceps Dip (Weighted)** — parallel dip bars, weight plate on a belt, torso upright. Highlight the **triceps, the back of the upper arm** — not the shoulder.
+> Top-right: **Seated Dip (Machine)** — a seated dip machine with handles at the sides and a back pad. Highlight the **triceps, the back of the upper arm** — not the shoulder.
+> Bottom-left: **Triceps Kickback (Cable)** — a **low cable pulley with a single D handle**, torso hinged forward, upper arm held horizontal, forearm extending back. Not a barbell.
+> Bottom-right: **Triceps Pushdown** — a high cable with a **straight bar** attachment, pressed down to the thighs. **A straight bar, not a rope** — there is a separate rope version and these two exist only to show the difference.
+
+---
 
 ## Review of all 110 — what needs redoing
 
