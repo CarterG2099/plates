@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v96';
+const CACHE_VERSION = 'plates-v97';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -62,6 +62,7 @@ const SHELL = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
+  '/icons/badge-96.png',
 ];
 
 /**
@@ -189,7 +190,11 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(data.title || 'Plates', {
     body: data.body || 'You have a workout still running.',
     icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    // Not the app icon. Android throws the badge's colour away and fills its
+    // opaque part with the system accent, so an image with no alpha channel —
+    // which every icon here is — arrives as a solid white box. badge-96 is the
+    // same logo cut as a silhouette; see tools/badge.mjs.
+    badge: '/icons/badge-96.png',
     // Replaces its predecessor rather than stacking, so a second reminder about
     // the same session does not become two things to dismiss.
     tag: data.tag || 'plates',
