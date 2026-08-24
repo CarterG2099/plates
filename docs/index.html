@@ -1711,6 +1711,58 @@
           </div>
         </div>
 
+        <!-- Consistency ------------------------------------------------------ -->
+        <div class="card" x-show="consistency.any" x-cloak>
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Consistency</div>
+              <div class="stat-hero">
+                <span x-text="consistency.weekStreak"></span><small>week streak</small>
+              </div>
+              <div class="stat-sub"
+                   x-text="consistency.daysSinceLast === 0
+                     ? 'Trained today'
+                     : `${count(consistency.daysSinceLast, 'day')} since the last one`"></div>
+            </div>
+          </div>
+
+          <!-- One square per day, twelve weeks. A calendar answers "how often"
+               in a way a number cannot: the gaps are visible as gaps. -->
+          <div class="plot" @pointermove="trackGrid($event)" @pointerleave="gridHover = null">
+            <svg class="grid-plot"
+                 x-effect="$el.setAttribute('viewBox', `0 0 ${gridBox.width} ${gridBox.height}`)"
+                 role="img" aria-label="Days trained over the last twelve weeks"
+                 x-html="gridCells"></svg>
+
+            <div class="plot-readout" x-show="gridReadout" x-cloak>
+              <b x-text="gridReadout && gridReadout.what"></b>
+              <span x-text="gridReadout && gridReadout.date"></span>
+            </div>
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat-cell">
+              <small>Day streak</small>
+              <b x-text="consistency.dayStreak"></b>
+              <span x-text="`best ${consistency.bestDayStreak}`"></span>
+            </div>
+            <div class="stat-cell">
+              <small>Week streak</small>
+              <b x-text="consistency.weekStreak"></b>
+              <span x-text="`best ${consistency.bestWeekStreak}`"></span>
+            </div>
+            <div class="stat-cell">
+              <small>Longest gap</small>
+              <b x-text="count(consistency.longestGap, 'day')"></b>
+            </div>
+            <div class="stat-cell">
+              <small>Days trained</small>
+              <b x-text="consistency.trainedDays"></b>
+              <span x-text="count(consistency.sessions, 'session')"></span>
+            </div>
+          </div>
+        </div>
+
         <!-- Top lifts -------------------------------------------------------- -->
         <div class="card" x-show="lifts.length">
           <div class="card-label">Best lifts · estimated 1RM</div>
@@ -1996,6 +2048,51 @@
       </nav>
 
       <div class="toast" x-show="$store.ui.toast" x-transition x-cloak x-text="$store.ui.toast"></div>
+
+      <!-- Post-workout. Sits at the app root, not inside the Train screen: by the
+           time this shows there is no session left for that component to hang off. -->
+      <template x-if="$store.ui.finished">
+        <div class="sheet-backdrop" @click.self="$store.ui.dismissFinished()">
+          <div class="sheet celebrate"
+               x-init="$swipe($el, () => { $store.ui.dismissFinished() })">
+            <div class="grabber"></div>
+
+            <div class="celebrate-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="var(--color-success)" stroke-width="1.5"/>
+                <path d="M7.5 12.4l3 3 6-6.4" stroke="var(--color-success)" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+
+            <h2 class="celebrate-head" x-text="$store.ui.finished.headline"></h2>
+            <p class="celebrate-note" x-text="$store.ui.finished.note"></p>
+
+            <div class="stat-grid">
+              <div class="stat-cell">
+                <small>Day streak</small>
+                <b x-text="$store.ui.finished.consistency.dayStreak"></b>
+                <span x-text="`best ${$store.ui.finished.consistency.bestDayStreak}`"></span>
+              </div>
+              <div class="stat-cell">
+                <small>Week streak</small>
+                <b x-text="$store.ui.finished.consistency.weekStreak"></b>
+                <span x-text="`best ${$store.ui.finished.consistency.bestWeekStreak}`"></span>
+              </div>
+              <div class="stat-cell">
+                <small>This session</small>
+                <b x-text="$store.ui.finished.session.volume
+                     ? `${($store.ui.finished.session.volume / 1000).toFixed(1)}k lb`
+                     : '—'"></b>
+                <span x-text="$store.ui.finished.session.elapsed"></span>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-block"
+                    @click="$store.ui.dismissFinished()">Done</button>
+          </div>
+        </div>
+      </template>
 
     </div>
   </template>

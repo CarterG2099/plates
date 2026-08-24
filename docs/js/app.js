@@ -630,6 +630,18 @@ Alpine.store('ui', {
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => { this.toast = ''; }, 1800);
   },
+
+  /**
+   * The post-workout popup. Lives on the ui store rather than trainPage because
+   * finishing a workout leaves the Train screen's session state behind — the
+   * component that raised it is mid-teardown by the time this shows.
+   *
+   * Dismissed by hand, not on a timer: it is the one moment worth stopping for,
+   * and a toast that vanishes in 1.8s is not that.
+   */
+  finished: null,
+  celebrate(payload) { this.finished = payload; },
+  dismissFinished() { this.finished = null; },
 });
 
 // ---- today -----------------------------------------------------------------
@@ -2085,6 +2097,14 @@ Alpine.data('trainPage', () => ({
       });
     }
 
+    // Held before finishSession clears it, for the popup underneath.
+    const done = {
+      name: this.session.name,
+      volume: Math.round(this.volume),
+      exercises: this.groups.length,
+      elapsed: this.elapsed,
+    };
+
     await workout.finishSession(this.session);
     this.finishing = false;
     this.routineName = '';
@@ -2092,11 +2112,14 @@ Alpine.data('trainPage', () => ({
     this.endRest();
     await Alpine.store('data').refreshTraining();
 
-    Alpine.store('ui').flash(
-      name ? `Finished · saved “${name}”`
-        : rewriting ? `Finished · updated “${source.name}”`
-          : 'Workout finished',
-    );
+    if (name) Alpine.store('ui').flash(`Saved “${name}”`);
+    else if (rewriting) Alpine.store('ui').flash(`Updated “${source.name}”`);
+
+    // After the refresh, deliberately: the streak has to include the session
+    // that was just finished, and before the refresh it is still open and
+    // therefore not counted at all.
+    const consistency = stats.trainingConsistency(this.data.index);
+    Alpine.store('ui').celebrate({ ...stats.finishNote(consistency, done), consistency, session: done });
   },
 
   async discard() {
@@ -2987,6 +3010,55 @@ Alpine.data('statsPage', () => ({
   get volumePlot() { return stats.volumePlot(this.weeks, { height: 40 }); },
   get volumeStats() { return stats.volumeStats(this.weeks); },
   get sessions() { return stats.sessionSummaries(this.data.index, 12); },
+
+  // ---- consistency ---------------------------------------------------------
+
+  gridHover: null,
+
+  get consistency() { return stats.trainingConsistency(this.data.index); },
+  get grid() { return stats.trainingGrid(this.data.index, { weeks: 12 }); },
+
+  /**
+   * The grid as markup, for the same namespace reason as the other charts.
+   *
+   * Two steps of one hue, not a gradient: trained or not is the whole signal,
+   * and shading by volume would make a light day look like a missed one.
+   */
+  get gridCells() {
+    const on = this.gridHover?.key;
+    return this.grid.map((column, x) => column.cells.map((cell, y) => {
+      const fill = cell.trained ? 'var(--color-primary-hover)' : 'var(--color-surface-raised)';
+      const opacity = cell.future ? 0.35 : 1;
+      const ring = cell.key === on
+        ? ' stroke="var(--color-text)" stroke-width="0.5" vector-effect="non-scaling-stroke"'
+        : '';
+      return `<rect x="${(x * 8.4).toFixed(2)}" y="${(y * 8.4).toFixed(2)}"`
+        + ` width="6.6" height="6.6" rx="1.6" fill="${fill}" opacity="${opacity}"${ring}/>`;
+    }).join('')).join('');
+  },
+
+  /** 12 columns of 8.4 units, less the trailing gap. */
+  get gridBox() { return { width: 12 * 8.4 - 1.8, height: 7 * 8.4 - 1.8 }; },
+
+  trackGrid(event) {
+    const box = event.currentTarget.getBoundingClientRect();
+    const unit = box.width / this.gridBox.width;
+    const x = Math.floor((event.clientX - box.left) / unit / 8.4);
+    const y = Math.floor((event.clientY - box.top) / unit / 8.4);
+    this.gridHover = this.grid[x]?.cells[y] ?? null;
+  },
+
+  /** "Trained · 1 workout" or "Rest day", for whichever square is under the pointer. */
+  get gridReadout() {
+    const cell = this.gridHover;
+    if (!cell) return null;
+    return {
+      date: this.weightDate(cell.date.toISOString(), { long: true }),
+      what: cell.future ? 'Still to come'
+        : cell.trained ? stats.count(cell.sessions, 'workout')
+          : 'Rest day',
+    };
+  },
 
   /**
    * The bars, as markup for the same reason stats.js builds its charts that way

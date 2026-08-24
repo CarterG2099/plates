@@ -9,7 +9,7 @@
 import * as local from './local.js';
 import * as sync from './sync.js';
 import { estimate1RM, historyOf } from './workout.js';
-import { dayBounds, addDays, toDateOnly, entriesForDay, sumTotals, currentGoal } from './food.js';
+import { dayBounds, addDays, toDateOnly, fromDateOnly, entriesForDay, sumTotals, currentGoal } from './food.js';
 
 const DAY = 86_400_000;
 
@@ -643,4 +643,181 @@ export function liftDetail(index, lift, { limit = 30 } = {}) {
       sets: h.sets.filter((s) => s.completed_at && !s.is_warmup).length,
     })),
   };
+}
+
+// ---- consistency ------------------------------------------------------------
+
+/**
+ * Distinct local dates that carry a finished session, newest first.
+ *
+ * Local, not UTC: a 9pm workout in Denver is a different UTC date, and a streak
+ * that breaks because you trained late is not a streak anyone would keep.
+ */
+function trainedDays(index) {
+  const days = new Set();
+  for (const session of index.owned) {
+    if (!session.ended_at || session.deleted_at) continue;
+    days.add(toDateOnly(new Date(session.started_at)));
+  }
+  return [...days].sort().reverse();
+}
+
+/** Consecutive entries in `has`, walking back one step at a time from `from`. */
+function runLength(has, from, step) {
+  let n = 0;
+  for (let cursor = from; has(cursor); cursor = step(cursor)) n += 1;
+  return n;
+}
+
+/**
+ * Day and week streaks, the gaps between, and the longest of each.
+ *
+ * Both streaks are forgiving of the period you are still in: not having trained
+ * yet today does not end a run at 6am. So the count starts at today, and if
+ * today is empty it starts at yesterday instead — a rest day only breaks the
+ * streak once a second one follows it. Weeks work the same way against the
+ * Monday-anchored week, which is what weeklyTraining already uses.
+ */
+export function trainingConsistency(index, { now = Date.now() } = {}) {
+  const days = trainedDays(index);
+  if (!days.length) {
+    return {
+      any: false, dayStreak: 0, weekStreak: 0, bestDayStreak: 0, bestWeekStreak: 0,
+      daysSinceLast: null, longestGap: null, lastAt: null, sessions: 0, trainedDays: 0,
+    };
+  }
+
+  const dayset = new Set(days);
+  const today = dayBounds(new Date(now)).start;
+  const hasDay = (d) => dayset.has(toDateOnly(d));
+  const backOne = (d) => addDays(d, -1);
+
+  // Today if it counts, else yesterday — see the note above about 6am.
+  const dayAnchor = hasDay(today) ? today : addDays(today, -1);
+
+  const weekset = new Set(days.map((d) => toDateOnly(weekStart(fromDateOnly(d)))));
+  const thisWeek = weekStart(today);
+  const hasWeek = (w) => weekset.has(toDateOnly(w));
+  const backWeek = (w) => addDays(w, -7);
+  const weekAnchor = hasWeek(thisWeek) ? thisWeek : addDays(thisWeek, -7);
+
+  // Longest runs ever: walk the sorted days once rather than probing every date.
+  const ascending = [...days].reverse().map(fromDateOnly);
+  let bestDayStreak = 1;
+  let dayRun = 1;
+  let longestGap = 0;
+  for (let i = 1; i < ascending.length; i++) {
+    const gap = Math.round((ascending[i] - ascending[i - 1]) / DAY);
+    if (gap > longestGap) longestGap = gap;
+    dayRun = gap === 1 ? dayRun + 1 : 1;
+    if (dayRun > bestDayStreak) bestDayStreak = dayRun;
+  }
+
+  const weeksAscending = [...weekset].sort().map(fromDateOnly);
+  let bestWeekStreak = 1;
+  let weekRun = 1;
+  for (let i = 1; i < weeksAscending.length; i++) {
+    weekRun = Math.round((weeksAscending[i] - weeksAscending[i - 1]) / DAY) === 7 ? weekRun + 1 : 1;
+    if (weekRun > bestWeekStreak) bestWeekStreak = weekRun;
+  }
+
+  const lastAt = index.owned.find((s) => s.ended_at && !s.deleted_at)?.started_at ?? null;
+
+  return {
+    any: true,
+    dayStreak: runLength(hasDay, dayAnchor, backOne),
+    weekStreak: runLength(hasWeek, weekAnchor, backWeek),
+    bestDayStreak,
+    bestWeekStreak,
+    daysSinceLast: Math.round((today - fromDateOnly(days[0])) / DAY),
+    longestGap,
+    lastAt,
+    sessions: index.owned.filter((s) => s.ended_at && !s.deleted_at).length,
+    trainedDays: days.length,
+  };
+}
+
+/**
+ * A day grid for the last `weeks` weeks, Monday-anchored, oldest column first.
+ *
+ * Trained or not is the signal, so it is one hue at two steps rather than a
+ * gradient — volume already has its own chart, and shading these by tonnage
+ * would make a light day look like a missed one.
+ */
+export function trainingGrid(index, { weeks = 12, now = Date.now() } = {}) {
+  const days = new Set(trainedDays(index));
+  const sessionsByDay = new Map();
+  for (const session of index.owned) {
+    if (!session.ended_at || session.deleted_at) continue;
+    const key = toDateOnly(new Date(session.started_at));
+    sessionsByDay.set(key, (sessionsByDay.get(key) ?? 0) + 1);
+  }
+
+  const today = dayBounds(new Date(now)).start;
+  const firstColumn = addDays(weekStart(today), -(weeks - 1) * 7);
+  const columns = [];
+
+  for (let w = 0; w < weeks; w++) {
+    const cells = [];
+    for (let d = 0; d < 7; d++) {
+      const date = addDays(firstColumn, w * 7 + d);
+      const key = toDateOnly(date);
+      cells.push({
+        date,
+        key,
+        trained: days.has(key),
+        sessions: sessionsByDay.get(key) ?? 0,
+        future: date > today,
+      });
+    }
+    columns.push({ start: addDays(firstColumn, w * 7), cells });
+  }
+
+  return columns;
+}
+
+/**
+ * What to say when a workout is finished.
+ *
+ * The specific line always wins over the generic one: "longest run yet" beats a
+ * stock phrase, and coming back after two weeks off deserves acknowledging
+ * rather than being told the streak is 1. Only when nothing notable happened
+ * does it reach for the list.
+ *
+ * `pick` is injectable so the tests are not at the mercy of Math.random.
+ */
+const ENCOURAGEMENT = [
+  'Logged. That is the part most people skip.',
+  'Another one in the bank.',
+  'That is the work. See you next time.',
+  'Done is the whole point.',
+  'Banked. Nothing else to prove today.',
+  'One more than yesterday.',
+];
+
+export function finishNote(consistency, session = {}, { pick = null } = {}) {
+  const choose = pick ?? ((list) => list[Math.floor(Math.random() * list.length)]);
+  const { dayStreak = 0, weekStreak = 0, bestDayStreak = 0, bestWeekStreak = 0, sessions = 0 } = consistency ?? {};
+
+  const headline = weekStreak > 1 ? count(weekStreak, 'week') + ' in a row'
+    : dayStreak > 1 ? count(dayStreak, 'day') + ' in a row'
+      : 'Workout done';
+
+  if (sessions <= 1) return { headline: 'First one logged', note: 'That is the hard one. The rest are easier.' };
+
+  if (dayStreak > 1 && dayStreak >= bestDayStreak) {
+    return { headline, note: `${count(dayStreak, 'day')} straight — your longest run yet.` };
+  }
+  if (weekStreak > 1 && weekStreak >= bestWeekStreak) {
+    return { headline, note: `${count(weekStreak, 'week')} without missing one. Best you have done.` };
+  }
+  // Only meaningful before this session extended the streak to 1.
+  if (weekStreak <= 1 && dayStreak <= 1 && bestWeekStreak > 1) {
+    return { headline: 'Back at it', note: 'The streak restarts today. That is all a streak ever is.' };
+  }
+  if (weekStreak > 1) {
+    return { headline, note: `Keep it up and next week makes ${weekStreak + 1}.` };
+  }
+
+  return { headline, note: choose(ENCOURAGEMENT) };
 }

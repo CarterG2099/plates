@@ -730,3 +730,200 @@ test('count pluralises the noun, which four shipped bugs did not', () => {
   assert.equal(stats.count(1, 'exercise', 'exercises'), '1 exercise');
   assert.equal(stats.count(3, 'exercise', 'exercises'), '3 exercises');
 });
+
+// ---- consistency -----------------------------------------------------------
+
+/** Finished sessions on the given local dates, newest-first order not required. */
+function sessionsOn(dates) {
+  return dates.map((d, i) => ({
+    id: `c${i}`, owner_email: ME,
+    started_at: new Date(`${d}T18:00:00`).toISOString(),
+    ended_at: new Date(`${d}T19:00:00`).toISOString(),
+  }));
+}
+
+const consistencyIndex = (dates) => workout.buildIndex([], sessionsOn(dates), ME);
+const AT = (d) => new Date(`${d}T12:00:00`).getTime();
+
+test('a day streak counts back from today', () => {
+  const index = consistencyIndex(['2026-08-22', '2026-08-23', '2026-08-24']);
+  const c = stats.trainingConsistency(index, { now: AT('2026-08-24') });
+  assert.equal(c.dayStreak, 3);
+  assert.equal(c.daysSinceLast, 0);
+});
+
+test('not having trained yet today does not end the streak', () => {
+  // Trained through yesterday; it is now 6am and nothing is logged.
+  const index = consistencyIndex(['2026-08-22', '2026-08-23']);
+  const c = stats.trainingConsistency(index, { now: AT('2026-08-24') });
+  assert.equal(c.dayStreak, 2, 'still alive on a rest morning');
+  assert.equal(c.daysSinceLast, 1);
+});
+
+test('a second empty day does end it', () => {
+  const index = consistencyIndex(['2026-08-21', '2026-08-22']);
+  const c = stats.trainingConsistency(index, { now: AT('2026-08-24') });
+  assert.equal(c.dayStreak, 0);
+  assert.equal(c.daysSinceLast, 2);
+});
+
+test('a week streak survives the rest days inside a week', () => {
+  // Mondays and Thursdays for three weeks — no two days adjacent.
+  const index = consistencyIndex([
+    '2026-08-10', '2026-08-13',
+    '2026-08-17', '2026-08-20',
+    '2026-08-24',
+  ]);
+  const c = stats.trainingConsistency(index, { now: AT('2026-08-24') });
+  assert.equal(c.weekStreak, 3);
+  assert.equal(c.dayStreak, 1, 'the day streak is honest about it');
+});
+
+test('a week with nothing in it breaks the week streak', () => {
+  const index = consistencyIndex(['2026-08-03', '2026-08-17', '2026-08-24']);
+  const c = stats.trainingConsistency(index, { now: AT('2026-08-24') });
+  assert.equal(c.weekStreak, 2, 'the week of the 10th is empty');
+});
+
+test('a quiet start to the week does not break the week streak', () => {
+  // Trained last week, nothing yet this week, and it is only Monday.
+  const index = consistencyIndex(['2026-08-17', '2026-08-20']);
+  const c = stats.trainingConsistency(index, { now: AT('2026-08-24') });
+  assert.equal(c.weekStreak, 1);
+});
+
+test('the best runs are the best ever, not the current ones', () => {
+  const index = consistencyIndex([
+    '2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04',   // a four-day run
+    '2026-08-24',
+  ]);
+  const c = stats.trainingConsistency(index, { now: AT('2026-08-24') });
+  assert.equal(c.dayStreak, 1);
+  assert.equal(c.bestDayStreak, 4);
+  assert.ok(c.longestGap > 60, 'the summer off is the longest gap');
+});
+
+test('trainingConsistency counts sessions and days apart', () => {
+  const sessions = [...sessionsOn(['2026-08-24']), ...sessionsOn(['2026-08-24'])]
+    .map((s, i) => ({ ...s, id: `dup${i}` }));
+  const c = stats.trainingConsistency(workout.buildIndex([], sessions, ME), { now: AT('2026-08-24') });
+  assert.equal(c.sessions, 2, 'two workouts');
+  assert.equal(c.trainedDays, 1, 'on one day');
+  assert.equal(c.dayStreak, 1);
+});
+
+test('trainingConsistency ignores unfinished and deleted sessions', () => {
+  const sessions = [
+    { id: 'a', owner_email: ME, started_at: new Date('2026-08-24T18:00:00').toISOString(), ended_at: null },
+    { id: 'b', owner_email: ME, started_at: new Date('2026-08-23T18:00:00').toISOString(),
+      ended_at: new Date('2026-08-23T19:00:00').toISOString(), deleted_at: new Date().toISOString() },
+  ];
+  const c = stats.trainingConsistency(workout.buildIndex([], sessions, ME), { now: AT('2026-08-24') });
+  assert.equal(c.any, false);
+  assert.equal(c.dayStreak, 0);
+  assert.equal(c.daysSinceLast, null);
+});
+
+test('trainingConsistency of an empty history does not divide by zero', () => {
+  const c = stats.trainingConsistency(workout.buildIndex([], [], ME), { now: AT('2026-08-24') });
+  assert.equal(c.any, false);
+  assert.equal(c.bestDayStreak, 0);
+  assert.equal(c.longestGap, null);
+});
+
+test('a late-evening workout counts as that local day, not the UTC one', () => {
+  // 9pm Denver on the 24th is the 25th in UTC. The streak must not see a gap.
+  const sessions = [{
+    id: 'late', owner_email: ME,
+    started_at: new Date('2026-08-24T21:00:00').toISOString(),
+    ended_at: new Date('2026-08-24T22:00:00').toISOString(),
+  }];
+  const c = stats.trainingConsistency(workout.buildIndex([], sessions, ME), { now: AT('2026-08-24') });
+  assert.equal(c.daysSinceLast, 0);
+  assert.equal(c.dayStreak, 1);
+});
+
+test('trainingGrid lays out whole Monday-anchored weeks', () => {
+  const grid = stats.trainingGrid(consistencyIndex(['2026-08-24']), { weeks: 4, now: AT('2026-08-24') });
+  assert.equal(grid.length, 4);
+  assert.ok(grid.every((col) => col.cells.length === 7));
+  assert.equal(grid[0].start.getDay(), 1, 'columns start on Monday');
+
+  const flat = grid.flatMap((c) => c.cells);
+  assert.equal(flat.filter((c) => c.trained).length, 1);
+  assert.equal(flat.find((c) => c.trained).key, '2026-08-24');
+});
+
+test('trainingGrid marks days that have not happened yet', () => {
+  const grid = stats.trainingGrid(consistencyIndex([]), { weeks: 2, now: AT('2026-08-24') });
+  const flat = grid.flatMap((c) => c.cells);
+  // 2026-08-24 is a Monday, so the rest of its week is still to come.
+  assert.equal(flat.filter((c) => c.future).length, 6);
+  assert.equal(flat.filter((c) => c.trained).length, 0);
+});
+
+test('trainingGrid counts two workouts on one day as one trained cell', () => {
+  const sessions = [...sessionsOn(['2026-08-24']), ...sessionsOn(['2026-08-24'])]
+    .map((s, i) => ({ ...s, id: `g${i}` }));
+  const grid = stats.trainingGrid(workout.buildIndex([], sessions, ME), { weeks: 1, now: AT('2026-08-24') });
+  const cell = grid.flatMap((c) => c.cells).find((c) => c.key === '2026-08-24');
+  assert.equal(cell.trained, true);
+  assert.equal(cell.sessions, 2);
+});
+
+// ---- what the finish popup says --------------------------------------------
+
+const first = (list) => list[0];
+
+test('the first workout ever is called out as the first', () => {
+  const note = stats.finishNote({ sessions: 1, dayStreak: 1, weekStreak: 1 }, {}, { pick: first });
+  assert.equal(note.headline, 'First one logged');
+});
+
+test('a new best day streak beats the stock line', () => {
+  const note = stats.finishNote(
+    { sessions: 20, dayStreak: 5, bestDayStreak: 5, weekStreak: 3, bestWeekStreak: 6 }, {}, { pick: first });
+  assert.equal(note.headline, '3 weeks in a row');
+  assert.match(note.note, /5 days straight/);
+  assert.match(note.note, /longest run yet/);
+});
+
+test('a new best week streak is said in weeks', () => {
+  const note = stats.finishNote(
+    { sessions: 40, dayStreak: 1, bestDayStreak: 6, weekStreak: 9, bestWeekStreak: 9 }, {}, { pick: first });
+  assert.match(note.note, /9 weeks without missing one/);
+});
+
+test('coming back after a lapse is acknowledged, not scored as 1', () => {
+  const note = stats.finishNote(
+    { sessions: 30, dayStreak: 1, bestDayStreak: 5, weekStreak: 1, bestWeekStreak: 7 }, {}, { pick: first });
+  assert.equal(note.headline, 'Back at it');
+  assert.match(note.note, /restarts today/);
+});
+
+test('an ordinary session in a running streak looks forward', () => {
+  const note = stats.finishNote(
+    { sessions: 30, dayStreak: 1, bestDayStreak: 9, weekStreak: 3, bestWeekStreak: 7 }, {}, { pick: first });
+  assert.equal(note.headline, '3 weeks in a row');
+  assert.match(note.note, /next week makes 4/);
+});
+
+test('with nothing notable it reaches for the list', () => {
+  const note = stats.finishNote(
+    { sessions: 30, dayStreak: 1, bestDayStreak: 9, weekStreak: 1, bestWeekStreak: 1 }, {}, { pick: first });
+  assert.equal(note.headline, 'Workout done');
+  assert.equal(note.note, 'Logged. That is the part most people skip.');
+});
+
+test('finishNote pluralises its streaks', () => {
+  const one = stats.finishNote(
+    { sessions: 30, dayStreak: 2, bestDayStreak: 9, weekStreak: 1, bestWeekStreak: 1 }, {}, { pick: first });
+  assert.equal(one.headline, '2 days in a row');
+  assert.ok(!/\b1 days\b|\b1 weeks\b/.test(JSON.stringify(one)));
+});
+
+test('finishNote survives being handed nothing', () => {
+  const note = stats.finishNote(null, {}, { pick: first });
+  assert.ok(note.headline);
+  assert.ok(note.note);
+});
