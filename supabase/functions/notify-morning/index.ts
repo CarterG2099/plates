@@ -94,11 +94,12 @@ const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
  * left out rather than guessed at, or credited to the tradition it came from —
  * which is why two of these credit a proverb and a motto rather than a person.
  *
- * Two famous ones are deliberately absent. "Success is not final, failure is not
- * fatal" and "If you're going through hell, keep going" are both hung on
- * Churchill and appear nowhere in what he wrote.
+ * The two Churchill ones are in, hedged. Neither appears anywhere in what he
+ * actually wrote, and the Churchill Society says as much — so they are credited
+ * as attributed rather than as his. Carter wanted them and they are famous; the
+ * fix is to be straight about the provenance, not to drop the line.
  *
- * Ronnie Coleman's is gone too. His actual line has a word in it Carter does not
+ * Ronnie Coleman's is still out. His actual line has a word in it Carter does not
  * want, and quietly editing a quotation to suit is worse than dropping it: the
  * attribution stops being true the moment the words stop being his.
  */
@@ -118,6 +119,9 @@ const QUOTES: Array<[string, string]> = [
   ["Hard choices, easy life. Easy choices, hard life.", "Jerzy Gregorek"],
   ["There are no shortcuts to any place worth going.", "Beverly Sills"],
   ["A year from now you may wish you had started today.", "Karen Lamb"],
+  ["Success is not final, failure is not fatal. It is the courage to continue that counts.",
+    "attributed to Winston Churchill"],
+  ["If you're going through hell, keep going.", "attributed to Winston Churchill"],
 
   // The gym, specifically
   ["The last three or four reps is what makes the muscle grow.", "Arnold Schwarzenegger"],
