@@ -1045,6 +1045,25 @@ test('a cardio line reads distance, time and pace, in miles by default', () => {
     '5.20 km · 26:00 · 5:00 /km');
 });
 
+test('a last performance reads as whatever kind of exercise it was', () => {
+  const run = { distance_m: 5200, duration_s: 1560 };
+  const lift = { weight_lb: 225, reps: 5 };
+
+  // The bug this replaces: a cardio set carries no weight and no reps, so the
+  // lifting format rendered every one of them as "— lb × —".
+  assert.equal(workout.setSummary(run, { category: 'cardio', name: 'Running' }),
+    '3.23 mi · 26:00 · 8:03 /mi');
+  assert.equal(workout.setSummary(run, null, 'Running'), '3.23 mi · 26:00 · 8:03 /mi',
+    'recognised by name when the exercise row has gone');
+
+  assert.equal(workout.setSummary(lift, { category: 'strength', name: 'Barbell Squat' }),
+    '225 lb × 5');
+  assert.equal(workout.setSummary({ weight_lb: null, reps: null }, null, 'Barbell Squat'),
+    '— lb × —', 'a lift that recorded nothing still says so in lifting terms');
+
+  assert.equal(workout.setSummary(null, null, 'Running'), '');
+});
+
 test('an hour-plus session shows hours, not ninety minutes', () => {
   assert.equal(workout.cardioLine({ distance_m: 40000, duration_s: 5400 }),
     '24.85 mi · 1:30:00 · 3:37 /mi');

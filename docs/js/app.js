@@ -2355,7 +2355,7 @@ Alpine.data('trainPage', () => ({
   previous(group) {
     const best = this.data.prior.get(group.exerciseId ?? group.name)?.best;
     if (!best) return null;
-    return `${best.weight_lb ?? '—'} lb × ${best.reps ?? '—'}`;
+    return workout.setSummary(best, this.exerciseById(group.exerciseId), group.name);
   },
 
   oneRm(set) { return workout.estimate1RM(set.weight_lb, set.reps); },
@@ -2641,7 +2641,7 @@ Alpine.data('trainPage', () => ({
       row.item.exercise_id, row.name, null,
     );
     if (!p?.best) return 'Not done yet';
-    return `Last: ${p.best.weight_lb ?? '—'} lb × ${p.best.reps ?? '—'}`;
+    return `Last: ${workout.setSummary(p.best, this.exerciseById(row.item.exercise_id), row.name)}`;
   },
 
   get builderExercises() {

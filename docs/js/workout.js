@@ -781,6 +781,19 @@ const CARDIO_NAMES = new Set([
   'stair machine (steps)', 'stair machine',
 ]);
 
+/**
+ * One set as a line of text: a distance and a time for cardio, a weight and a
+ * rep count for everything else.
+ *
+ * A cardio set carries neither weight_lb nor reps, so the lifting format printed
+ * it as "— lb × —" everywhere a last performance was shown.
+ */
+export function setSummary(set, exercise, name = '') {
+  if (!set) return '';
+  if (isCardio(exercise, name)) return cardioLine(set);
+  return `${set.weight_lb ?? '—'} lb × ${set.reps ?? '—'}`;
+}
+
 export function isCardio(exercise, name = '') {
   if (exercise?.category === 'cardio') return true;
 
