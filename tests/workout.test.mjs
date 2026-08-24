@@ -363,6 +363,148 @@ async function seedFinishedSession() {
   return local.all('session_sets');
 }
 
+// ---- ordering routines, and the exercises inside one -------------------------
+// Both are the same operation as reordering exercise cards, and go through the
+// same moveTo; what these pin down is the persistence either side of it.
+
+/** Routines in display order, seeded straight in so a test states its own shape. */
+async function seedRoutines(specs, ownerEmail = ME) {
+  for (const spec of specs) {
+    await local.save('routines', { name: spec.name, notes: null, position: spec.position }, ownerEmail);
+  }
+  return local.all('routines');
+}
+
+const names = (rs) => rs.map((r) => r.name);
+
+test('routines sort by position, and fall back to name rather than to nothing', async () => {
+  await seedRoutines([
+    { name: 'Legs',   position: 2 },
+    { name: 'Push A', position: 0 },
+    { name: 'Pull B', position: 1 },
+  ]);
+  assert.deepEqual(names(workout.routinesFor(await local.all('routines'), ME)),
+    ['Push A', 'Pull B', 'Legs']);
+
+  // Everything at 0 is what an importer, or a routine made before this column
+  // existed, actually looks like. Alphabetical is the old behaviour, and a
+  // stable order beats an arbitrary one.
+  await local.wipe();
+  await seedRoutines([
+    { name: 'Legs',   position: 0 },
+    { name: 'Push A', position: 0 },
+    { name: 'Pull B', position: 0 },
+  ]);
+  assert.deepEqual(names(workout.routinesFor(await local.all('routines'), ME)),
+    ['Legs', 'Pull B', 'Push A']);
+});
+
+test('a routine you do not own is not in your order', async () => {
+  await seedRoutines([{ name: 'Mine', position: 0 }]);
+  await seedRoutines([{ name: 'Theirs', position: 1 }], 'someone@else');
+
+  assert.deepEqual(names(workout.routinesFor(await local.all('routines'), ME)), ['Mine']);
+  assert.equal(workout.nextRoutinePosition(await local.all('routines'), ME), 1,
+    'and does not push my next routine down the list');
+});
+
+test('orderRoutines is pure list surgery and leaves its input alone', () => {
+  const rs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const ids = (list) => list.map((r) => r.id);
+
+  assert.deepEqual(ids(workout.orderRoutines(rs, 'a', 2)), ['b', 'c', 'a']);
+  assert.deepEqual(ids(workout.orderRoutines(rs, 'c', 0)), ['c', 'a', 'b']);
+  assert.deepEqual(ids(workout.orderRoutines(rs, 'b', 1)), ['a', 'b', 'c'], 'same slot is a no-op');
+  assert.deepEqual(ids(workout.orderRoutines(rs, 'a', 99)), ['b', 'c', 'a'], 'past the end clamps');
+  assert.deepEqual(ids(workout.orderRoutines(rs, 'a', -5)), ['a', 'b', 'c'], 'before the start clamps');
+  assert.deepEqual(ids(workout.orderRoutines(rs, 'zz', 0)), ['a', 'b', 'c'], 'unknown id changes nothing');
+  assert.deepEqual(ids(rs), ['a', 'b', 'c']);
+});
+
+test('dragging a routine to the front renumbers the list behind it', async () => {
+  await seedRoutines([
+    { name: 'Push A', position: 0 },
+    { name: 'Pull B', position: 1 },
+    { name: 'Legs',   position: 2 },
+  ]);
+
+  const ordered = workout.routinesFor(await local.all('routines'), ME);
+  await workout.reindexRoutines(workout.orderRoutines(ordered, ordered[2].id, 0));
+
+  const after = workout.routinesFor(await local.all('routines'), ME);
+  assert.deepEqual(names(after), ['Legs', 'Push A', 'Pull B']);
+  assert.deepEqual(after.map((r) => r.position), [0, 1, 2],
+    'positions stay contiguous, or the next reorder drifts');
+});
+
+test('reindexRoutines writes only the rows that actually moved', async () => {
+  await seedRoutines([
+    { name: 'Push A', position: 0 },
+    { name: 'Pull B', position: 1 },
+    { name: 'Legs',   position: 2 },
+  ]);
+
+  const ordered = workout.routinesFor(await local.all('routines'), ME);
+  assert.equal((await workout.reindexRoutines(ordered)).length, 0, 'already in order: no writes');
+
+  const swapped = workout.orderRoutines(ordered, ordered[0].id, 1);
+  assert.equal((await workout.reindexRoutines(swapped)).length, 2,
+    'the top two swap; the third does not move');
+});
+
+test('renaming a routine leaves its place in the list alone', async () => {
+  await seedRoutines([
+    { name: 'Push A', position: 0 },
+    { name: 'Pull B', position: 1 },
+  ]);
+  const pull = (await local.all('routines')).find((r) => r.name === 'Pull B');
+
+  // local.save writes the object it is handed, so a rename that rebuilt the row
+  // from { id, name } alone would drop position back to its default and jump
+  // the routine to the top of the list.
+  const renamed = await workout.upsertRoutine({ id: pull.id, name: 'Pull A' }, ME);
+  assert.equal(renamed.position, 1);
+  assert.deepEqual(names(workout.routinesFor(await local.all('routines'), ME)), ['Push A', 'Pull A']);
+});
+
+test('a new routine goes to the end of the list, not the top', async () => {
+  await seedRoutines([
+    { name: 'Push A', position: 0 },
+    { name: 'Pull B', position: 1 },
+  ]);
+
+  const made = await workout.upsertRoutine(
+    { name: 'Legs' }, ME, await local.all('routines'));
+  assert.equal(made.position, 2);
+
+  const fromSession = await workout.saveSessionAsRoutine({
+    name: 'Arms', session: SESSION, sets: await seedFinishedSession(), ownerEmail: ME,
+    routines: await local.all('routines'),
+  });
+  assert.equal(fromSession.position, 3, 'however it was created');
+});
+
+test('reordering the exercises inside a routine renumbers only what moved', async () => {
+  const sets = await seedFinishedSession();
+  const routine = await workout.saveSessionAsRoutine({
+    name: 'Push A', session: SESSION, sets, ownerEmail: ME,
+  });
+
+  const plan = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  assert.deepEqual(plan.map((i) => i.notes), ['Bench', 'Barbell Row']);
+
+  assert.equal((await workout.reindexRoutineExercises(plan)).length, 0, 'already in order: no writes');
+
+  const moved = workout.orderRoutineExercises(plan, plan[1].id, 0);
+  assert.equal((await workout.reindexRoutineExercises(moved)).length, 2);
+
+  const after = workout.routineExercises(await local.all('routine_exercises'), routine.id);
+  assert.deepEqual(after.map((i) => i.notes), ['Barbell Row', 'Bench']);
+  assert.deepEqual(after.map((i) => i.position), [0, 1]);
+  assert.equal(after[0].target_weight_lb, 95,
+    'reordering moves the row, it does not rewrite the plan');
+});
+
 test('saving a session as a routine records what was actually done', async () => {
   const sets = await seedFinishedSession();
   const routine = await workout.saveSessionAsRoutine({

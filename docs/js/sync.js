@@ -71,7 +71,7 @@ async function refreshPending() {
  */
 const NOT_NULL_DEFAULTS = {
   exercises: { secondary_muscles: [], instructions: [], image_urls: [] },
-  routines: { notes: null },
+  routines: { notes: null, position: 0 },
   meal_combos: { items: [] },
   day_templates: { items: [] },
 };

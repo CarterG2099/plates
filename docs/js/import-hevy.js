@@ -183,7 +183,10 @@ export async function importHevy(text, { ownerEmail, existingExercises }, onProg
     if (count < ROUTINE_THRESHOLD) continue;
 
     const { setRows } = latestByTitle.get(title);
-    const routine = await local.save('routines', { name: title, notes: null }, ownerEmail);
+    // Imported in frequency order; without an explicit position they would all
+    // share 0 and fall back to being sorted by name.
+    const routine = await local.save('routines',
+      { name: title, notes: null, position: routineCount }, ownerEmail);
 
     // Exercises in the order performed, with the heaviest working set as target.
     const order = [];

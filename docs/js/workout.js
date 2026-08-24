@@ -160,15 +160,26 @@ export async function reindexSets(ordered) {
   return written;
 }
 
-/** Exercise cards in display order, which is what a reorder rearranges. */
-export function orderGroups(groups, fromKey, toIndex) {
-  const from = groups.findIndex((g) => g.key === fromKey);
-  if (from === -1) return groups;
+/**
+ * Move one item to an index, leaving the input alone.
+ *
+ * Exercise cards, routines and a routine's exercises all mean the same thing by
+ * "reorder" and differ only in how an item is identified, so they share this
+ * rather than each carrying their own copy of the splice.
+ */
+function moveTo(list, matches, toIndex) {
+  const from = list.findIndex(matches);
+  if (from === -1) return list;
 
-  const next = groups.slice();
+  const next = list.slice();
   const [moved] = next.splice(from, 1);
   next.splice(Math.max(0, Math.min(next.length, toIndex)), 0, moved);
   return next;
+}
+
+/** Exercise cards in display order, which is what a reorder rearranges. */
+export function orderGroups(groups, fromKey, toIndex) {
+  return moveTo(groups, (g) => g.key === fromKey, toIndex);
 }
 
 /**
@@ -419,10 +430,47 @@ export function formatClock(seconds) {
 
 // ---- routines --------------------------------------------------------------
 
+/**
+ * Routines in display order: where you put them, then alphabetically.
+ *
+ * The name is the tiebreak rather than the sort because `position` defaults to
+ * 0 — a routine created offline, or by an importer that never thought about
+ * order, still lands somewhere predictable instead of moving between reads.
+ */
 export function routinesFor(routines, ownerEmail) {
   return routines
     .filter((r) => r.owner_email === ownerEmail && !r.deleted_at)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.name.localeCompare(b.name));
+}
+
+/** Where a newly created routine goes: the end of the list, not the top. */
+export function nextRoutinePosition(routines, ownerEmail) {
+  return routines
+    .filter((r) => r.owner_email === ownerEmail && !r.deleted_at)
+    .reduce((next, r) => Math.max(next, (r.position ?? 0) + 1), 0);
+}
+
+/** Routines in display order, which is what a reorder rearranges. */
+export function orderRoutines(routines, fromId, toIndex) {
+  return moveTo(routines, (r) => r.id === fromId, toIndex);
+}
+
+/**
+ * Persist a routine order, writing only the rows that actually moved.
+ *
+ * Dragging one routine one place shifts two rows, not the whole list, which
+ * keeps the outbox — and therefore the next sync — proportional to the edit.
+ */
+export async function reindexRoutines(ordered) {
+  const written = [];
+
+  for (const [index, routine] of ordered.entries()) {
+    if (routine.position === index) continue;
+    written.push(await local.save('routines', { ...routine, position: index }, routine.owner_email));
+  }
+
+  sync.nudge();
+  return written;
 }
 
 /**
@@ -430,8 +478,12 @@ export function routinesFor(routines, ownerEmail) {
  * separate builder, and the workout you just did is the best description of
  * what you meant to do.
  */
-export async function saveSessionAsRoutine({ name, session, sets, ownerEmail }) {
-  const routine = await local.save('routines', { name, notes: null }, ownerEmail);
+export async function saveSessionAsRoutine({ name, session, sets, ownerEmail, routines = [] }) {
+  const routine = await local.save('routines', {
+    name,
+    notes: null,
+    position: nextRoutinePosition(routines, ownerEmail),
+  }, ownerEmail);
   await writePlan({ routineId: routine.id, session, sets, ownerEmail });
 
   sync.nudge();
@@ -507,11 +559,18 @@ async function writePlan({ routineId, session, sets, ownerEmail }) {
 
 /** Create or rename a routine. Used by the builder; saving from a session uses
  *  saveSessionAsRoutine above. */
-export async function upsertRoutine({ id, name, notes }, ownerEmail) {
+export async function upsertRoutine({ id, name, notes }, ownerEmail, routines = []) {
+  // Renaming has to start from the row on disk. local.save writes exactly what
+  // it is handed, so a column left out of the object is a column erased — which
+  // is how a rename would drop the routine's place in the list.
+  const existing = id ? await local.get('routines', id) : null;
+
   const routine = await local.save('routines', {
+    ...(existing ?? {}),
     ...(id ? { id } : {}),
     name,
-    notes: notes ?? null,
+    notes: notes ?? existing?.notes ?? null,
+    position: existing?.position ?? nextRoutinePosition(routines, ownerEmail),
   }, ownerEmail);
   sync.nudge();
   return routine;
@@ -545,6 +604,23 @@ export async function removeRoutineExercise(id) {
   const row = await local.remove('routine_exercises', id);
   sync.nudge();
   return row;
+}
+
+/** A routine's exercises in display order, which is what a reorder rearranges. */
+export function orderRoutineExercises(items, fromId, toIndex) {
+  return moveTo(items, (r) => r.id === fromId, toIndex);
+}
+
+/** Persist a routine's exercise order, writing only the rows that moved. */
+export async function reindexRoutineExercises(ordered) {
+  const written = [];
+
+  for (const [index, item] of ordered.entries()) {
+    if (item.position === index) continue;
+    written.push(await updateRoutineExercise(item, { position: index }));
+  }
+
+  return written;
 }
 
 export function routineExercises(routineExercises, routineId) {

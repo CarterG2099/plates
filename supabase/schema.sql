@@ -207,6 +207,10 @@ create table if not exists plates.routines (
   owner_email text not null default auth.email(),
   name        text not null,
   notes       text,
+  -- Display order on the Train screen. Alphabetical is not the order anyone
+  -- trains in: a split is a sequence, and the next day's routine should be the
+  -- next one down.
+  position    integer not null default 0,
   updated_at  timestamptz not null default now(),
   deleted_at  timestamptz
 );

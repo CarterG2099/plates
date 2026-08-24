@@ -227,7 +227,7 @@ plates.exercises
   external_id text   -- id from free-exercise-db, for re-import
 
 plates.routines
-  id, owner_email, name, notes
+  id, owner_email, name, notes, position
 
 plates.routine_exercises
   id, owner_email, routine_id, exercise_id, position,

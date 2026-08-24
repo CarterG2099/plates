@@ -559,6 +559,16 @@
   border-color: var(--color-primary-soft);
 }
 
+/* A routine in reorder mode. It is a .card so it inherits the stack's lift and
+   glide, but lays out as a row: a name and a handle is all there is to show
+   when the only question being asked is what order these go in. */
+.cardstack > .card.row-card {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
 .grip {
   flex: none;
   width: 28px;
