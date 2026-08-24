@@ -1274,17 +1274,11 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   letter-spacing: .04em;
 }
 
-.chart {
-  width: 100%;
-  height: 72px;
-  display: block;
-  overflow: visible;
-}
-
 /* ---- interactive plot ------------------------------------------------------ */
-/* The older charts here are SVG strings handed to x-html, which cannot carry a
-   hover layer — a picture rather than something you can interrogate. This one
-   renders real elements so a crosshair and a readout can hang off them. */
+/* Every chart on this page used to be an SVG string handed to x-html, which
+   cannot carry a hover layer — a picture rather than something you can
+   interrogate. These render real elements, so a crosshair and a readout can
+   hang off them. */
 
 .plot {
   position: relative;
@@ -1449,15 +1443,6 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 .delta.is-down { color: var(--color-success); }
 .delta.is-up   { color: var(--color-warning); }
-
-.chart-axis {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-text-dim);
-  letter-spacing: .06em;
-}
 
 /* Tap-to-focus confirmation. Purely feedback — the camera does the work. */
 .focus-ping {

@@ -1661,7 +1661,7 @@
             <div class="plot-readout" x-show="volumeFocus" x-cloak>
               <b x-text="volumeFocus && `${volumeFocus.volume.toLocaleString()} lb`"></b>
               <span x-text="volumeFocus && `week of ${weekOf(volumeFocus.start)} · ${
-                volumeFocus.sessions} ${volumeFocus.sessions === 1 ? 'session' : 'sessions'}`"></span>
+                count(volumeFocus.sessions, 'session')}`"></span>
             </div>
           </div>
 
@@ -1688,7 +1688,7 @@
           <!-- The comparison is against a finished week, so say when it isn't fair. -->
           <p class="plot-note" x-show="volumeStats" x-cloak
              x-text="volumeStats && (volumeStats.partial
-               ? `This week is ${volumeStats.daysIn} ${volumeStats.daysIn === 1 ? 'day' : 'days'} old — the comparison catches up as it fills.`
+               ? `This week is ${count(volumeStats.daysIn, 'day')} old — the comparison catches up as it fills.`
                : `Averaged over the ${volumeStats.weeksTrained} of ${volumeStats.weeks} weeks you trained.`)"></p>
 
           <button class="btn btn-ghost btn-block" x-show="sessions.length" x-cloak
@@ -1700,8 +1700,8 @@
               <div class="row">
                 <div class="row-text">
                   <b x-text="s.name"></b>
-                  <small x-text="`${weightDate(s.at, { long: true })} · ${s.sets} sets · ${
-                    s.exercises} ${s.exercises === 1 ? 'exercise' : 'exercises'}${
+                  <small x-text="`${weightDate(s.at, { long: true })} · ${
+                    count(s.sets, 'set')} · ${count(s.exercises, 'exercise', 'exercises')}${
                     s.minutes ? ` · ${duration(s.minutes)}` : ''}`"></small>
                 </div>
                 <span class="row-num" x-text="s.volume ? `${thousands(s.volume)} lb` : '—'"></span>
@@ -1741,7 +1741,7 @@
                         <b x-text="`${liftDetail.latest} lb`"></b>
                       </div>
                       <div class="stat-cell" x-show="liftDetail.change !== null">
-                        <small>Over <span x-text="liftDetail.sessions"></span> sessions</small>
+                        <small>Last <span x-text="liftDetail.sessions"></span></small>
                         <b x-text="signed(liftDetail.change, ' lb', 0)"></b>
                       </div>
                       <div class="stat-cell" x-show="liftDetail.heaviest && liftDetail.heaviest.best">
@@ -1758,8 +1758,8 @@
                         <div class="row">
                           <div class="row-text">
                             <b x-text="weightDate(h.at, { long: true })"></b>
-                            <small x-text="`${h.weight ?? '—'} × ${h.reps ?? '—'} · ${h.sets} ${
-                              h.sets === 1 ? 'set' : 'sets'}`"></small>
+                            <small x-text="`${h.weight ?? '—'} × ${h.reps ?? '—'} · ${
+                              count(h.sets, 'set')}`"></small>
                           </div>
                           <span class="row-num" x-text="`${h.oneRm} lb`"></span>
                         </div>
@@ -1783,12 +1783,13 @@
               <div class="stat-sub" x-show="calorieSummary && calorieSummary.delta !== null">
                 <span x-text="calorieSummary && Math.abs(calorieSummary.delta)"></span>
                 <span x-text="calorieSummary && calorieSummary.delta > 0 ? 'over target' : 'under target'"></span>
-                · <span x-text="calorieSummary && calorieSummary.loggedDays"></span> days logged
+                · <span x-text="calorieSummary && count(calorieSummary.loggedDays, 'day')"></span> logged
               </div>
             </div>
           </div>
 
-          <div class="plot" @pointermove="trackCalories($event)"
+          <div class="plot" x-show="loggedDays > 1" x-cloak
+               @pointermove="trackCalories($event)"
                @pointerleave="calorieHover = null">
             <svg x-effect="$el.setAttribute('viewBox', `0 0 ${caloriePlot.width} ${caloriePlot.height}`)"
                  role="img" aria-label="Daily calories over the last 14 days">
@@ -1809,6 +1810,10 @@
                   : ''}`"></span>
             </div>
           </div>
+
+          <p class="empty" style="padding:var(--space-3) 0" x-show="loggedDays < 2" x-cloak>
+            Log a couple of days and the chart fills in.
+          </p>
 
           <div class="stat-grid" x-show="adherence" x-cloak>
             <div class="stat-cell">

@@ -183,63 +183,7 @@ test('topLifts flags a new best', () => {
 
 // ---- chart geometry --------------------------------------------------------
 
-test('barGeometry scales to the tallest bar and floors the rest', () => {
-  const bars = stats.barGeometry([0, 5, 10], { height: 60, gap: 2 });
-  assert.equal(bars.length, 3);
-  assert.equal(bars[0].height, 0);          // zero stays flat
-  assert.equal(bars[2].height, 60);         // tallest fills
-  assert.ok(bars[1].height >= 2);           // non-zero gets a visible stub
-  assert.ok(bars[2].y + bars[2].height <= 60.001);
-});
-
-test('barGeometry of all zeros does not divide by zero', () => {
-  const bars = stats.barGeometry([0, 0, 0]);
-  assert.equal(bars.every((b) => Number.isFinite(b.height)), true);
-});
-
-test('barGeometry bars are evenly spaced across 100 units', () => {
-  const bars = stats.barGeometry([1, 1, 1, 1]);
-  assert.equal(bars[0].x, 0);
-  assert.equal(bars[3].x, 75);
-});
-
-test('linePoints needs two points to draw anything', () => {
-  assert.equal(stats.linePoints([]).points, '');
-  assert.equal(stats.linePoints([5]).points, '');
-  assert.equal(stats.linePoints([5]).last, null);
-});
-
-test('linePoints pads so the extremes are not clipped', () => {
-  const { points, last } = stats.linePoints([10, 20, 15], { width: 100, height: 50, pad: 4 });
-  const ys = points.split(' ').map((p) => Number(p.split(',')[1]));
-  assert.ok(Math.min(...ys) >= 4);
-  assert.ok(Math.max(...ys) <= 46);
-  assert.equal(last.v, 15);
-});
-
-test('linePoints handles a flat series without dividing by zero', () => {
-  const { points } = stats.linePoints([10, 10, 10]);
-  assert.equal(points.split(' ').every((p) => Number.isFinite(Number(p.split(',')[1]))), true);
-});
-
 // ---- chart markup ----------------------------------------------------------
-
-test('barChart escapes tooltip text rather than injecting it raw', () => {
-  const html = stats.barChart([{ x: 0, y: 0, width: 10, height: 10, tip: '<script>alert(1)</script>' }], { fill: 'red' });
-  assert.equal(html.includes('<script>'), false);
-  assert.ok(html.includes('&lt;script&gt;'));
-});
-
-test('barChart emphasises the last bar when asked', () => {
-  const bars = [{ x: 0, y: 0, width: 10, height: 10 }, { x: 10, y: 0, width: 10, height: 10 }];
-  const html = stats.barChart(bars, { fill: 'blue', emphasiseLast: true });
-  assert.ok(html.includes('opacity="1"'));
-  assert.ok(html.includes('opacity="0.55"'));
-});
-
-test('lineChart returns nothing for an empty series', () => {
-  assert.equal(stats.lineChart('', { stroke: 'red' }), '');
-});
 
 // ---- weight in detail -------------------------------------------------------
 // Four readings is not a trend. Everything here reports what it had to work
@@ -776,4 +720,13 @@ test('a lift straight out of topLifts can be handed back to liftDetail', async (
     assert.ok(detail, 'the round trip has to work, not just a hand-built lift');
     assert.equal(detail.sessions, 2);
   });
+});
+
+test('count pluralises the noun, which four shipped bugs did not', () => {
+  assert.equal(stats.count(1, 'day'), '1 day');
+  assert.equal(stats.count(2, 'day'), '2 days');
+  assert.equal(stats.count(0, 'day'), '0 days');
+  assert.equal(stats.count(1, 'serving'), '1 serving');
+  assert.equal(stats.count(1, 'exercise', 'exercises'), '1 exercise');
+  assert.equal(stats.count(3, 'exercise', 'exercises'), '3 exercises');
 });

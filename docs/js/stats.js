@@ -162,73 +162,6 @@ export function calorieSummary(days) {
   };
 }
 
-// ---- chart geometry --------------------------------------------------------
-//
-// Charts are built as plain SVG in the template. These return the numbers the
-// markup needs so no arithmetic lives in the HTML.
-
-/** Bars sized to the tallest value, floored so an empty week still shows a stub. */
-export function barGeometry(values, { height = 60, gap = 2 } = {}) {
-  const max = Math.max(...values, 1);
-  const width = 100 / values.length;
-
-  return values.map((v, i) => ({
-    x: i * width,
-    width: width - gap,
-    height: Math.max(v > 0 ? 2 : 0, (v / max) * height),
-    y: height - Math.max(v > 0 ? 2 : 0, (v / max) * height),
-    value: v,
-  }));
-}
-
-/** A polyline through a series, padded so the extremes aren't clipped. */
-export function linePoints(values, { width = 100, height = 50, pad = 4 } = {}) {
-  if (values.length < 2) return { points: '', last: null };
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-
-  const coords = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * width;
-    const y = pad + (1 - (v - min) / span) * (height - pad * 2);
-    return { x, y, v };
-  });
-
-  return {
-    points: coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' '),
-    last: coords[coords.length - 1],
-  };
-}
-
-
-// ---- chart markup ----------------------------------------------------------
-//
-// Returned as strings rather than driven by x-for, for two reasons: a <template>
-// inside an <svg> is parsed as an SVG element with no `.content`, so Alpine
-// cannot clone it — and building 26 bars as reactive bindings costs more than
-// generating the markup once.
-
-const esc = (s) => String(s).replace(/[<>&"]/g, (c) => (
-  { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
-
-export function barChart(bars, { fill, emphasiseLast = false, dimUnlogged = false } = {}) {
-  return bars.map((bar, i) => {
-    const last = emphasiseLast && i === bars.length - 1;
-    const opacity = dimUnlogged ? (bar.logged ? 0.9 : 0.25) : (last ? 1 : 0.55);
-    return `<rect x="${bar.x.toFixed(2)}" y="${bar.y.toFixed(2)}"`
-      + ` width="${bar.width.toFixed(2)}" height="${bar.height.toFixed(2)}"`
-      + ` rx="1.2" fill="${fill}" opacity="${opacity}">`
-      + `<title>${esc(bar.tip ?? '')}</title></rect>`;
-  }).join('');
-}
-
-export function lineChart(points, { stroke }) {
-  if (!points) return '';
-  return `<polyline points="${points}" fill="none" stroke="${stroke}" stroke-width="2"`
-    + ' stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
-}
-
 // ---- body weight, in detail -------------------------------------------------
 // Four readings is not a trend, and the honest thing is to say so rather than
 // draw a confident line through noise. Everything here reports how much it had
@@ -267,6 +200,17 @@ export function signed(n, unit = '', decimals = 1) {
 }
 
 /**
+ * "1 day", "2 days" — the plural this project keeps getting wrong.
+ *
+ * Shipped as "1serving", then "2 serving", then "1 days after the one before",
+ * then "1 days logged". Four times is enough to stop writing it by hand in
+ * template strings where no test can see it.
+ */
+export function count(n, singular, plural = `${singular}s`) {
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
+/**
  * The gap since the previous weigh-in, in words.
  *
  * Lives here rather than in the template because "1 days" is the mistake this
@@ -275,7 +219,7 @@ export function signed(n, unit = '', decimals = 1) {
  */
 export function gapLabel(days) {
   if (days == null) return 'First reading';
-  return `${days} day${days === 1 ? '' : 's'} after the one before`;
+  return `${count(days, 'day')} after the one before`;
 }
 
 /**

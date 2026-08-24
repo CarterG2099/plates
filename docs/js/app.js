@@ -2876,6 +2876,7 @@ Alpine.data('statsPage', () => ({
 
   get weightReadings() { return stats.weightReadings(this.weight); },
   gapLabel(days) { return stats.gapLabel(days); },
+  count(n, singular, plural) { return stats.count(n, singular, plural); },
   get weightTrend() { return stats.weightTrend(this.weight, { target: this.weightTarget }); },
   get weightWeek() { return stats.weightWindows(this.weight, 7); },
   get weightMonth() { return stats.weightWindows(this.weight, 30); },
@@ -2924,11 +2925,6 @@ Alpine.data('statsPage', () => ({
     }
     if (t.noisy) return `Scattered — ${t.points} readings over ${t.spanDays} days, but they jump around.`;
     return `${t.points} readings over ${t.spanDays} days, closely fitted.`;
-  },
-
-  get weightChart() {
-    const line = stats.linePoints(this.weight.map((w) => w.lb), { width: 100, height: 46 });
-    return stats.lineChart(line.points, { stroke: 'var(--color-protein)' });
   },
 
   async saveWeight() {
@@ -3040,6 +3036,7 @@ Alpine.data('statsPage', () => ({
 
   get caloriePlot() { return stats.caloriePlot(this.days, { height: 40 }); },
   get adherence() { return stats.calorieAdherence(this.days); },
+  get loggedDays() { return this.days.filter((d) => d.logged).length; },
   get streak() { return stats.loggingStreak(this.days); },
 
   /**
