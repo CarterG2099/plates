@@ -1309,7 +1309,10 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   vector-effect: non-scaling-stroke;
 }
 
-.plot-area { fill: var(--color-primary-soft); stroke: none; }
+/* A tint, not a mass. The fill's floor is the axis minimum rather than zero, so
+   its height encodes nothing — and at full strength it outweighed the 2px stroke
+   that carries the actual signal. */
+.plot-area { fill: var(--color-primary); opacity: .1; stroke: none; }
 
 /* Context, not data, so it stays under the line's weight. */
 .plot-target {

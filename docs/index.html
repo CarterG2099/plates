@@ -1572,9 +1572,9 @@
           <!-- Trajectory, in words first. -->
           <div class="stat-grid" x-show="weight.length > 1" x-cloak>
             <div class="stat-cell">
-              <small>Trend</small>
+              <small>Weekly trend</small>
               <b x-text="weightTrend.enough
-                   ? `${signed(weightTrend.lbPerWeek)} lb / wk`
+                   ? signed(weightTrend.lbPerWeek, ' lb')
                    : 'Not yet'"></b>
             </div>
             <div class="stat-cell" x-show="weightWeek.change !== null">
