@@ -755,3 +755,25 @@ test('liftDetail returns null for a lift with no estimable set', async () => {
     assert.equal(stats.liftDetail(index, { id: 'nope', name: 'Never Done' }), null);
   });
 });
+
+test('a lift straight out of topLifts can be handed back to liftDetail', async () => {
+  await atTime(NOW, () => {
+    // The sets carry an exercise_id, so byExercise is keyed by id and a lookup
+    // by name finds nothing. Building the lift by hand in the tests above hid
+    // that topLifts was not passing the id on.
+    const sessions = [
+      { id: 's1', owner_email: ME, started_at: '2026-08-01T10:00:00.000Z', ended_at: '2026-08-01T11:00:00.000Z' },
+      { id: 's2', owner_email: ME, started_at: '2026-08-08T10:00:00.000Z', ended_at: '2026-08-08T11:00:00.000Z' },
+    ];
+    const sets = [...buildSets('s1', 'ex-42', 'Bench Press (Barbell)', [{ w: 185, r: 5 }]),
+                  ...buildSets('s2', 'ex-42', 'Bench Press (Barbell)', [{ w: 195, r: 5 }])];
+    const index = workout.buildIndex(sets, sessions, ME);
+
+    const lift = stats.topLifts(index)[0];
+    assert.equal(lift.id, 'ex-42');
+
+    const detail = stats.liftDetail(index, lift);
+    assert.ok(detail, 'the round trip has to work, not just a hand-built lift');
+    assert.equal(detail.sessions, 2);
+  });
+});

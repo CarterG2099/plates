@@ -109,6 +109,10 @@ export function topLifts(index, limit = 6) {
       const baseline = previous.length ? Math.max(...previous) : null;
 
       return {
+        // Carried out because byExercise is keyed by id wherever a set has one,
+        // so anything looking this lift up again needs the id and not just the
+        // name — liftDetail found nothing at all without it.
+        id,
         name,
         best,
         latest,
