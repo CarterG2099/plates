@@ -128,6 +128,30 @@ button {
   min-width: 0;
 }
 
+/* What arrives after a swipe comes in from the side the swipe was going, so the
+   movement reads as continuous with the finger that started it. Kept short and
+   small — this is punctuation on a gesture that has already happened, not a
+   transition to sit through. The reduced-motion block above collapses both. */
+@keyframes swipe-in-forward {
+  from { transform: translateX(32px);  opacity: 0; }
+  to   { transform: none;              opacity: 1; }
+}
+
+@keyframes swipe-in-back {
+  from { transform: translateX(-32px); opacity: 0; }
+  to   { transform: none;              opacity: 1; }
+}
+
+/* The shell carries the direction, so the rule is already in place whenever the
+   arriving tab mounts — :not(.log-panel) because the log overlay shares the
+   .app-main class and is not what was swiped to. */
+.app[data-enter="forward"] .app-main:not(.log-panel) { animation: swipe-in-forward 200ms ease-out; }
+.app[data-enter="back"]    .app-main:not(.log-panel) { animation: swipe-in-back    200ms ease-out; }
+
+/* Changing day redraws the card in place. */
+.readout.is-entering-forward { animation: swipe-in-forward 200ms ease-out; }
+.readout.is-entering-back    { animation: swipe-in-back    200ms ease-out; }
+
 /* Centred single-purpose screens: sign-in, access denied, loading. */
 .screen-centered {
   flex: 1;

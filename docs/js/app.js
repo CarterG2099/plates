@@ -2928,67 +2928,171 @@ function trackKeyboardInset() {
 }
 
 /**
- * Swipe sideways to move between Today, Train and Stats.
+ * Swipe sideways to move between tabs — and, on the readout card, between days.
+ *
+ * The card is the exception because the arrows either side of it already mean
+ * "another day". A sideways drag starting there should agree with them rather
+ * than leave the screen entirely.
  *
  * Bound once on the document rather than per page, because two of the three tabs
- * are `x-if` and are not in the DOM to be bound until you are already looking at
+ * are x-if and are not in the DOM to be bound until you are already looking at
  * them.
  *
- * Touch only. A sideways drag with a mouse is how you select text, and a pointer
- * device already has the tab bar one click away.
+ * Touch only. A sideways drag with a mouse is how text gets selected, and a
+ * pointer device has the tab bar one click away.
  *
- * The direction test runs at the end of the gesture rather than during it. A
- * vertical scroll never reaches that point: the browser fires `pointercancel`
- * when it claims the gesture for scrolling, which is a more reliable statement
- * that the finger was going up or down than any coordinate check of ours — the
- * same reasoning $dragCard uses to tell letting go from being interrupted.
+ * What moves under the finger is damped rather than pinned to it. A true
+ * carousel would need all three tabs mounted side by side, and Train and Stats
+ * are deliberately x-if so their getters do not recompute through an entire
+ * workout — see the two-counter note above `snapshot`. Damping keeps the gesture
+ * physical without paying for that.
  */
-function swipeTabs() {
+function swipeNav() {
   const TABS = ['today', 'train', 'stats'];
-  const DISTANCE = 60;   // px before a drag is a swipe
-  const SLOPE = 1.2;     // and how much more sideways than up-and-down it must be
+  const DISTANCE = 60;    // px before a drag counts as a swipe
+  const SLOPE = 1.2;      // and how much more sideways than up-and-down it must be
+  const DECIDE = 8;       // px before there is enough of a gesture to judge
+  const DAMP = .35;       // how far what you are dragging actually travels
 
   /* Anything that already means something by a sideways drag, or that changing
-     tab underneath would interrupt. A sheet's backdrop covers the screen, so
-     matching it here is also what stops a swipe behind an open sheet. */
+     what is on screen underneath would interrupt. A sheet's backdrop covers the
+     screen, so matching it is also what stops a swipe behind an open sheet. */
   const CLAIMED = '.sheet-backdrop, .log-panel, .row-swipe, .grip, input, textarea, select';
 
-  let id = null;
-  let startX = 0;
-  let startY = 0;
+  let id = null, startX = 0, startY = 0, sideways = null, subject = null, kind = null;
 
-  const forget = () => { id = null; };
+  const visiblePane = () => [...document.querySelectorAll('main.app-main')]
+    .find((m) => !m.classList.contains('log-panel') && m.offsetParent !== null) ?? null;
+
+  const forget = () => { id = null; subject = null; sideways = null; };
+
+  const settle = (el) => {
+    if (!el) return;
+    el.style.transition = 'transform 180ms ease';
+    el.style.transform = '';
+  };
+
+  /* Cleared outright rather than eased back, because the entry animation below
+     is about to take the same element over — and an inline transform left behind
+     would reassert itself the moment that animation finishes. */
+  const clear = (el) => {
+    if (!el) return;
+    el.style.transition = '';
+    el.style.transform = '';
+  };
+
+  let enterTimer = null;
+
+  const enter = (which, forward) => {
+    const dir = forward ? 'forward' : 'back';
+
+    // The card is already on screen and never remounts, so its animation has to
+    // be restarted by hand. Reading layout in between is what restarts it —
+    // without that, a second swipe the same way re-adds a class that is already
+    // there and nothing plays.
+    if (which === 'day') {
+      const el = document.querySelector('.card.readout');
+      if (!el) return;
+      el.classList.remove('is-entering-forward', 'is-entering-back');
+      void el.offsetWidth;
+      el.classList.add(`is-entering-${dir}`);
+      return;
+    }
+
+    /* Marked on the shell rather than on the arriving pane, because that pane
+       does not exist yet: two of the three tabs are x-if, and how many frames
+       Alpine needs to mount one is not something to guess at — a rule that waits
+       for whatever turns up cannot be raced. Cleared afterwards so the next
+       thing to mount does not inherit a stale direction. */
+    const app = document.querySelector('.app');
+    if (!app) return;
+    app.removeAttribute('data-enter');
+    void app.offsetWidth;
+    app.dataset.enter = dir;
+
+    clearTimeout(enterTimer);
+    enterTimer = setTimeout(() => app.removeAttribute('data-enter'), 400);
+  };
 
   document.addEventListener('pointerdown', (e) => {
     forget();
     if (e.pointerType !== 'touch' || !e.isPrimary) return;
-    if (e.target?.closest?.(CLAIMED)) return;
+    if (!e.target?.closest || e.target.closest(CLAIMED)) return;
+
+    const card = Alpine.store('ui').view === 'today'
+      ? e.target.closest('.card.readout')
+      : null;
+
+    kind = card ? 'day' : 'tab';
+    subject = card ?? visiblePane();
+    if (!subject) return;
 
     id = e.pointerId;
     startX = e.clientX;
     startY = e.clientY;
+    sideways = null;
   }, { passive: true });
 
-  document.addEventListener('pointercancel', forget, { passive: true });
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== id) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+
+    // Decided once, on the first movement worth reading, and then left alone —
+    // so a drag that starts sideways and wanders does not stop tracking.
+    if (sideways === null) {
+      if (Math.abs(dx) < DECIDE && Math.abs(dy) < DECIDE) return;
+      sideways = Math.abs(dx) > Math.abs(dy) * SLOPE;
+      if (!sideways) { forget(); return; }
+      subject.style.transition = 'none';
+    }
+
+    subject.style.transform = `translateX(${dx * DAMP}px)`;
+  }, { passive: true });
+
+  /* The browser sends this when it claims the gesture for scrolling, which is a
+     better statement of which way the finger was going than any coordinate check
+     of ours — the same distinction $dragCard draws between letting go and being
+     interrupted. */
+  document.addEventListener('pointercancel', (e) => {
+    if (e.pointerId !== id) return;
+    const el = subject;
+    forget();
+    settle(el);
+  }, { passive: true });
 
   document.addEventListener('pointerup', (e) => {
     if (e.pointerId !== id) return;
-    forget();
 
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
-    if (Math.abs(dx) < DISTANCE || Math.abs(dx) < Math.abs(dy) * SLOPE) return;
+    const el = subject;
+    const which = kind;
+    const far = sideways && Math.abs(dx) >= DISTANCE && Math.abs(dx) >= Math.abs(dy) * SLOPE;
+    forget();
+
+    if (!far) { settle(el); return; }
 
     const ui = Alpine.store('ui');
-    // Left goes forward, and the ends are ends — no wrapping round, so a swipe
-    // that runs out of tabs does nothing rather than jumping to the far side.
-    const next = TABS[TABS.indexOf(ui.view) + (dx < 0 ? 1 : -1)];
-    if (next) ui.go(next);
+    const forward = dx < 0;
+
+    if (which === 'day') {
+      ui.shiftDay(forward ? 1 : -1);
+    } else {
+      // The ends are ends: a swipe past Stats or before Today springs back
+      // rather than wrapping round to the far side.
+      const next = TABS[TABS.indexOf(ui.view) + (forward ? 1 : -1)];
+      if (!next) { settle(el); return; }
+      ui.go(next);
+    }
+
+    clear(el);
+    enter(which, forward);
   }, { passive: true });
 }
 
 trackKeyboardInset();
-swipeTabs();
+swipeNav();
 
 window.Alpine = Alpine;
 
