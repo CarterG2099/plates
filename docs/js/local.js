@@ -162,6 +162,38 @@ function plain(row) {
 }
 
 /**
+ * One row's read-modify-writes, in order.
+ *
+ * Reading a row, merging a change into it and writing it back is only safe if no
+ * other write to that row happens in between. Two handlers doing it at once is a
+ * lost update, and the browser hands us exactly that: typing in a set's reps
+ * fires `change`, tapping the checkmark fires `click`, and the two listeners do
+ * not await each other. The click's read landed before the change's write, so it
+ * merged the checkmark into the *old* reps and put the prefilled default back.
+ *
+ * Keyed per row, so unrelated rows still write in parallel.
+ */
+const chains = new Map();
+
+export function serialise(key, task) {
+  const previous = chains.get(key) ?? Promise.resolve();
+
+  // `then(task, task)` so a failed write still lets the next one run.
+  const done = previous.then(task, task);
+
+  // What later callers queue behind is a promise that never rejects: one failed
+  // write must not poison every subsequent write to the same row.
+  const settled = done.then(() => {}, () => {});
+  chains.set(key, settled);
+  settled.then(() => {
+    // Only if nothing else queued behind it in the meantime.
+    if (chains.get(key) === settled) chains.delete(key);
+  });
+
+  return done;
+}
+
+/**
  * Create or update a row: write locally, queue for sync, return immediately.
  *
  * The id is generated here rather than by the server so a row created offline

@@ -709,3 +709,111 @@ test('the set index reads another owner\'s session, but priors stay mine', async
   assert.equal(prior.get('bp').best.weight_lb, 185,
     'her 95 lb bench must not become my last-performance prefill');
 });
+
+// ---- concurrent writes to one set ------------------------------------------
+// These fire without awaiting between them, because that is what the DOM does:
+// typing in a box fires `change`, tapping the check fires `click`, and the two
+// listeners are independent. Awaiting between them — which the first version of
+// this suite did — is the one ordering that cannot fail, which is exactly why
+// the bug kept coming back.
+
+test('reps typed just before the check survive it, concurrently', async () => {
+  const [set] = await seedSets([{ id: 'bp', name: 'Bench', weight: 205, reps: 8 }]);
+
+  await Promise.all([
+    workout.updateSet(set, { reps: 7 }),              // change
+    workout.updateSet(set, { completed_at: 'T' }),    // click, same tick
+  ]);
+
+  const stored = await local.get('session_sets', set.id);
+  assert.equal(stored.reps, 7, 'the default must not come back');
+  assert.equal(stored.completed_at, 'T', 'and the check still lands');
+});
+
+test('the last write wins for the same field, not an earlier read', async () => {
+  const [set] = await seedSets([{ id: 'bp', name: 'Bench', reps: 8 }]);
+
+  await Promise.all([
+    workout.updateSet(set, { reps: 9 }),
+    workout.updateSet(set, { reps: 10 }),
+    workout.updateSet(set, { reps: 11 }),
+  ]);
+
+  assert.equal((await local.get('session_sets', set.id)).reps, 11);
+});
+
+test('concurrent edits to different fields all land', async () => {
+  const [set] = await seedSets([{ id: 'bp', name: 'Bench', weight: 205, reps: 8 }]);
+
+  await Promise.all([
+    workout.updateSet(set, { weight_lb: 185 }),
+    workout.updateSet(set, { reps: 6 }),
+    workout.updateSet(set, { completed_at: 'T' }),
+  ]);
+
+  const stored = await local.get('session_sets', set.id);
+  assert.deepEqual([stored.weight_lb, stored.reps, stored.completed_at], [185, 6, 'T']);
+});
+
+test('writes to different sets are not serialised behind each other', async () => {
+  const sets = await seedSets([
+    { id: 'bp', name: 'Bench', reps: 8 },
+    { id: 'bp', name: 'Bench', reps: 8 },
+  ]);
+
+  await Promise.all([
+    workout.updateSet(sets[0], { reps: 5 }),
+    workout.updateSet(sets[1], { reps: 6 }),
+  ]);
+
+  assert.equal((await local.get('session_sets', sets[0].id)).reps, 5);
+  assert.equal((await local.get('session_sets', sets[1].id)).reps, 6);
+});
+
+// ---- what "previous" is, and what a placeholder adopts ----------------------
+
+test('priorForm carries the last session\'s working sets, in order', () => {
+  const sets = [
+    { id: 'o1', session_id: 'old', set_index: 0, exercise_id: 'bp', exercise_name: 'Bench',
+      weight_lb: 205, reps: 8, is_warmup: false, completed_at: 'T' },
+    { id: 'o2', session_id: 'old', set_index: 1, exercise_id: 'bp', exercise_name: 'Bench',
+      weight_lb: 205, reps: 6, is_warmup: false, completed_at: 'T' },
+    { id: 'ow', session_id: 'old', set_index: 2, exercise_id: 'bp', exercise_name: 'Bench',
+      weight_lb: 45, reps: 10, is_warmup: true, completed_at: 'T' },
+    { id: 'older', session_id: 'ancient', set_index: 0, exercise_id: 'bp', exercise_name: 'Bench',
+      weight_lb: 135, reps: 5, is_warmup: false, completed_at: 'T' },
+  ];
+  const sessions = [
+    { id: 'old', owner_email: ME, started_at: '2026-08-10T10:00:00Z' },
+    { id: 'ancient', owner_email: ME, started_at: '2026-01-01T10:00:00Z' },
+  ];
+
+  const prior = workout.priorForm(workout.buildIndex(sets, sessions, ME), null);
+  const previous = prior.get('bp').previous;
+
+  assert.deepEqual(previous.map((s) => s.reps), [8, 6], 'most recent session only, in set order');
+  assert.equal(previous.some((s) => s.is_warmup), false, 'warm-ups are not a set to repeat');
+});
+
+test('the running session is excluded from previous', () => {
+  const sets = [
+    { id: 'old', session_id: 'last', set_index: 0, exercise_id: 'bp', exercise_name: 'Bench',
+      weight_lb: 205, reps: 8, is_warmup: false, completed_at: 'T' },
+    { id: 'now', session_id: 'today', set_index: 0, exercise_id: 'bp', exercise_name: 'Bench',
+      weight_lb: 225, reps: 3, is_warmup: false, completed_at: 'T' },
+  ];
+  const sessions = [
+    { id: 'last', owner_email: ME, started_at: '2026-08-10T10:00:00Z' },
+    { id: 'today', owner_email: ME, started_at: '2026-08-24T10:00:00Z' },
+  ];
+  const index = workout.buildIndex(sets, sessions, ME);
+
+  // Without excluding it, "previous" would be the set you just finished.
+  assert.deepEqual(workout.priorForm(index, 'today').get('bp').previous.map((s) => s.reps), [8]);
+  assert.deepEqual(workout.priorForm(index, null).get('bp').previous.map((s) => s.reps), [3]);
+});
+
+test('an exercise with no history has no previous, rather than throwing', () => {
+  const index = workout.buildIndex([], [], ME);
+  assert.equal(workout.priorForm(index, null).size, 0);
+});

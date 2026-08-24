@@ -883,8 +883,8 @@
       <template x-if="$store.ui.view === 'train'">
       <main class="app-main" x-data="trainPage">
 
-        <!-- No workout running ---------------------------------------------- -->
-        <template x-if="!session">
+        <!-- Nothing running, or running but folded away ---------------------- -->
+        <template x-if="!session || collapsed">
           <div style="display: contents;">
             <div class="section-head">
               <span>Train</span>
@@ -1012,8 +1012,21 @@
           </div>
         </template>
 
+        <!-- Folded away: one bar, so the routines and history below are reachable -->
+        <template x-if="session && collapsed">
+          <button class="running-bar" @click="collapsed = false">
+            <span class="dot dot-pending" aria-hidden="true"></span>
+            <span class="running-name" x-text="session.name || 'Workout'"></span>
+            <span class="running-meta">
+              <span x-text="elapsed"></span> ·
+              <span x-text="`${volume.toLocaleString()} lb`"></span>
+            </span>
+            <span class="tap" aria-hidden="true">▾</span>
+          </button>
+        </template>
+
         <!-- Workout in progress --------------------------------------------- -->
-        <template x-if="session">
+        <template x-if="session && !collapsed">
           <div style="display: contents;">
 
             <div class="timer">
@@ -1029,6 +1042,8 @@
                 <b class="num" x-text="volume.toLocaleString()"></b>
                 <small>lb volume</small>
               </div>
+              <button class="tap" @click="collapsed = true"
+                      aria-label="Collapse workout">▴</button>
             </div>
 
             <div class="chips" x-show="restEndsAt">
@@ -1062,7 +1077,7 @@
 
                 <div class="setgrid">
                   <div class="sethead">
-                    <span>#</span><span>lb</span><span>Reps</span><span></span>
+                    <span>#</span><span>Previous</span><span>lb</span><span>Reps</span><span></span>
                   </div>
                   <template x-for="(set, i) in group.sets" :key="set.id">
                     <div class="row-swipe" x-init="$swipeRow($el)">
@@ -1070,13 +1085,23 @@
                               :aria-label="`Remove set ${i + 1}`">Remove</button>
                       <div class="setrow" :class="[set.completed_at && 'done', isRecord(set, group) && 'record']">
                         <span class="idx" :class="set.is_warmup && 'warm'" x-text="set.is_warmup ? 'W' : i + 1"></span>
+                        <!-- What this set was last time, so you can see the whole
+                             progression without opening the history sheet. -->
+                        <span class="prev-cell" x-text="previousLabel(group, i)"></span>
+                        <!-- value, not placeholder, once you have typed something:
+                             an empty box with a grey suggestion is a box you can
+                             tap and type into without clearing anything first. -->
                         <input class="cell num" type="number" inputmode="decimal" step="any"
-                               :value="set.weight_lb" @change="edit(set, 'weight_lb', $event.target.value)"
+                               :value="set.weight_lb ?? ''"
+                               :placeholder="placeholderWeight(group, i)"
+                               @change="edit(set, 'weight_lb', $event.target.value)"
                                aria-label="Weight in pounds">
                         <input class="cell num" type="number" inputmode="numeric"
-                               :value="set.reps" @change="edit(set, 'reps', $event.target.value)"
+                               :value="set.reps ?? ''"
+                               :placeholder="placeholderReps(group, i)"
+                               @change="edit(set, 'reps', $event.target.value)"
                                aria-label="Reps">
-                        <button class="check" @click="toggleDone(set)"
+                        <button class="check" @click="toggleDone(set, placeholderFor(group, i))"
                                 :aria-label="set.completed_at ? 'Mark set incomplete' : 'Mark set done'"
                         >✓</button>
                       </div>

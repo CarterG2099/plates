@@ -113,15 +113,23 @@ export async function addSet({ session, exercise, weight, reps, isWarmup, ownerE
 /**
  * Change one field of a set.
  *
- * The stored row is re-read rather than the caller's copy being trusted, because
- * that copy is routinely stale by the time it gets here. Typing reps and then
- * tapping the checkmark fires `change` and then `click`, and the click's handler
- * closed over the set as it was *before* the change — spreading it would write
- * the old reps straight back over the ones just typed.
+ * Two things are needed to stop the checkmark reverting reps you just typed, and
+ * only having the first was why it kept coming back:
+ *
+ *  1. Re-read the stored row instead of trusting the caller's copy. Handlers
+ *     close over the set as it was when the row rendered, which is a revision
+ *     behind by the time `click` runs.
+ *  2. Serialise per row. Re-reading makes this a read-modify-write, and `change`
+ *     and `click` are separate listeners that do not await each other — so the
+ *     click's read could land before the change's write and merge the checkmark
+ *     into the old reps, putting the prefilled default back.
  */
 export async function updateSet(set, fields) {
-  const current = (await local.get('session_sets', set.id)) ?? set;
-  const saved = await local.save('session_sets', { ...current, ...fields }, set.owner_email);
+  const saved = await local.serialise(`session_sets:${set.id}`, async () => {
+    const current = (await local.get('session_sets', set.id)) ?? set;
+    return local.save('session_sets', { ...current, ...fields }, set.owner_email);
+  });
+
   sync.nudge();
   return saved;
 }
@@ -885,6 +893,8 @@ export function priorForm(index, excludeSessionId) {
     let bestRm = null;
     let latest = null;
 
+    let latestSession = null;
+
     for (const set of sets) {
       if (set.session_id === excludeSessionId) continue;
       const session = index.sessionById.get(set.session_id);
@@ -893,10 +903,25 @@ export function priorForm(index, excludeSessionId) {
       const rm = estimate1RM(set.weight_lb, set.reps);
       if (rm && (bestRm == null || rm > bestRm)) bestRm = rm;
 
-      if (!latest || session.started_at > latest) { latest = session.started_at; best = set; }
-      else if (latest === session.started_at && (set.weight_lb ?? 0) > (best?.weight_lb ?? 0)) best = set;
+      if (!latest || session.started_at > latest) {
+        latest = session.started_at;
+        best = set;
+        latestSession = session.id;
+      } else if (latest === session.started_at && (set.weight_lb ?? 0) > (best?.weight_lb ?? 0)) {
+        best = set;
+      }
     }
-    out.set(key, { best, bestRm });
+
+    // That session's working sets, in order. The set rows show these in the
+    // PREVIOUS column and use them as placeholders, so a set you are repeating
+    // can be checked off without typing anything.
+    const previous = latestSession
+      ? sets
+        .filter((s) => s.session_id === latestSession && !s.is_warmup && s.completed_at)
+        .sort((a, b) => a.set_index - b.set_index)
+      : [];
+
+    out.set(key, { best, bestRm, previous });
   }
   return out;
 }

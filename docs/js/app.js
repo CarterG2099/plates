@@ -536,7 +536,11 @@ Alpine.store('data', {
 
     // Indexed once per refresh rather than per render.
     raw.index = workout.buildIndex(sessionSets, sessions, Alpine.store('auth').email);
-    raw.prior = workout.priorForm(raw.index, null);
+    // Excluding the workout in progress, which is what makes "previous" mean the
+    // last time rather than the set you just did — and makes a PR a PR against
+    // history rather than against yourself ten seconds ago.
+    const running = workout.activeSession(sessions, Alpine.store('auth').email);
+    raw.prior = workout.priorForm(raw.index, running?.id ?? null);
     this.trainVersion++;
   },
 
@@ -1844,6 +1848,11 @@ Alpine.data('trainPage', () => ({
   picker: false,
   pickerTerm: '',
   replacing: null,  // the group whose exercise is being swapped out; null = adding
+
+  // A workout in progress otherwise fills the tab, so there is no way to look at
+  // a routine or last week's numbers without finishing or discarding it. Folded
+  // away it becomes one bar, and the rest of the tab comes back.
+  collapsed: false,
   finishing: false,
   routineName: '',
   restEndsAt: null,
@@ -1885,7 +1894,42 @@ Alpine.data('trainPage', () => ({
 
   get session() { return workout.activeSession(this.data.sessions, this.email); },
   get sets() { return this.session ? workout.setsOf(this.data.index, this.session.id) : []; },
-  get groups() { return workout.groupByExercise(this.sets); },
+  /**
+   * Cards, each carrying what you did for that exercise last time.
+   *
+   * Attached here rather than looked up per row: `groups` is read once by the
+   * x-for, whereas a getter called from inside the loop would rebuild the whole
+   * lookup for every set on screen.
+   */
+  get groups() {
+    return workout.groupByExercise(this.sets).map((group) => ({
+      ...group,
+      previous: this.data.prior.get(group.exerciseId ?? group.name)?.previous ?? [],
+    }));
+  },
+
+  /** The greyed number in a row: that set last time, else the last one there was. */
+  placeholderFor(group, index) {
+    const previous = group.previous ?? [];
+    return previous[index] ?? previous[previous.length - 1] ?? null;
+  },
+
+  /** The PREVIOUS column. Blank past what you actually did, rather than repeating. */
+  previousLabel(group, index) {
+    const set = (group.previous ?? [])[index];
+    if (!set) return '';
+    return `${set.weight_lb ?? '—'}lb × ${set.reps ?? '—'}`;
+  },
+
+  placeholderWeight(group, index) {
+    const p = this.placeholderFor(group, index);
+    return p?.weight_lb == null ? '' : String(p.weight_lb);
+  },
+
+  placeholderReps(group, index) {
+    const p = this.placeholderFor(group, index);
+    return p?.reps == null ? '' : String(p.reps);
+  },
   get routines() { return workout.routinesFor(this.data.routines, this.email); },
   // `history` lives with the past-session code below, since it depends on
   // historyOwner rather than always meaning "mine".
@@ -1920,22 +1964,20 @@ Alpine.data('trainPage', () => ({
       const exercise = library.find((e) => e.id === item.exercise_id)
         ?? { id: item.exercise_id, name: item.notes || 'Exercise' };
 
-      // As many sets as the routine plans, each prefilled from the last time you
-      // did the exercise. target_sets is recorded when a routine is saved from a
-      // session or imported from Hevy; only a hand-built one leaves it empty,
-      // and one set is the right floor for that.
-      const previous = workout.lastPerformance(
-        this.data.sessionSets, this.data.sessions, this.email,
-        exercise.id, exercise.name, session.id,
-      );
-
+      // As many sets as the routine plans. target_sets is recorded when a routine
+      // is saved from a session or imported from Hevy; only a hand-built one
+      // leaves it empty, and one set is the right floor for that.
+      //
+      // Deliberately empty. Last time's numbers show as placeholders instead, so
+      // tapping a box gives you an empty field rather than a value to clear —
+      // and checking the set without typing adopts them. See toggleDone.
       const planCount = Math.max(1, Number(item.target_sets) || 1);
       for (let n = 0; n < planCount; n++) {
         const { set } = await workout.addSet({
           session,
           exercise,
-          weight: previous?.best?.weight_lb ?? null,
-          reps: previous?.best?.reps ?? null,
+          weight: null,
+          reps: null,
           isWarmup: false,
           ownerEmail: this.email,
           existingSets: existing,
@@ -2056,13 +2098,13 @@ Alpine.data('trainPage', () => ({
     );
   },
 
+  /** Empty, like the planned sets — the placeholder carries the suggestion. */
   async addSetTo(group) {
-    const previous = group.sets[group.sets.length - 1];
     await workout.addSet({
       session: this.session,
       exercise: { id: group.exerciseId, name: group.name },
-      weight: previous?.weight_lb ?? null,
-      reps: previous?.reps ?? null,
+      weight: null,
+      reps: null,
       isWarmup: false,
       ownerEmail: this.email,
       existingSets: this.sets,
@@ -2092,10 +2134,23 @@ Alpine.data('trainPage', () => ({
     Alpine.store('data').patchSet(await workout.updateSet(set, next));
   },
 
-  /** Checking a set is what starts the rest clock — the moment you finish lifting. */
-  async toggleDone(set) {
+  /**
+   * Checking a set is what starts the rest clock — the moment you finish lifting.
+   *
+   * `fallback` is the greyed placeholder the row was showing. Checking a set you
+   * never typed into means "yes, that again", so the placeholder becomes the
+   * value — which is the whole point of them being placeholders rather than
+   * prefilled text you would have to clear first.
+   */
+  async toggleDone(set, fallback = null) {
     const done = Boolean(set.completed_at);
     const next = { completed_at: done ? null : new Date().toISOString() };
+
+    if (!done) {
+      const current = this.currentSet(set);
+      if (current.weight_lb == null && fallback?.weight_lb != null) next.weight_lb = fallback.weight_lb;
+      if (current.reps == null && fallback?.reps != null) next.reps = fallback.reps;
+    }
 
     // Green before the write, for the same reason as edit(): this is the most
     // repeated interaction in the app and it has to feel like a light switch.

@@ -585,7 +585,7 @@
 .sethead,
 .setrow {
   display: grid;
-  grid-template-columns: 26px 1fr 1fr 40px;
+  grid-template-columns: 22px minmax(0, 1.15fr) 1fr 1fr 38px;
   gap: var(--space-2);
   align-items: center;
   padding: var(--space-2) var(--space-2);
@@ -633,6 +633,57 @@
   box-shadow: var(--shadow-sm);
 }
 .setrow .cell:focus { border-color: var(--color-primary); }
+
+/* What this set was last time. Quiet on purpose — it is reference, not input,
+   and it sits directly beside the box you are about to type into. */
+.prev-cell {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Dimmer than typed text, so "205" you have to beat never looks like "205" you
+   already entered. */
+.setrow .cell::placeholder {
+  color: var(--color-text-dim);
+  opacity: .75;
+  font-weight: 400;
+}
+
+/* A workout folded away: one tappable line, holding its place at the top. */
+.running-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-primary-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-inset);
+  text-align: left;
+}
+
+.running-name {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.running-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  flex: none;
+}
 
 /* A finished set goes green edge to edge. Mid-set, from a few feet away and out
  * of breath, "which ones have I done" has to be answerable without reading —
