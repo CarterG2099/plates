@@ -4,7 +4,11 @@
 // walked away from. The app cannot notice this itself: a phone suspends a
 // backgrounded PWA within moments, so nothing in the page is alive to fire a
 // timer. Only something server-side can, which is what this is — pg_cron calls
-// it every five minutes and it pushes to whoever has opted in.
+// it every twenty minutes and it pushes to whoever has opted in.
+//
+// Cadence and threshold are both twenty minutes, so a forgotten session is
+// noticed between twenty and forty minutes after you stop. The schedule lives in
+// cron.job, not here.
 //
 // Runs with the service role key, because it deliberately reads across owners:
 // it is checking everybody's sessions, not the caller's. It is not reachable

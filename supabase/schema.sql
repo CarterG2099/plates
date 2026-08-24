@@ -239,7 +239,7 @@ create table if not exists plates.sessions (
   ended_at    timestamptz,
   notes       text,
   -- When the "you left this running" reminder was last pushed for this session.
-  -- Stops the five-minute cron sending the same nudge on every pass.
+  -- Stops the cron sending the same nudge on every pass.
   idle_notified_at timestamptz,
   updated_at  timestamptz not null default now(),
   deleted_at  timestamptz
