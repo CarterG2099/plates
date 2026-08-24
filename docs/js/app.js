@@ -2576,6 +2576,26 @@ Alpine.data('trainPage', () => ({
 
   get detailBests() { return workout.personalBests(this.detailHistory); },
 
+  get detailIsCardio() {
+    return workout.isCardio(this.detail?.exercise, this.detail?.name ?? '');
+  },
+
+  /**
+   * The headline record. A run's is the furthest one; a lift's is the heaviest
+   * set. There is no third case — an exercise is one or the other.
+   */
+  get detailBestLine() {
+    const { heaviest, furthest } = this.detailBests;
+
+    if (this.detailIsCardio) {
+      return furthest ? workout.distanceLabel(furthest.distance_m) : null;
+    }
+    return heaviest ? `${heaviest.weight_lb ?? '—'} lb × ${heaviest.reps ?? '—'}` : null;
+  },
+
+  /** An estimated one-rep max means nothing for a run. */
+  get detailShowsOneRm() { return !this.detailIsCardio && Boolean(this.detailBests.bestRm); },
+
   detailDate(entry) {
     return new Date(entry.date).toLocaleDateString(undefined, {
       year: 'numeric', month: 'short', day: 'numeric',
@@ -2584,9 +2604,25 @@ Alpine.data('trainPage', () => ({
 
   /** "125 × 10, 125 × 8, 125 × 7" — the whole session at a glance. */
   setLine(entry) {
+    if (this.detailIsCardio) {
+      return entry.sets.map((s) => workout.cardioLine(s)).filter(Boolean).join(', ');
+    }
     return entry.sets
       .map((s) => `${s.weight_lb ?? '—'}×${s.reps ?? '—'}${s.is_warmup ? 'w' : ''}`)
       .join(', ');
+  },
+
+  /**
+   * What a session came to. Load moved for a lift; distance covered for a run,
+   * which is the same question asked of an exercise that moves you rather than a
+   * weight — and stops the column reading "0 lb" against every run.
+   */
+  detailTotal(entry) {
+    if (this.detailIsCardio) {
+      const metres = entry.sets.reduce((sum, s) => sum + (Number(s.distance_m) || 0), 0);
+      return workout.distanceLabel(metres) ?? '—';
+    }
+    return `${Math.round(entry.volume).toLocaleString()} lb`;
   },
 
   // ---- routine builder -----------------------------------------------------

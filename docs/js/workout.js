@@ -385,14 +385,21 @@ export function exerciseHistory(sets, sessions, ownerEmail, exerciseId, exercise
 export function personalBests(history) {
   let heaviest = null;
   let bestRm = null;
+  let furthest = null;
 
   for (const entry of history) {
     if (entry.best && (!heaviest || (entry.best.weight_lb ?? 0) > (heaviest.weight_lb ?? 0))) {
       heaviest = entry.best;
     }
     if (entry.oneRm && (!bestRm || entry.oneRm > bestRm)) bestRm = entry.oneRm;
+
+    // Every set, not just entry.best: a session's best set is picked by weight,
+    // which says nothing at all about how far anybody ran.
+    for (const set of entry.sets ?? []) {
+      if ((Number(set?.distance_m) || 0) > (Number(furthest?.distance_m) || 0)) furthest = set;
+    }
   }
-  return { heaviest, bestRm };
+  return { heaviest, bestRm, furthest };
 }
 
 // ---- numbers ---------------------------------------------------------------
@@ -822,12 +829,18 @@ function clock(totalSeconds) {
  * because plates.members.weight_unit already exists, so a per-person metric
  * preference has somewhere to plug in without touching call sites.
  */
+export function distanceLabel(metres, { metric = false } = {}) {
+  const m = Number(metres) || 0;
+  if (!m) return null;
+  return metric ? `${(m / 1000).toFixed(2)} km` : `${(m / 1609.344).toFixed(2)} mi`;
+}
+
 export function cardioLine(set, { metric = false } = {}) {
   const parts = [];
-  const metres = Number(set?.distance_m) || 0;
   const seconds = Number(set?.duration_s) || 0;
 
-  if (metres) parts.push(metric ? `${(metres / 1000).toFixed(2)} km` : `${(metres / 1609.344).toFixed(2)} mi`);
+  const distance = distanceLabel(set?.distance_m, { metric });
+  if (distance) parts.push(distance);
   if (seconds) parts.push(clock(seconds));
 
   const pace = pacePer(set, { metric });

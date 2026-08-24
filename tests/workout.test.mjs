@@ -1045,6 +1045,45 @@ test('a cardio line reads distance, time and pace, in miles by default', () => {
     '5.20 km · 26:00 · 5:00 /km');
 });
 
+test('the record for a run is the furthest one, not the heaviest', () => {
+  // Sessions as historyOf builds them: `best` is picked by weight, so for a run
+  // it is arbitrary — the furthest has to come from the sets themselves.
+  const history = [
+    { best: null, oneRm: null, sets: [{ distance_m: 5200, duration_s: 1560 }] },
+    { best: null, oneRm: null, sets: [{ distance_m: 8000, duration_s: 2700 },
+                                      { distance_m: 1200, duration_s: 400 }] },
+    { best: null, oneRm: null, sets: [{ distance_m: 3000, duration_s: 900 }] },
+  ];
+
+  const { furthest, heaviest, bestRm } = workout.personalBests(history);
+  assert.equal(furthest.distance_m, 8000, 'across every set of every session');
+  assert.equal(workout.distanceLabel(furthest.distance_m), '4.97 mi');
+  assert.equal(heaviest, null, 'a run weighs nothing');
+  assert.equal(bestRm, null, 'and has no one-rep max to estimate');
+});
+
+test('a lift keeps the heaviest set as its record, and nothing is furthest', () => {
+  const history = [
+    { best: { weight_lb: 225, reps: 5 }, oneRm: 262, sets: [{ weight_lb: 225, reps: 5 }] },
+    { best: { weight_lb: 275, reps: 3 }, oneRm: 303, sets: [{ weight_lb: 275, reps: 3 }] },
+  ];
+
+  const { heaviest, bestRm, furthest } = workout.personalBests(history);
+  assert.equal(heaviest.weight_lb, 275);
+  assert.equal(bestRm, 303);
+  assert.equal(furthest, null, 'no distance anywhere, so no furthest');
+});
+
+test('a distance is one definition, whether it is a chip or a whole line', () => {
+  assert.equal(workout.distanceLabel(5200), '3.23 mi');
+  assert.equal(workout.distanceLabel(5200, { metric: true }), '5.20 km');
+  assert.equal(workout.distanceLabel(0), null, 'nothing run is not "0.00 mi"');
+  assert.equal(workout.distanceLabel(null), null);
+  // The line still leads with exactly what the chip would show on its own.
+  assert.ok(workout.cardioLine({ distance_m: 5200, duration_s: 1560 })
+    .startsWith(workout.distanceLabel(5200)));
+});
+
 test('a last performance reads as whatever kind of exercise it was', () => {
   const run = { distance_m: 5200, duration_s: 1560 };
   const lift = { weight_lb: 225, reps: 5 };

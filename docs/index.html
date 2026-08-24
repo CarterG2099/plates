@@ -1328,11 +1328,12 @@
               </div>
 
               <div class="chips">
-                <span class="chip" x-show="detailBests.heaviest">
-                  Best <span x-text="detailBests.heaviest && detailBests.heaviest.weight_lb"></span> lb ×
-                  <span x-text="detailBests.heaviest && detailBests.heaviest.reps"></span>
+                <!-- Furthest for a run, heaviest for a lift — detailBestLine
+                     picks, so this does not have to know which. -->
+                <span class="chip" x-show="detailBestLine">
+                  Best <span x-text="detailBestLine"></span>
                 </span>
-                <span class="chip" x-show="detailBests.bestRm">
+                <span class="chip" x-show="detailShowsOneRm">
                   Est. 1RM <span x-text="detailBests.bestRm"></span> lb
                 </span>
                 <span class="chip"><span x-text="detailHistory.length"></span> sessions</span>
@@ -1345,7 +1346,7 @@
                       <b x-text="detailDate(entry)"></b>
                       <small x-text="setLine(entry)"></small>
                     </div>
-                    <span class="row-num" x-text="`${Math.round(entry.volume).toLocaleString()} lb`"></span>
+                    <span class="row-num" x-text="detailTotal(entry)"></span>
                   </div>
                 </template>
               </div>
