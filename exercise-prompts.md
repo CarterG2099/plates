@@ -4,9 +4,9 @@
 key has no image quota. Companion to `exercise-art.md`, which explains where the
 files go and why they exist; this file is just the commands.
 
-**All 110 drawn and every fault corrected.** What is left is the style split: 40
-drawings are still in the old flat Gemini style. The commands to replace them are
-under **Restyle sheets** below. Four exercises per image, sliced apart
+**All 110 drawn and every fault corrected.** What is left is the style split: 24
+drawings are still in the old flat Gemini style — chest and the pulldowns are
+done. The commands to replace the rest are under **Restyle sheets** below. Four exercises per image, sliced apart
 afterwards. A square sheet gives cells well above the 512px target, so nothing is
 lost to the grid, and it is four times fewer requests.
 
@@ -161,8 +161,12 @@ two drawings apart.
 
 ## Restyle sheets — copy and paste these
 
-The 40 drawings still in the old flat Gemini style, as 10 sheets. Nothing is
+The 24 drawings still in the old flat Gemini style, as 6 sheets. Nothing is
 wrong with any of them beyond the style; these are replacements, not corrections.
+
+The first four sheets are done — all 16 came back correct, including the three
+cable flys as three visibly different pictures and all four pulldowns from
+three-quarter behind. The naming-the-difference trick is working; keep it.
 
 Paste the style primer at the top of this file first if you are starting a new
 conversation. Two habits from the last round are baked into the lines below and
@@ -176,40 +180,7 @@ are worth keeping:
 
 ---
 
-### Restyle sheet 1 — chest, bench presses
-
-> Top-left: **Bench Press (Barbell)** — highlight the pectorals. A straight barbell on a flat bench, lying back, bar lowered to the chest.
-> Top-right: **Bench Press (Dumbbell)** — highlight the pectorals. Two dumbbells on a **flat** bench.
-> Bottom-left: **Incline Bench Press (Barbell)** — highlight the **upper** pectorals, near the collarbone. A straight barbell on a bench set to a clear upward incline.
-> Bottom-right: **Incline Bench Press (Dumbbell)** — highlight the **upper** pectorals. Two dumbbells on the same inclined bench.
-
-### Restyle sheet 2 — chest, machines and the first fly
-
-> Top-left: **Incline Chest Press (Machine)** — highlight the upper pectorals. A seated chest press machine with the seat reclined back, two handles, a weight stack.
-> Top-right: **Iso-Lateral Chest Press (Machine)** — highlight the pectorals. A **plate-loaded** chest press with two independent handles and weight plates on the horns — no stack.
-> Bottom-left: **Chest Fly (Machine)** — highlight the pectorals. A pec deck: seated, back against a pad, both padded arms swept together in front of the chest.
-> Bottom-right: **Fly (Cable)** — highlight the pectorals. Standing between two cable towers, **high** pulleys, a handle in each hand, arms sweeping together in front of the chest and stopping there without crossing.
-
-### Restyle sheet 3 — chest, the crossovers and bodyweight
-
-These first two differ only in where the pulleys are and whether the hands cross.
-Draw the difference clearly.
-
-> Top-left: **Fly Crossovers (Cable)** — highlight the pectorals. Two **high** pulleys, arms sweeping down and **crossing over one another** in front of the hips.
-> Top-right: **Low Fly Crossovers (Cable)** — highlight the pectorals. Two **low** pulleys near the floor, arms sweeping **upward** and together at chest height.
-> Bottom-left: **Chest Dip** — highlight the pectorals. Parallel dip bars, torso leaning well forward, elbows flared out.
-> Bottom-right: **Push-Up** — highlight the pectorals. No equipment, hands flat on the floor, body in one straight line.
-
-### Restyle sheet 4 — back, pulldowns
-
-> All four: draw from **three-quarter behind**, back turned toward the viewer, so the latissimus dorsi is broad and clearly visible. Not in profile.
->
-> Top-left: **Pull-Up** — highlight the latissimus dorsi. Overhead bar, **overhand** grip, body hanging, no machine.
-> Top-right: **Reverse Grip Lat Pulldown (Cable)** — highlight the latissimus dorsi. A seated pulldown machine with a straight bar held **underhand**, palms up.
-> Bottom-left: **Single Arm Lat Pulldown** — highlight the latissimus dorsi. A cable station with **one** single handle, pulled with one arm only, other hand resting on the thigh.
-> Bottom-right: **Straight Arm Lat Pulldown (Cable)** — highlight the latissimus dorsi. A high cable with a **straight bar**, standing, arms locked straight, sweeping down to the thighs.
-
-### Restyle sheet 5 — back, the rope pulldown and the seated rows
+### Restyle sheet 1 — back, the rope pulldown and the seated rows
 
 The three rows differ by attachment and by machine. Draw all three differently.
 
@@ -220,21 +191,21 @@ The three rows differ by attachment and by machine. Draw all three differently.
 > Bottom-left: **Seated Row - Bar Wide Grip (Cable)** — highlight the latissimus dorsi. The same seated cable row but with a **long straight bar, hands set wide apart**.
 > Bottom-right: **Seated Row (Machine)** — highlight the latissimus dorsi. A **machine** with a chest pad the torso presses against and two handles — no cable and no footplate.
 
-### Restyle sheet 6 — the last of the back, into squats
+### Restyle sheet 2 — the last of the back, into squats
 
 > Top-left: **Row (T Bar)** — highlight the **rhomboids and mid-back, between and below the shoulder blades**. A landmine-mounted barbell with plates on the end and a V handle, torso hinged forward. Draw from three-quarter behind.
 > Top-right: **Deadlift** — highlight the **erector spinae, the columns either side of the lower spine, and the hamstrings**. A loaded barbell lifted from the floor, hips hinged, back flat, feet about hip width.
 > Bottom-left: **Squat (Barbell)** — highlight the quadriceps. A barbell across the upper back with a squat rack behind, at the bottom of the squat.
 > Bottom-right: **Front Squat** — highlight the quadriceps. A barbell racked across the **front** of the shoulders with the elbows driven high.
 
-### Restyle sheet 7 — squats, the single-leg ones
+### Restyle sheet 3 — squats, the single-leg ones
 
 > Top-left: **Goblet Squat** — highlight the quadriceps. A single dumbbell held vertically against the chest with both hands.
 > Top-right: **Hack Squat (Machine)** — highlight the quadriceps. An angled hack squat machine with shoulder pads and a footplate, back against the sled.
 > Bottom-left: **Bulgarian Split Squat** — highlight the quadriceps of the **front** leg. The **rear foot is raised up on a bench behind the figure**, front knee bent deep, a dumbbell in each hand. The figure is standing and lunging, not sitting on the bench.
 > Bottom-right: **Assisted Pistol Squats** — highlight the quadriceps. Squatting on **one** leg with the other leg extended straight out in front, one hand holding an upright post for balance.
 
-### Restyle sheet 8 — lunges and the first leg press
+### Restyle sheet 4 — lunges and the first leg press
 
 All three lunges must be visibly different — direction of travel is the whole
 difference.
@@ -244,14 +215,14 @@ difference.
 > Bottom-left: **Walking Lunge** — highlight the quadriceps. A **dumbbell in each hand**, mid-stride, clearly walking forward rather than stationary.
 > Bottom-right: **Leg Press** — highlight the quadriceps. A **45-degree angled** leg press with a loaded sled above the figure.
 
-### Restyle sheet 9 — the leg machines
+### Restyle sheet 5 — the leg machines
 
 > Top-left: **Leg Press Horizontal (Machine)** — highlight the quadriceps. A **seated, horizontal** leg press — the figure sits upright and pushes forward, not up an incline.
 > Top-right: **Leg Extension** — highlight the quadriceps, the front of the thigh. A seated leg extension machine with an ankle pad, legs straightening out in front.
 > Bottom-left: **Lying Leg Curl** — highlight the **hamstrings, the back of the thigh**. A lying leg curl machine, face down, ankle pad curled up toward the glutes.
 > Bottom-right: **Romanian Deadlift** — highlight the **hamstrings**. A barbell held at arm's length, hips pushed back, knees only slightly bent, bar tracking down the thighs.
 
-### Restyle sheet 10 — shoulders
+### Restyle sheet 6 — shoulders
 
 Four presses. The equipment is the only thing separating them.
 
