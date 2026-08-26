@@ -1532,8 +1532,14 @@
                preserveAspectRatio is deliberately not "none" here: the old chart
                stretched, which skews a slope into whatever the card width says. -->
           <template x-if="weightPlot && weight.length > 1">
-            <div class="plot" @pointermove="trackWeight($event)"
-                 @pointerleave="weightHover = null">
+            <!-- Tap to select, and it stays selected. pointermove is guarded on
+                 $event.buttons, which is 1 only while a finger, pen or held mouse
+                 button is actually down — so dragging scrubs along the series and
+                 a mouse merely passing over does nothing. Nothing clears the
+                 selection on the way out, because a readout that vanishes when
+                 you lift your finger is no use on a phone. -->
+            <div class="plot" @pointerdown="trackWeight($event)"
+                 @pointermove="if ($event.buttons) trackWeight($event)">
               <!-- viewBox is set imperatively, not with :viewBox. The HTML parser
                    lowercases attribute names, so :viewBox arrives as :viewbox and
                    Alpine sets "viewbox" — which SVG, being case-sensitive, ignores
@@ -1650,9 +1656,9 @@
           </div>
 
           <!-- One series, so no legend: the spokes are labelled and the shape is
-               the only thing drawn. Hover snaps by angle — see trackMuscle. -->
-          <div class="plot plot-radar" @pointermove="trackMuscle($event)"
-               @pointerleave="muscleHover = null">
+               the only thing drawn. Selection snaps by angle — see trackMuscle. -->
+          <div class="plot plot-radar" @pointerdown="trackMuscle($event)"
+               @pointermove="if ($event.buttons) trackMuscle($event)">
             <!-- Built as a string, not x-for: a <template> inside <svg> is
                  parsed in the SVG namespace and never runs. The dashed inner
                  outline is what an even split across six groups would draw, so
@@ -1702,11 +1708,11 @@
           </div>
 
           <!-- Bars as elements rather than an x-html string, so a pointer has
-               something to interrogate. Hover snaps by slot, not by rectangle:
+               something to interrogate. Selection snaps by slot, not by rectangle:
                an untrained week has no bar to hit and is still a week you can
                ask about. -->
-          <div class="plot" @pointermove="trackVolume($event)"
-               @pointerleave="volumeHover = null">
+          <div class="plot" @pointerdown="trackVolume($event)"
+               @pointermove="if ($event.buttons) trackVolume($event)">
             <svg x-effect="$el.setAttribute('viewBox', `0 0 ${volumePlot.width} ${volumePlot.height}`)"
                  role="img" aria-label="Training volume by week, last 12 weeks">
               <g x-html="volumeBars"></g>
@@ -1781,7 +1787,8 @@
 
           <!-- One square per day, twelve weeks. A calendar answers "how often"
                in a way a number cannot: the gaps are visible as gaps. -->
-          <div class="plot" @pointermove="trackGrid($event)" @pointerleave="gridHover = null">
+          <div class="plot" @pointerdown="trackGrid($event)"
+               @pointermove="if ($event.buttons) trackGrid($event)">
             <svg class="grid-plot"
                  x-effect="$el.setAttribute('viewBox', `0 0 ${gridBox.width} ${gridBox.height}`)"
                  role="img" aria-label="Days trained over the last twelve weeks"
@@ -1895,8 +1902,8 @@
           </div>
 
           <div class="plot" x-show="loggedDays > 1" x-cloak
-               @pointermove="trackCalories($event)"
-               @pointerleave="calorieHover = null">
+               @pointerdown="trackCalories($event)"
+               @pointermove="if ($event.buttons) trackCalories($event)">
             <svg x-effect="$el.setAttribute('viewBox', `0 0 ${caloriePlot.width} ${caloriePlot.height}`)"
                  role="img" aria-label="Daily calories over the last 14 days">
               <line x-show="caloriePlot.targetY !== null" x-cloak

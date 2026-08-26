@@ -468,7 +468,7 @@ function round1(n) { return Math.round(n * 10) / 10; }
  * Plot geometry for the weight chart, as data rather than as an SVG string.
  *
  * The older charts here build markup and hand it to x-html, which cannot carry a
- * hover layer — you get a picture, not a chart you can interrogate. This returns
+ * pointer layer — you get a picture, not a chart you can interrogate. This returns
  * coordinates so the template can render real elements and put a crosshair and a
  * tooltip on them.
  *
@@ -525,7 +525,7 @@ function round2(n) { return Math.round(n * 100) / 100; }
  * The old chart was an SVG string with `preserveAspectRatio="none"`, which both
  * stretched the bars and left nothing for a pointer to interrogate. These are
  * real coordinates in a real aspect ratio, and `slot` is carried out so the
- * hover layer can turn a pointer x into a week index — a zero-volume week has
+ * selection layer can turn a pointer x into a week index — a zero-volume week has
  * no rectangle to hit but is still a week you can ask about.
  */
 export function volumePlot(weeks, { width = 100, height = 40, gap = 1.4 } = {}) {

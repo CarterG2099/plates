@@ -2912,6 +2912,18 @@ Alpine.data('trainPage', () => ({
 
 // ---- stats -----------------------------------------------------------------
 
+/**
+ * Whether a pointer event should move a plot's readout.
+ *
+ * A mouse hovers, so it tracks on every move. A finger does not hover at all —
+ * it tracks while it is down, and a tap is the whole gesture. Without the
+ * `buttons` half, dragging the page up past a chart drags the readout along
+ * with it; without the `pointerdown` half, a tap that never moves reports
+ * nothing, which is most taps.
+ */
+const tracksPointer = (event) =>
+  event.pointerType === 'mouse' || event.type === 'pointerdown' || event.buttons > 0;
+
 Alpine.data('statsPage', () => ({
   weighing: false,
   newWeight: '',
@@ -2934,7 +2946,10 @@ Alpine.data('statsPage', () => ({
   // clears it.
 
   weightOpen: false,
-  weightHover: null,     // the reading under the pointer, or null
+  // The selected reading, or null until one is tapped. Named *Hover across
+  // these charts for historical reasons — it is a selection now, and it
+  // persists until another tap moves it.
+  weightHover: null,
 
   get weightTarget() { return Number(this.goal?.target_weight_lb) || null; },
 
@@ -2974,6 +2989,7 @@ Alpine.data('statsPage', () => ({
    * nobody hits that reliably.
    */
   trackWeight(event) {
+    if (!tracksPointer(event)) return;
     const plot = this.weightPlot;
     if (!plot) return;
 
@@ -3068,6 +3084,7 @@ Alpine.data('statsPage', () => ({
   get gridBox() { return { width: 12 * 8.4 - 1.8, height: 7 * 8.4 - 1.8 }; },
 
   trackGrid(event) {
+    if (!tracksPointer(event)) return;
     const box = event.currentTarget.getBoundingClientRect();
     const unit = box.width / this.gridBox.width;
     const x = Math.floor((event.clientX - box.left) / unit / 8.4);
@@ -3126,6 +3143,7 @@ Alpine.data('statsPage', () => ({
    * on a phone — anywhere in a group's wedge is a question about that group.
    */
   trackMuscle(event) {
+    if (!tracksPointer(event)) return;
     const plot = this.musclePlot;
     if (!plot) return;
 
@@ -3191,6 +3209,7 @@ Alpine.data('statsPage', () => ({
   },
 
   trackVolume(event) {
+    if (!tracksPointer(event)) return;
     const plot = this.volumePlot;
     if (!plot.bars.length) return;
 
@@ -3282,6 +3301,7 @@ Alpine.data('statsPage', () => ({
   },
 
   trackCalories(event) {
+    if (!tracksPointer(event)) return;
     const plot = this.caloriePlot;
     if (!plot.bars.length) return;
 

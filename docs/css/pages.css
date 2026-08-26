@@ -1276,13 +1276,18 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 /* ---- interactive plot ------------------------------------------------------ */
 /* Every chart on this page used to be an SVG string handed to x-html, which
-   cannot carry a hover layer — a picture rather than something you can
+   cannot carry a pointer layer — a picture rather than something you can
    interrogate. These render real elements, so a crosshair and a readout can
    hang off them. */
 
 .plot {
   position: relative;
   touch-action: pan-y;      /* tracking the finger must not block scrolling */
+  cursor: pointer;          /* it is tapped, not hovered */
+  /* A tap selects a point, so the browser must not also select the text of the
+     readout underneath when you drag along the series. */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .plot svg {
