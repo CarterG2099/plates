@@ -4,9 +4,9 @@
 key has no image quota. Companion to `exercise-art.md`, which explains where the
 files go and why they exist; this file is just the commands.
 
-**All 110 drawn and every fault corrected.** What is left is the style split: 24
-drawings are still in the old flat Gemini style — chest and the pulldowns are
-done. The commands to replace the rest are under **Restyle sheets** below. Four exercises per image, sliced apart
+**All 110 drawn and every fault corrected.** What is left is the style split: 16
+drawings are still in the old flat Gemini style — chest and back are done, and
+only legs and shoulders remain. The commands are under **Restyle sheets** below. Four exercises per image, sliced apart
 afterwards. A square sheet gives cells well above the 512px target, so nothing is
 lost to the grid, and it is four times fewer requests.
 
@@ -161,12 +161,15 @@ two drawings apart.
 
 ## Restyle sheets — copy and paste these
 
-The 24 drawings still in the old flat Gemini style, as 6 sheets. Nothing is
+The 16 drawings still in the old flat Gemini style, as 4 sheets. All of them are
+legs or shoulders. Nothing is
 wrong with any of them beyond the style; these are replacements, not corrections.
 
-The first four sheets are done — all 16 came back correct, including the three
-cable flys as three visibly different pictures and all four pulldowns from
-three-quarter behind. The naming-the-difference trick is working; keep it.
+Twenty-four are done and every one came back correct — the three cable flys as
+three visibly different pictures, all four pulldowns from three-quarter behind,
+and the three seated rows as three distinct machines. Naming the difference in
+the prompt is what does it; the four sheets below need it most, because they hold
+three lunges, two leg presses and four shoulder presses.
 
 Paste the style primer at the top of this file first if you are starting a new
 conversation. Two habits from the last round are baked into the lines below and
@@ -180,32 +183,14 @@ are worth keeping:
 
 ---
 
-### Restyle sheet 1 — back, the rope pulldown and the seated rows
-
-The three rows differ by attachment and by machine. Draw all three differently.
-
-> All four: draw from **three-quarter behind**, so the latissimus dorsi is broad and clearly visible. Not in profile.
->
-> Top-left: **Straight Arm Pulldown (Rope)** — highlight the latissimus dorsi. A high cable with a **rope**, arms locked straight, the two rope ends pulled apart at the thighs. Same movement as the bar version; the rope is the whole difference.
-> Top-right: **Seated Row (Cable)** — highlight the latissimus dorsi. A seated cable row with a footplate, a **low** pulley, and a close V handle pulled to the stomach.
-> Bottom-left: **Seated Row - Bar Wide Grip (Cable)** — highlight the latissimus dorsi. The same seated cable row but with a **long straight bar, hands set wide apart**.
-> Bottom-right: **Seated Row (Machine)** — highlight the latissimus dorsi. A **machine** with a chest pad the torso presses against and two handles — no cable and no footplate.
-
-### Restyle sheet 2 — the last of the back, into squats
-
-> Top-left: **Row (T Bar)** — highlight the **rhomboids and mid-back, between and below the shoulder blades**. A landmine-mounted barbell with plates on the end and a V handle, torso hinged forward. Draw from three-quarter behind.
-> Top-right: **Deadlift** — highlight the **erector spinae, the columns either side of the lower spine, and the hamstrings**. A loaded barbell lifted from the floor, hips hinged, back flat, feet about hip width.
-> Bottom-left: **Squat (Barbell)** — highlight the quadriceps. A barbell across the upper back with a squat rack behind, at the bottom of the squat.
-> Bottom-right: **Front Squat** — highlight the quadriceps. A barbell racked across the **front** of the shoulders with the elbows driven high.
-
-### Restyle sheet 3 — squats, the single-leg ones
+### Restyle sheet 1 — squats, the single-leg ones
 
 > Top-left: **Goblet Squat** — highlight the quadriceps. A single dumbbell held vertically against the chest with both hands.
 > Top-right: **Hack Squat (Machine)** — highlight the quadriceps. An angled hack squat machine with shoulder pads and a footplate, back against the sled.
 > Bottom-left: **Bulgarian Split Squat** — highlight the quadriceps of the **front** leg. The **rear foot is raised up on a bench behind the figure**, front knee bent deep, a dumbbell in each hand. The figure is standing and lunging, not sitting on the bench.
 > Bottom-right: **Assisted Pistol Squats** — highlight the quadriceps. Squatting on **one** leg with the other leg extended straight out in front, one hand holding an upright post for balance.
 
-### Restyle sheet 4 — lunges and the first leg press
+### Restyle sheet 2 — lunges and the first leg press
 
 All three lunges must be visibly different — direction of travel is the whole
 difference.
@@ -215,14 +200,14 @@ difference.
 > Bottom-left: **Walking Lunge** — highlight the quadriceps. A **dumbbell in each hand**, mid-stride, clearly walking forward rather than stationary.
 > Bottom-right: **Leg Press** — highlight the quadriceps. A **45-degree angled** leg press with a loaded sled above the figure.
 
-### Restyle sheet 5 — the leg machines
+### Restyle sheet 3 — the leg machines
 
 > Top-left: **Leg Press Horizontal (Machine)** — highlight the quadriceps. A **seated, horizontal** leg press — the figure sits upright and pushes forward, not up an incline.
 > Top-right: **Leg Extension** — highlight the quadriceps, the front of the thigh. A seated leg extension machine with an ankle pad, legs straightening out in front.
 > Bottom-left: **Lying Leg Curl** — highlight the **hamstrings, the back of the thigh**. A lying leg curl machine, face down, ankle pad curled up toward the glutes.
 > Bottom-right: **Romanian Deadlift** — highlight the **hamstrings**. A barbell held at arm's length, hips pushed back, knees only slightly bent, bar tracking down the thighs.
 
-### Restyle sheet 6 — shoulders
+### Restyle sheet 4 — shoulders
 
 Four presses. The equipment is the only thing separating them.
 
