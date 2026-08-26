@@ -161,25 +161,26 @@ two drawings apart.
 
 ## Restyle sheets — copy and paste these
 
-The 16 drawings still in the old flat Gemini style, as 4 sheets. All of them are
-legs or shoulders. Nothing is
-wrong with any of them beyond the style; these are replacements, not corrections.
+The 16 drawings still in the old flat Gemini style, as 4 sheets — all of them
+legs or shoulders. Nothing is wrong with any of them beyond the style; these are
+replacements, not corrections.
 
-Twenty-four are done and every one came back correct — the three cable flys as
+Twenty-four are done and every one came back correct: the three cable flys as
 three visibly different pictures, all four pulldowns from three-quarter behind,
-and the three seated rows as three distinct machines. Naming the difference in
-the prompt is what does it; the four sheets below need it most, because they hold
-three lunges, two leg presses and four shoulder presses.
+and the three seated rows as three distinct machines.
 
 Paste the style primer at the top of this file first if you are starting a new
-conversation. Two habits from the last round are baked into the lines below and
-are worth keeping:
+conversation.
 
-- **Back exercises say "three-quarter behind".** Drawn in profile, the lats go
-  edge-on and shrink to a sliver at 44px. Every back sheet says it explicitly.
-- **Near-identical variants say what makes them different.** Five chest flys,
-  three seated rows, four shoulder presses and three lunges are in here, and left
-  to itself the model draws each group as one picture repeated.
+**The one habit that has made the difference: say what separates a variant from
+its neighbours.** These last four sheets need it more than any so far — between
+them they hold three lunges that differ only in direction of travel, two leg
+presses that differ only in angle, and four shoulder presses that differ only in
+equipment. Every one of those lines below already names the difference; keep it
+in if you retype them.
+
+The three-quarter-behind rule that the back sheets used no longer applies — no
+back exercises are left.
 
 ---
 
