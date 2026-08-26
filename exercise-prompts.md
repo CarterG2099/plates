@@ -4,9 +4,9 @@
 key has no image quota. Companion to `exercise-art.md`, which explains where the
 files go and why they exist; this file is just the commands.
 
-**All 110 drawn and every fault corrected.** What is left is the style split: 16
-drawings are still in the old flat Gemini style — chest and back are done, and
-only legs and shoulders remain. The commands are under **Restyle sheets** below. Four exercises per image, sliced apart
+**Finished.** All 110 drawn, every fault corrected, and every drawing now in the
+same ChatGPT style — the flat Gemini set is gone, and the sparkle watermark with
+it. Nothing outstanding. Four exercises per image, sliced apart
 afterwards. A square sheet gives cells well above the 512px target, so nothing is
 lost to the grid, and it is four times fewer requests.
 
@@ -159,63 +159,19 @@ two drawings apart.
 | `straight-arm-lat-pulldown-cable.png` | `straight-arm-pulldown-rope.png` |
 | `triceps-pushdown.png` | `triceps-pushdown-rope.png` |
 
-## Restyle sheets — copy and paste these
+## Restyle — done
 
-The 16 drawings still in the old flat Gemini style, as 4 sheets — all of them
-legs or shoulders. Nothing is wrong with any of them beyond the style; these are
-replacements, not corrections.
+All 40 flat-style drawings were replaced across 10 sheets, and every sheet came
+back correct. The thing that made it work, kept here because it is the one lesson
+that transferred to every batch:
 
-Twenty-four are done and every one came back correct: the three cable flys as
-three visibly different pictures, all four pulldowns from three-quarter behind,
-and the three seated rows as three distinct machines.
+**Say what separates a variant from its neighbours.** Three cable flys, three
+seated rows, four shoulder presses, two leg presses, three lunges — left to
+itself the model draws each group as one picture repeated. Naming the difference
+in the line (high pulleys versus low, stack versus plate-loaded, standing versus
+seated, forward versus backward) produced distinct drawings every time but one.
 
-Paste the style primer at the top of this file first if you are starting a new
-conversation.
-
-**The one habit that has made the difference: say what separates a variant from
-its neighbours.** These last four sheets need it more than any so far — between
-them they hold three lunges that differ only in direction of travel, two leg
-presses that differ only in angle, and four shoulder presses that differ only in
-equipment. Every one of those lines below already names the difference; keep it
-in if you retype them.
-
-The three-quarter-behind rule that the back sheets used no longer applies — no
-back exercises are left.
-
----
-
-### Restyle sheet 1 — squats, the single-leg ones
-
-> Top-left: **Goblet Squat** — highlight the quadriceps. A single dumbbell held vertically against the chest with both hands.
-> Top-right: **Hack Squat (Machine)** — highlight the quadriceps. An angled hack squat machine with shoulder pads and a footplate, back against the sled.
-> Bottom-left: **Bulgarian Split Squat** — highlight the quadriceps of the **front** leg. The **rear foot is raised up on a bench behind the figure**, front knee bent deep, a dumbbell in each hand. The figure is standing and lunging, not sitting on the bench.
-> Bottom-right: **Assisted Pistol Squats** — highlight the quadriceps. Squatting on **one** leg with the other leg extended straight out in front, one hand holding an upright post for balance.
-
-### Restyle sheet 2 — lunges and the first leg press
-
-All three lunges must be visibly different — direction of travel is the whole
-difference.
-
-> Top-left: **Lunge (Barbell)** — highlight the quadriceps. A barbell across the upper back, stepping **forward** into a deep lunge.
-> Top-right: **Reverse Lunge (Barbell)** — highlight the quadriceps. A barbell across the upper back, stepping **backward**, the rear knee dropping toward the floor.
-> Bottom-left: **Walking Lunge** — highlight the quadriceps. A **dumbbell in each hand**, mid-stride, clearly walking forward rather than stationary.
-> Bottom-right: **Leg Press** — highlight the quadriceps. A **45-degree angled** leg press with a loaded sled above the figure.
-
-### Restyle sheet 3 — the leg machines
-
-> Top-left: **Leg Press Horizontal (Machine)** — highlight the quadriceps. A **seated, horizontal** leg press — the figure sits upright and pushes forward, not up an incline.
-> Top-right: **Leg Extension** — highlight the quadriceps, the front of the thigh. A seated leg extension machine with an ankle pad, legs straightening out in front.
-> Bottom-left: **Lying Leg Curl** — highlight the **hamstrings, the back of the thigh**. A lying leg curl machine, face down, ankle pad curled up toward the glutes.
-> Bottom-right: **Romanian Deadlift** — highlight the **hamstrings**. A barbell held at arm's length, hips pushed back, knees only slightly bent, bar tracking down the thighs.
-
-### Restyle sheet 4 — shoulders
-
-Four presses. The equipment is the only thing separating them.
-
-> Top-left: **Overhead Press** — highlight the deltoids. A barbell pressed overhead, **standing**, no bench.
-> Top-right: **Seated Overhead Press (Barbell)** — highlight the deltoids. A **barbell**, seated on an upright bench with a back pad.
-> Bottom-left: **Seated Shoulder Press (Dumbbell)** — highlight the deltoids. **Two dumbbells**, seated on the same upright bench.
-> Bottom-right: **Seated Shoulder Press (Machine)** — highlight the deltoids. A seated shoulder press **machine** with fixed overhead handles and a weight stack.
+The exception is recorded in the review below.
 
 ---
 
