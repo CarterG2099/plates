@@ -108,3 +108,23 @@ test('base.css floors every field at the threshold', () => {
   assert.ok(inheritAt !== -1 && floorAt > inheritAt,
     'the floor must come after `font: inherit`, which would otherwise win');
 });
+
+test('things floating above the tab bar track its height rather than the raw inset', () => {
+  // The tab bar's height is 54px plus however much of the home-indicator inset
+  // exceeds the button padding it replaces — which is what --tabbar-extra is.
+  // The FAB and the toast sit above the bar, and both had `72px + inset` and
+  // `76px + inset` hardcoded. Those were right only while the bar's padding
+  // stayed exactly as it was, and stopped being right the moment it changed.
+  assert.match(tokens, /--tabbar-extra:\s*max\(0px, calc\(var\(--inset-bottom\) - var\(--space-3\)\)\)/);
+
+  const offsets = [...pages.matchAll(/bottom:\s*calc\((\d+)px \+ var\((--[a-z-]+)\)\)/g)]
+    .map((m) => ({ px: Number(m[1]), token: m[2] }));
+
+  // Only the ones clearing the tab bar; nothing else uses this shape.
+  const overBar = offsets.filter((o) => o.px >= 60);
+  assert.ok(overBar.length >= 2, 'expected the FAB and the toast');
+  for (const o of overBar) {
+    assert.equal(o.token, '--tabbar-extra',
+      `${o.px}px offset must use --tabbar-extra, not the raw inset`);
+  }
+});

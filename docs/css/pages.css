@@ -14,7 +14,13 @@
 }
 
 .tabbar button {
-  padding: var(--space-3) 0 var(--space-3);
+  /* The bar adds the home-indicator inset below these, so the buttons hand their
+     own bottom padding over to it: 12px above the label and 12+34 below read as
+     a label stranded at the top of a tall empty bar. Clamped at zero so a device
+     with no inset — Android, desktop, Safari with its toolbar showing — keeps the
+     symmetric padding it needs. The 34px itself stays: it is where the home
+     indicator lives, and a button under it loses its taps to the system swipe. */
+  padding: var(--space-3) 0 max(0px, calc(var(--space-3) - var(--inset-bottom)));
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: .1em;
@@ -70,7 +76,7 @@
 .fab-stack {
   position: fixed;
   right: var(--space-4);
-  bottom: calc(72px + var(--inset-bottom));
+  bottom: calc(72px + var(--tabbar-extra));
   z-index: 12;
   display: flex;
   flex-direction: column;
@@ -495,7 +501,7 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(76px + var(--inset-bottom));
+  bottom: calc(76px + var(--tabbar-extra));
   z-index: 30;
   max-width: calc(100% - var(--space-8));
   padding: var(--space-2) var(--space-4);

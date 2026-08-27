@@ -80,4 +80,12 @@
   /* Safe areas — this runs as an installed PWA */
   --inset-top:    env(safe-area-inset-top, 0px);
   --inset-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* How much taller the tab bar gets once the home-indicator inset is applied.
+     The bar's buttons give up their own bottom padding to the inset (see
+     .tabbar button), so the first --space-3 of inset costs nothing and only the
+     remainder adds height. The FAB and the toast sit above the bar and had this
+     baked into hardcoded pixel offsets, which stopped being true the moment the
+     bar's padding changed. */
+  --tabbar-extra: max(0px, calc(var(--inset-bottom) - var(--space-3)));
 }
