@@ -625,6 +625,13 @@ Alpine.store('ui', {
     this.scanRequested = true;
   },
 
+  /**
+   * "1 day" / "2 days". On the store because three screens format counts now and
+   * the plural is the mistake this project has shipped four times — see
+   * stats.count, which is where the logic and its test live.
+   */
+  count(n, singular, plural) { return stats.count(n, singular, plural); },
+
   flash(message) {
     this.toast = message;
     clearTimeout(this._toastTimer);
@@ -2186,6 +2193,37 @@ Alpine.data('trainPage', () => ({
   },
   get routines() { return workout.routinesFor(this.data.routines, this.email); },
 
+  // ---- routine categories --------------------------------------------------
+  //
+  // Which categories are folded shut is a per-device view preference, so it goes
+  // to localStorage rather than through sync: collapsing a group on the phone at
+  // the gym should not fold it on the laptop, and it is not worth a table.
+
+  collapsed: JSON.parse(localStorage.getItem('plates:collapsedCategories') || '[]'),
+
+  get routineGroups() {
+    return workout.groupRoutinesByCategory(this.data.routines, this.email);
+  },
+
+  get knownCategories() {
+    return workout.routineCategories(this.data.routines, this.email);
+  },
+
+  /** Uncategorised has no name to key on, so it gets a reserved one. */
+  categoryKey(category) { return category ?? '\u0000none'; },
+
+  isCollapsed(category) { return this.collapsed.includes(this.categoryKey(category)); },
+
+  toggleCategory(category) {
+    const key = this.categoryKey(category);
+    // Replaced rather than mutated: Alpine tracks the array, and push() on a
+    // plain array read out of localStorage would not re-render the group.
+    this.collapsed = this.isCollapsed(category)
+      ? this.collapsed.filter((k) => k !== key)
+      : [...this.collapsed, key];
+    localStorage.setItem('plates:collapsedCategories', JSON.stringify(this.collapsed));
+  },
+
   /**
    * Reordering is a mode rather than a permanent grip on every card.
    *
@@ -2804,9 +2842,11 @@ Alpine.data('trainPage', () => ({
   // curious tap can't accidentally begin a workout.
   builder: null,
 
-  newRoutine() { this.builder = { routine: null, name: '', mode: 'edit' }; },
+  newRoutine() { this.builder = { routine: null, name: '', category: '', mode: 'edit' }; },
 
-  openRoutine(routine) { this.builder = { routine, name: routine.name, mode: 'view' }; },
+  openRoutine(routine) {
+    this.builder = { routine, name: routine.name, category: routine.category ?? '', mode: 'view' };
+  },
 
   toEdit() { this.builder.mode = 'edit'; },
 
@@ -2868,7 +2908,8 @@ Alpine.data('trainPage', () => ({
     if (!name) return;
 
     const routine = await workout.upsertRoutine(
-      { id: this.builder.routine?.id, name }, this.email, this.data.routines,
+      { id: this.builder.routine?.id, name, category: this.builder.category },
+      this.email, this.data.routines,
     );
     this.builder.routine = routine;
     await Alpine.store('data').refreshTraining();

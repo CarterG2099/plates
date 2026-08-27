@@ -453,6 +453,41 @@ export function routinesFor(routines, ownerEmail) {
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.name.localeCompare(b.name));
 }
 
+/**
+ * Routines grouped into their categories, in display order.
+ *
+ * Category order is the order the categories first appear in the flat list, so
+ * dragging a routine also decides where its category sits — there is no separate
+ * ordering to keep in step, and no second reorder UI to build. Uncategorised
+ * always goes last: it is the leftovers, not a category anyone chose.
+ *
+ * Matching is exact rather than case-insensitive. "Push" and "push" being two
+ * groups is confusing, but silently folding them means a rename you did not ask
+ * for, and the category picker offers the existing spellings precisely so the
+ * question does not come up.
+ */
+export function groupRoutinesByCategory(routines, ownerEmail) {
+  const groups = new Map();
+
+  for (const routine of routinesFor(routines, ownerEmail)) {
+    const key = routine.category ?? null;
+    if (!groups.has(key)) groups.set(key, { category: key, routines: [] });
+    groups.get(key).routines.push(routine);
+  }
+
+  const out = [...groups.values()];
+  const loose = out.findIndex((g) => g.category === null);
+  if (loose !== -1) out.push(out.splice(loose, 1)[0]);
+  return out;
+}
+
+/** The categories in use, for offering rather than retyping. */
+export function routineCategories(routines, ownerEmail) {
+  return [...new Set(
+    routinesFor(routines, ownerEmail).map((r) => r.category).filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b));
+}
+
 /** Where a newly created routine goes: the end of the list, not the top. */
 export function nextRoutinePosition(routines, ownerEmail) {
   return routines
@@ -569,7 +604,7 @@ async function writePlan({ routineId, session, sets, ownerEmail }) {
 
 /** Create or rename a routine. Used by the builder; saving from a session uses
  *  saveSessionAsRoutine above. */
-export async function upsertRoutine({ id, name, notes }, ownerEmail, routines = []) {
+export async function upsertRoutine({ id, name, notes, category }, ownerEmail, routines = []) {
   // Renaming has to start from the row on disk. local.save writes exactly what
   // it is handed, so a column left out of the object is a column erased — which
   // is how a rename would drop the routine's place in the list.
@@ -580,6 +615,11 @@ export async function upsertRoutine({ id, name, notes }, ownerEmail, routines = 
     ...(id ? { id } : {}),
     name,
     notes: notes ?? existing?.notes ?? null,
+    // Trimmed, and blank becomes null: "  " and "" and absent all have to mean
+    // uncategorised, or the list grows a group whose heading is whitespace.
+    category: category === undefined
+      ? (existing?.category ?? null)
+      : (String(category).trim() || null),
     position: existing?.position ?? nextRoutinePosition(routines, ownerEmail),
   }, ownerEmail);
   sync.nudge();

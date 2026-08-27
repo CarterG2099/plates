@@ -1169,3 +1169,80 @@ test('a run does not become a personal record on load', () => {
   const run = { distance_m: 5000, duration_s: 1500, is_warmup: false, completed_at: 'T' };
   assert.equal(workout.isRecord(run, null), false);
 });
+
+// ---- routine categories ----------------------------------------------------
+
+const routine = (name, position, category = null, owner = ME) =>
+  ({ id: `r-${name}`, owner_email: owner, name, position, category });
+
+test('routines group into categories, uncategorised last', () => {
+  const rows = [
+    routine('Pull A', 0, 'Upper'),
+    routine('Legs', 1, 'Lower'),
+    routine('Odd one', 2),
+    routine('Push A', 3, 'Upper'),
+  ];
+  const groups = workout.groupRoutinesByCategory(rows, ME);
+
+  assert.deepEqual(groups.map((g) => g.category), ['Upper', 'Lower', null]);
+  assert.deepEqual(groups[0].routines.map((r) => r.name), ['Pull A', 'Push A']);
+  assert.deepEqual(groups[2].routines.map((r) => r.name), ['Odd one']);
+});
+
+test('category order follows where the routines sit, not the alphabet', () => {
+  // Zebra's routine comes first in the list, so Zebra is the first group.
+  const rows = [routine('One', 0, 'Zebra'), routine('Two', 1, 'Apple')];
+  assert.deepEqual(
+    workout.groupRoutinesByCategory(rows, ME).map((g) => g.category), ['Zebra', 'Apple']);
+});
+
+test('grouping keeps other people and deleted routines out', () => {
+  const rows = [
+    routine('Mine', 0, 'Upper'),
+    routine('Hers', 1, 'Upper', AANA),
+    { ...routine('Gone', 2, 'Upper'), deleted_at: new Date().toISOString() },
+  ];
+  const groups = workout.groupRoutinesByCategory(rows, ME);
+  assert.equal(groups.length, 1);
+  assert.deepEqual(groups[0].routines.map((r) => r.name), ['Mine']);
+});
+
+test('grouping an empty list is an empty list, not one null group', () => {
+  assert.deepEqual(workout.groupRoutinesByCategory([], ME), []);
+});
+
+test('uncategorised alone does not get a heading it cannot use', () => {
+  const groups = workout.groupRoutinesByCategory([routine('Solo', 0)], ME);
+  assert.deepEqual(groups.map((g) => g.category), [null]);
+});
+
+test('routineCategories offers each spelling once, alphabetically', () => {
+  const rows = [
+    routine('a', 0, 'Upper'), routine('b', 1, 'Lower'),
+    routine('c', 2, 'Upper'), routine('d', 3), routine('e', 4, 'Cardio'),
+  ];
+  assert.deepEqual(workout.routineCategories(rows, ME), ['Cardio', 'Lower', 'Upper']);
+});
+
+test('a blank category is stored as uncategorised, not as whitespace', async () => {
+  const saved = await workout.upsertRoutine({ name: 'Push A', category: '   ' }, ME, []);
+  assert.equal(saved.category, null);
+
+  const named = await workout.upsertRoutine({ name: 'Pull A', category: '  Upper ' }, ME, []);
+  assert.equal(named.category, 'Upper', 'trimmed');
+});
+
+test('renaming a routine does not erase the category it already had', async () => {
+  const first = await workout.upsertRoutine({ name: 'Legs', category: 'Lower' }, ME, []);
+  // The builder saves name and notes; category is simply absent from the call.
+  const renamed = await workout.upsertRoutine({ id: first.id, name: 'Leg day' }, ME, []);
+
+  assert.equal(renamed.name, 'Leg day');
+  assert.equal(renamed.category, 'Lower', 'absent must mean unchanged, not cleared');
+});
+
+test('a category can be cleared on purpose', async () => {
+  const first = await workout.upsertRoutine({ name: 'Legs', category: 'Lower' }, ME, []);
+  const cleared = await workout.upsertRoutine({ id: first.id, name: 'Legs', category: '' }, ME, []);
+  assert.equal(cleared.category, null);
+});

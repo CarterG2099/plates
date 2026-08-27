@@ -955,36 +955,58 @@
                 </template>
               </div>
 
-              <div class="routine-grid" x-show="routines.length && !reordering">
-                <template x-for="r in routines" :key="r.id">
-                  <button class="routine-card" @click="openRoutine(r)" x-data="{ c: routineCard(r) }">
-                    <div class="routine-top">
-                      <div style="min-width:0">
-                        <div class="routine-name" x-text="r.name"></div>
-                        <div class="routine-meta">
-                          <span x-text="`${c.exercises} exercises`"></span>
-                          <span x-show="c.lastLabel"> · <span x-text="c.lastLabel"></span></span>
-                        </div>
-                      </div>
-                      <span class="tap">›</span>
-                    </div>
-
-                    <!-- What the routine works, as a share of its exercises. -->
-                    <div class="coverage" x-show="c.bars.length">
-                      <template x-for="b in c.bars" :key="b.family">
-                        <i :style="`background:${b.colour}; width:${b.width}%`"></i>
-                      </template>
-                      <span x-text="c.label"></span>
-                    </div>
-
-                    <div class="routine-stats" x-show="c.count">
-                      <span><b x-text="c.count"></b> done</span>
-                      <span x-show="c.volumeLabel"><b x-text="c.volumeLabel"></b> avg</span>
-                      <span x-show="c.avgMinutes"><b x-text="c.avgMinutes"></b> min</span>
-                    </div>
+              <!-- One block per category, each foldable. A single uncategorised
+                   group gets no heading at all: there is nothing to fold it away
+                   from, and a lone "Uncategorised" bar is just noise. -->
+              <template x-for="g in routineGroups" :key="g.category ?? '\u0000none'">
+                <div class="routine-group" x-show="!reordering">
+                  <button class="group-head" x-show="g.category || routineGroups.length > 1"
+                          @click="toggleCategory(g.category)"
+                          :aria-expanded="!isCollapsed(g.category)">
+                    <span class="group-caret" :class="{ 'is-shut': isCollapsed(g.category) }"
+                          aria-hidden="true">
+                      <svg viewBox="0 0 12 12" fill="none">
+                        <path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor"
+                              stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </span>
+                    <b x-text="g.category ?? 'Uncategorised'"></b>
+                    <small x-text="$store.ui.count(g.routines.length, 'routine')"></small>
                   </button>
-                </template>
-              </div>
+
+                  <div class="routine-grid" x-show="!isCollapsed(g.category)" x-cloak>
+                    <template x-for="r in g.routines" :key="r.id">
+                      <button class="routine-card" @click="openRoutine(r)" x-data="{ c: routineCard(r) }">
+                        <div class="routine-top">
+                          <div style="min-width:0">
+                            <div class="routine-name" x-text="r.name"></div>
+                            <div class="routine-meta">
+                              <span x-text="`${c.exercises} exercises`"></span>
+                              <span x-show="c.lastLabel"> · <span x-text="c.lastLabel"></span></span>
+                            </div>
+                          </div>
+                          <span class="tap">›</span>
+                        </div>
+
+                        <!-- What the routine works, as a share of its exercises. -->
+                        <div class="coverage" x-show="c.bars.length">
+                          <template x-for="b in c.bars" :key="b.family">
+                            <i :style="`background:${b.colour}; width:${b.width}%`"></i>
+                          </template>
+                          <span x-text="c.label"></span>
+                        </div>
+
+                        <div class="routine-stats" x-show="c.count">
+                          <span><b x-text="c.count"></b> done</span>
+                          <span x-show="c.volumeLabel"><b x-text="c.volumeLabel"></b> avg</span>
+                          <span x-show="c.avgMinutes"><b x-text="c.avgMinutes"></b> min</span>
+                        </div>
+                      </button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
               <p class="empty" x-show="!routines.length">
                 No routines yet. Start a workout and save it as one at the end.
               </p>
@@ -1422,6 +1444,23 @@
                 <label for="rt-name">Name</label>
                 <input id="rt-name" type="text" x-model="builder.name" placeholder="Push A"
                        autocomplete="off" @change="saveRoutineName()">
+              </div>
+
+              <!-- Free text, because the categories you want are not knowable in
+                   advance. The chips exist so an existing one is a tap rather
+                   than a retype — "Upper" and "upper" grouping separately is
+                   correct behaviour and still not what anyone wants to see. -->
+              <div class="field">
+                <label for="rt-cat">Category <small>optional</small></label>
+                <input id="rt-cat" type="text" x-model="builder.category" placeholder="Upper"
+                       autocomplete="off" @change="saveRoutineName()">
+                <div class="chips" x-show="knownCategories.length" x-cloak>
+                  <template x-for="c in knownCategories" :key="c">
+                    <button class="chip" :class="builder.category === c && 'is-active'"
+                            @click="builder.category = builder.category === c ? '' : c;
+                                    saveRoutineName()" x-text="c"></button>
+                  </template>
+                </div>
               </div>
 
               <template x-if="builder.routine">
