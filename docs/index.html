@@ -381,7 +381,7 @@
         <!-- Says which filter is on, so a tap that changes the set but not the
              rows on screen still visibly does something. -->
         <div class="section-head" x-show="filter !== 'recipes'">
-          <span x-text="filter === 'mine' ? 'My foods' : filter === 'recent' ? 'Recent foods' : 'Foods'"></span>
+          <span x-text="filter === 'mine' ? 'Foods I made' : filter === 'recent' ? 'Recent foods' : 'Foods'"></span>
           <span x-text="`${results.length} shown`"></span>
         </div>
 
@@ -434,7 +434,11 @@
         </div>
 
         <template x-if="!results.length && !term && filter !== 'recipes'">
-          <p class="empty">No foods yet — add the first one.</p>
+          <p class="empty">
+            <span x-show="filter === 'mine'">Nothing you've made yet. Foods you log from a search stay in the main list — this is for ones you add by hand.</span>
+            <span x-show="filter === 'recent'">Nothing logged yet.</span>
+            <span x-show="!filter">No foods yet — add the first one.</span>
+          </p>
         </template>
 
         <!-- Recipes from Mom's Kitchen. One serving of each is a food; the ones

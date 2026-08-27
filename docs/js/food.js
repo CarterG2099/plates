@@ -595,6 +595,20 @@ export function amountLabel(quantity, unit) {
   return `${n} ${plural}`;
 }
 
+/**
+ * A food you made, as opposed to one you merely logged.
+ *
+ * Every lookup hit becomes a `foods` row on the way to being logged — that is
+ * what lets it rank by frecency next time — so owner_email marks everything and
+ * says nothing about authorship. `source` does: it is 'manual' only for a food
+ * typed in by hand, and the source's name for anything that arrived from USDA,
+ * Open Food Facts, a label photo or a recipe. A row with no source predates the
+ * column and was typed in, so it counts as made.
+ */
+export function isCreated(food) {
+  return (food?.source ?? 'manual') === 'manual';
+}
+
 // ---- writes ----------------------------------------------------------------
 
 /**

@@ -1149,7 +1149,9 @@ Alpine.data('logPage', () => ({
       list = list.filter((f) => f.lastLoggedAt)
         .sort((a, b) => (a.lastLoggedAt < b.lastLoggedAt ? 1 : -1));
     } else if (this.filter === 'mine') {
-      list = list.filter((f) => f.owner_email === this.email);
+      // Made by you, not merely logged by you. Owner alone matched everything,
+      // because logging a lookup hit writes it as a food — see food.isCreated.
+      list = list.filter((f) => f.owner_email === this.email && food.isCreated(f));
     }
     return list.slice(0, 60);
   },

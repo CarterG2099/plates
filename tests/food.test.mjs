@@ -571,3 +571,21 @@ test('the slider means the same thing on every food', () => {
   assert.deepEqual(food.LENS_MAX, { serving: 10, measure: 500, imperial: 20, kcal: 1500 });
   assert.deepEqual(food.LENS_STEP, { serving: 0.25, measure: 5, imperial: 0.25, kcal: 10 });
 });
+
+// ---- made vs logged -----------------------------------------------------------
+// Every lookup hit is written as a food when it is logged, so owner_email marks
+// all of them. "My foods" meant the whole list until this drew the line.
+
+test('isCreated is true only for a food typed in by hand', () => {
+  assert.equal(food.isCreated({ source: 'manual' }), true);
+  assert.equal(food.isCreated({ source: 'usda' }), false);
+  assert.equal(food.isCreated({ source: 'off' }), false);
+  assert.equal(food.isCreated({ source: 'label_photo' }), false);
+  assert.equal(food.isCreated({ source: 'recipe' }), false);
+});
+
+test('isCreated treats a food with no source as made, since it predates the column', () => {
+  assert.equal(food.isCreated({}), true);
+  assert.equal(food.isCreated({ source: null }), true);
+  assert.equal(food.isCreated(null), true);
+});
