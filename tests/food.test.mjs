@@ -153,9 +153,113 @@ test('scaleMacros scales from the stored basis', () => {
 
 test('scaleMacros is identity for one serving of a per-serving food', () => {
   const perServing = { serving_qty: 1, calories: 120, protein_g: 25, carbs_g: 3, fat_g: 1.5, fiber_g: 0, sodium_mg: 60 };
-  assert.deepEqual(food.scaleMacros(perServing, 1), {
-    calories: 120, protein_g: 25, carbs_g: 3, fat_g: 1.5, fiber_g: 0, sodium_mg: 60,
-  });
+  const scaled = food.scaleMacros(perServing, 1);
+
+  // Field by field rather than deep-equal on the whole shape, which would break
+  // every time a nutrient joins MACROS without saying anything about scaling.
+  for (const [key, value] of Object.entries(perServing)) {
+    if (key === 'serving_qty') continue;
+    assert.equal(scaled[key], value, key);
+  }
+
+  // And what the food never carried stays unknown rather than becoming zero.
+  assert.equal(scaled.saturated_fat_g, null);
+  assert.equal(scaled.calcium_mg, null);
+});
+
+// ---- the nutrition label ----------------------------------------------------
+
+const LABELLED = {
+  calories: 150, fat_g: 5, saturated_fat_g: 3, trans_fat_g: 0, cholesterol_mg: 15,
+  sodium_mg: 60, carbs_g: 8, fiber_g: 0, sugars_g: 6, added_sugars_g: 0,
+  protein_g: 15, vitamin_d_mcg: 0, calcium_mg: 200, iron_mg: 0, potassium_mg: 240,
+};
+
+const row = (label, key) => [...label.rows, ...label.micros].find((r) => r.key === key);
+
+test('the label prints in the order a label prints', () => {
+  const label = food.nutritionLabel(LABELLED);
+  assert.deepEqual(label.rows.map((r) => r.key), [
+    'fat_g', 'saturated_fat_g', 'trans_fat_g', 'cholesterol_mg', 'sodium_mg',
+    'carbs_g', 'fiber_g', 'sugars_g', 'added_sugars_g', 'protein_g',
+  ]);
+  assert.deepEqual(label.micros.map((r) => r.key),
+    ['vitamin_d_mcg', 'calcium_mg', 'iron_mg', 'potassium_mg']);
+});
+
+test('percentages are of the FDA daily value, and rounded', () => {
+  const label = food.nutritionLabel(LABELLED);
+  assert.equal(row(label, 'fat_g').percent, 6, '5 of 78 g');
+  assert.equal(row(label, 'saturated_fat_g').percent, 15, '3 of 20 g');
+  assert.equal(row(label, 'sodium_mg').percent, 3, '60 of 2300 mg');
+  assert.equal(row(label, 'calcium_mg').percent, 15, '200 of 1300 mg');
+});
+
+test('the two rows with no established daily value show no percentage', () => {
+  const label = food.nutritionLabel(LABELLED);
+  assert.equal(row(label, 'trans_fat_g').percent, null);
+  assert.equal(row(label, 'sugars_g').percent, null, 'total sugars has no DV; added sugars does');
+  assert.equal(row(label, 'added_sugars_g').percent, 0);
+  assert.equal(row(label, 'protein_g').percent, null, 'a label leaves protein blank');
+});
+
+test('unknown is blank and zero is zero, and they are not the same', () => {
+  const label = food.nutritionLabel({ calories: 100, fat_g: 0, saturated_fat_g: null });
+
+  const zero = row(label, 'fat_g');
+  assert.equal(zero.value, 0);
+  assert.equal(zero.amount, '0g', 'a food with no fat says so');
+  assert.equal(zero.percent, 0);
+
+  const unknown = row(label, 'saturated_fat_g');
+  assert.equal(unknown.value, null);
+  assert.equal(unknown.amount, null, 'a product that never reported it stays blank');
+  assert.equal(unknown.percent, null, 'and gets no percentage of nothing');
+});
+
+test('a food carrying only the old six has no detail worth a panel', () => {
+  const plain = { calories: 150, protein_g: 15, carbs_g: 8, fat_g: 5, fiber_g: 0, sodium_mg: 60 };
+  assert.equal(food.nutritionLabel(plain).hasDetail, false);
+  assert.equal(food.nutritionLabel(LABELLED).hasDetail, true);
+
+  // One extra nutrient is enough to be worth showing.
+  assert.equal(food.nutritionLabel({ ...plain, sugars_g: 6 }).hasDetail, true);
+});
+
+test('the label survives a food with nothing on it at all', () => {
+  const label = food.nutritionLabel({});
+  assert.equal(label.calories, null);
+  assert.equal(label.hasDetail, false);
+  assert.equal(label.rows.every((r) => r.amount === null), true);
+
+  assert.equal(food.nutritionLabel(null).calories, null, 'and no food at all');
+});
+
+test('the label scales with the amount, because it reads a scaled snapshot', () => {
+  // nutritionLabel takes macros, not a food — so two servings is the same call
+  // on the output of scaleMacros, and the percentages double with it.
+  const two = food.scaleMacros({ serving_qty: 1, ...LABELLED }, 2);
+  const label = food.nutritionLabel(two);
+
+  assert.equal(label.calories, 300);
+  assert.equal(row(label, 'saturated_fat_g').amount, '6g');
+  assert.equal(row(label, 'saturated_fat_g').percent, 30);
+});
+
+test('MACROS is the list, and the label is drawn from it', () => {
+  // Pinned deliberately: every key here needs a column on plates.foods *and*
+  // plates.food_log, or the first push jams the outbox on an unknown column.
+  assert.deepEqual(food.MACROS, [
+    'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg',
+    'saturated_fat_g', 'trans_fat_g', 'cholesterol_mg',
+    'sugars_g', 'added_sugars_g',
+    'vitamin_d_mcg', 'calcium_mg', 'iron_mg', 'potassium_mg',
+  ]);
+
+  const printed = [...food.LABEL_ROWS, ...food.LABEL_MICROS].map((r) => r.key);
+  for (const key of printed) {
+    assert.ok(food.MACROS.includes(key), `${key} is printed but never stored`);
+  }
 });
 
 test('scaleMacros keeps nulls null rather than turning them into zero', () => {

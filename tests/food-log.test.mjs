@@ -91,9 +91,14 @@ const ENTRY = {
 };
 
 test('an edited amount rescales the entry proportionally', () => {
-  assert.deepEqual(food.scaleEntry(ENTRY, 2), {
-    calories: 300, protein_g: 24, carbs_g: 48, fat_g: 5, fiber_g: 6, sodium_mg: 380,
-  });
+  const doubled = food.scaleEntry(ENTRY, 2);
+  for (const [key, value] of Object.entries(
+    { calories: 300, protein_g: 24, carbs_g: 48, fat_g: 5, fiber_g: 6, sodium_mg: 380 })) {
+    assert.equal(doubled[key], value, key);
+  }
+  // The entry never carried these, so doubling it does not invent them.
+  assert.equal(doubled.sugars_g, null);
+
   assert.equal(food.scaleEntry(ENTRY, 0.5).calories, 75);
   assert.equal(food.scaleEntry(ENTRY, 1).calories, 150, 'no change is a no-op');
 });

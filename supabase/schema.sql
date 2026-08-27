@@ -101,6 +101,18 @@ create table if not exists plates.foods (
   fat_g         numeric,
   fiber_g       numeric,
   sodium_mg     numeric,
+  -- The rest of a nutrition label. Nullable because a product that never
+  -- published its potassium has unknown potassium, which is not zero and has
+  -- to print as a blank.
+  saturated_fat_g numeric,
+  trans_fat_g     numeric,
+  cholesterol_mg  numeric,
+  sugars_g        numeric,
+  added_sugars_g  numeric,
+  vitamin_d_mcg   numeric,
+  calcium_mg      numeric,
+  iron_mg         numeric,
+  potassium_mg    numeric,
   source        text check (source in ('off','usda','fatsecret','manual','label_photo')),
   updated_at    timestamptz not null default now(),
   deleted_at    timestamptz
@@ -125,6 +137,18 @@ create table if not exists plates.food_log (
   fat_g        numeric,
   fiber_g      numeric,
   sodium_mg    numeric,
+  -- The rest of a nutrition label. Nullable because a product that never
+  -- published its potassium has unknown potassium, which is not zero and has
+  -- to print as a blank.
+  saturated_fat_g numeric,
+  trans_fat_g     numeric,
+  cholesterol_mg  numeric,
+  sugars_g        numeric,
+  added_sugars_g  numeric,
+  vitamin_d_mcg   numeric,
+  calcium_mg      numeric,
+  iron_mg         numeric,
+  potassium_mg    numeric,
   updated_at   timestamptz not null default now(),
   deleted_at   timestamptz
 );

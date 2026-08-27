@@ -190,15 +190,26 @@ plates.foods
   id, owner_email (null = shared barcode cache), barcode, name, brand,
   serving_qty, serving_unit,
   calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,   -- per serving
+  saturated_fat_g, trans_fat_g, cholesterol_mg,              -- the rest of a
+  sugars_g, added_sugars_g,                                  -- nutrition label
+  vitamin_d_mcg, calcium_mg, iron_mg, potassium_mg,
   source text  -- 'off' | 'usda' | 'manual' | 'label_photo'
 
 plates.food_log
-  id, owner_email, logged_at, meal_slot,
+  id, owner_email, logged_at, meal_slot null,   -- slot no longer written
   food_id    uuid   null,   -- provenance only
   recipe_id  bigint null,   -- provenance only
   description text not null,
   quantity, unit,
-  calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg    -- SNAPSHOT
+  calories, protein_g, carbs_g, fat_g, fiber_g, sodium_mg,   -- SNAPSHOT
+  saturated_fat_g, trans_fat_g, cholesterol_mg,              -- also snapshot:
+  sugars_g, added_sugars_g,                                  -- food.MACROS is
+  vitamin_d_mcg, calcium_mg, iron_mg, potassium_mg           -- one list
+
+The nutrient columns are one list — `food.MACROS` — and both tables carry all of
+it. Adding a nutrient there without a column on *both* jams the outbox on the
+first push, since PostgREST rejects the whole batch on a column it has never
+heard of.
 
 plates.weight_log
   id, owner_email, measured_at, weight_lb, note

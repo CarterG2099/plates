@@ -491,6 +491,104 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 .qty-slider:active::-webkit-slider-thumb { cursor: grabbing; }
 
+/* ---- nutrition label ------------------------------------------------------ */
+
+/* Deliberately the FDA panel's typography rather than this app's: the rules,
+   the weights and the hanging percentages are what make it recognisable as a
+   label at a glance. It is quoting a thing that exists, so it should look like
+   the thing. Dark, because everything else here is. */
+.nutrition {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+.nf-title {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+}
+
+.nf-serving {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  /* The thick rule under the serving is the label's own signature. */
+  border-bottom: 8px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.nf-calories {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  border-bottom: 4px solid var(--color-border);
+  font-weight: 800;
+}
+
+.nf-calories b {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+}
+
+.nf-dv {
+  text-align: right;
+  font-weight: 700;
+  font-size: var(--text-xs);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.nf-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Indent carries the nesting — saturated fat under total fat, added sugars
+   under total sugars — which is how a label shows what is part of what. */
+.nf-in-1 { padding-left: var(--space-4); }
+.nf-in-2 { padding-left: var(--space-8); }
+
+.nf-row.is-major .nf-name > span:first-child { font-weight: 700; }
+
+.nf-name { display: flex; gap: var(--space-2); min-width: 0; }
+
+.nf-amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.nf-pct {
+  flex: none;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* The heavy rule between the macros and the micronutrients. */
+.nf-rule {
+  height: 8px;
+  background: var(--color-border);
+  margin: var(--space-2) 0;
+}
+
+.nf-note {
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  padding-top: var(--space-2);
+}
+
 .qty-amount { flex: 1; text-align: center; }
 
 .qty-amount input {

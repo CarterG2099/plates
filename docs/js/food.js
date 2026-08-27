@@ -9,7 +9,90 @@
 import * as local from './local.js';
 import * as sync from './sync.js';
 
-export const MACROS = ['calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg'];
+/**
+ * Every nutrient carried on a food and frozen onto an entry.
+ *
+ * One list, because it is the seam everything else hangs off: scaleMacros
+ * scales it, sumTotals adds it, emptyTotals shapes it and logFood spreads it
+ * onto the row. Adding a nutrient here gives it all of that — and requires a
+ * matching column on plates.foods *and* plates.food_log, or the outbox jams on
+ * the first push with a column PostgREST has never heard of.
+ *
+ * The first six are what Today shows. The rest exist so a food can print a real
+ * nutrition label, and are null far more often than not.
+ */
+export const MACROS = [
+  'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg',
+  'saturated_fat_g', 'trans_fat_g', 'cholesterol_mg',
+  'sugars_g', 'added_sugars_g',
+  'vitamin_d_mcg', 'calcium_mg', 'iron_mg', 'potassium_mg',
+];
+
+/**
+ * The label itself, in the order a label prints it.
+ *
+ * `indent` is how far under its parent a row sits — saturated fat beneath total
+ * fat, added sugars beneath total sugars. `dv` is the FDA daily value used for
+ * the percentage; the two rows without one (trans fat, total sugars) have no
+ * established value and a label leaves their percentage column blank rather
+ * than inventing one.
+ */
+export const LABEL_ROWS = [
+  { key: 'fat_g',           name: 'Total Fat',          unit: 'g',   dv: 78,   indent: 0, bold: true },
+  { key: 'saturated_fat_g', name: 'Saturated Fat',      unit: 'g',   dv: 20,   indent: 1 },
+  { key: 'trans_fat_g',     name: 'Trans Fat',          unit: 'g',   dv: null, indent: 1 },
+  { key: 'cholesterol_mg',  name: 'Cholesterol',        unit: 'mg',  dv: 300,  indent: 0, bold: true },
+  { key: 'sodium_mg',       name: 'Sodium',             unit: 'mg',  dv: 2300, indent: 0, bold: true },
+  { key: 'carbs_g',         name: 'Total Carbohydrate', unit: 'g',   dv: 275,  indent: 0, bold: true },
+  { key: 'fiber_g',         name: 'Dietary Fiber',      unit: 'g',   dv: 28,   indent: 1 },
+  { key: 'sugars_g',        name: 'Total Sugars',       unit: 'g',   dv: null, indent: 1 },
+  { key: 'added_sugars_g',  name: 'Added Sugars',       unit: 'g',   dv: 50,   indent: 2 },
+  { key: 'protein_g',       name: 'Protein',            unit: 'g',   dv: null, indent: 0, bold: true },
+];
+
+/** Printed below the rule, in their own block, as a label does. */
+export const LABEL_MICROS = [
+  { key: 'vitamin_d_mcg', name: 'Vitamin D', unit: 'mcg', dv: 20 },
+  { key: 'calcium_mg',    name: 'Calcium',   unit: 'mg',  dv: 1300 },
+  { key: 'iron_mg',       name: 'Iron',      unit: 'mg',  dv: 18 },
+  { key: 'potassium_mg',  name: 'Potassium', unit: 'mg',  dv: 4700 },
+];
+
+/**
+ * One label row, ready to print. Null stays null all the way through: a product
+ * that never reported its potassium is blank on the label, which is a different
+ * statement from zero.
+ */
+export function labelRow(row, macros) {
+  const raw = macros?.[row.key];
+  const value = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+  const known = value !== null && Number.isFinite(value);
+
+  return {
+    ...row,
+    value: known ? value : null,
+    amount: known ? `${round(value, 1)}${row.unit}` : null,
+    percent: known && row.dv ? Math.round((value / row.dv) * 100) : null,
+  };
+}
+
+/** The whole panel, for a food or for an entry's frozen snapshot. */
+export function nutritionLabel(macros) {
+  const rows = LABEL_ROWS.map((r) => labelRow(r, macros));
+  const micros = LABEL_MICROS.map((r) => labelRow(r, macros));
+  const calories = Number(macros?.calories);
+
+  return {
+    calories: Number.isFinite(calories) ? Math.round(calories) : null,
+    rows,
+    micros,
+    // Whether there is anything below the six Today already shows. A label with
+    // every extra row blank is a worse thing to show than no label.
+    hasDetail: [...rows, ...micros].some(
+      (r) => r.value !== null && !['calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg'].includes(r.key),
+    ),
+  };
+}
 
 // ---- dates -----------------------------------------------------------------
 

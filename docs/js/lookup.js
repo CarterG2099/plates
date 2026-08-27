@@ -138,6 +138,21 @@ function toDraft(product, code) {
     fat_g: basis.read('fat'),
     fiber_g: basis.read('fiber'),
     sodium_mg: sodiumMg(basis),
+
+    // The rest of the label. Blank far more often than not — OFF has whatever
+    // the manufacturer published, and most publish the top six and stop.
+    saturated_fat_g: basis.read('saturated-fat'),
+    trans_fat_g: basis.read('trans-fat'),
+    sugars_g: basis.read('sugars'),
+    added_sugars_g: basis.read('added-sugars'),
+
+    // Grams on the wire, smaller units on the label. Converted before rounding,
+    // for the reason sodiumMg spells out.
+    cholesterol_mg: converted(basis, 'cholesterol', 1000),
+    calcium_mg: converted(basis, 'calcium', 1000),
+    iron_mg: converted(basis, 'iron', 1000, 1),
+    potassium_mg: converted(basis, 'potassium', 1000),
+    vitamin_d_mcg: converted(basis, 'vitamin-d', 1e6, 1),
     basis: basis.label,
     // Exactly what OFF sent for the serving fields. Shown in the review form
     // because three attempts at this have been made against assumed response
@@ -238,6 +253,22 @@ function num(value) {
 function kjToKcal(kj) {
   const n = num(kj);
   return n == null ? null : Math.round(n / 4.184);
+}
+
+/**
+ * A nutrient OFF publishes in grams, stored in a smaller unit.
+ *
+ * basis.raw, not basis.read, for the reason sodiumMg gives directly below: read
+ * rounds to one decimal while the number is still in grams, and every one of
+ * these is a fraction of a gram. Iron at 0.0018 g would round to 0.0 and report
+ * nothing rather than 1.8 mg. Convert first, round after.
+ */
+function converted(basis, key, factor, dp = 0) {
+  const v = Number(basis.raw(key));
+  if (!Number.isFinite(v)) return null;
+
+  const f = 10 ** dp;
+  return Math.round(v * factor * f) / f;
 }
 
 /**

@@ -875,6 +875,16 @@ Alpine.data('todayPage', () => ({
     return lenses;
   },
 
+  /** From the entry's own snapshot, so it is a label for what you ate. */
+  labelOpen: false,
+
+  get editLabel() { return food.nutritionLabel(this.editMacros); },
+
+  get editServingLabel() {
+    if (!this.edit) return '';
+    return food.amountLabel(this.editQuantity, this.edit.entry.unit);
+  },
+
   editMax() { return food.LENS_MAX[this.edit?.lens] ?? 100; },
   editStepSize() { return food.LENS_STEP[this.edit?.lens] ?? 1; },
 
@@ -1293,6 +1303,17 @@ Alpine.data('logPage', () => ({
     const quantity = this.sheetQuantity;
     this.sheet.lens = lens;
     this.sheet.amount = food.fromQuantity(this.sheet.food, quantity, lens);
+  },
+
+  /** The panel, for the amount currently chosen rather than for one serving. */
+  labelOpen: false,
+
+  get sheetLabel() { return food.nutritionLabel(this.sheetMacros); },
+
+  /** What the panel is a label *for* — the amount, spelled the food's own way. */
+  get sheetServingLabel() {
+    if (!this.sheet) return '';
+    return food.amountLabel(this.sheetQuantity, this.sheet.unit);
   },
 
   sheetMax() { return food.LENS_MAX[this.sheet?.lens] ?? 100; },
