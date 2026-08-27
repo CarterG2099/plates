@@ -227,3 +227,39 @@ test('a Hevy name still matches once the weight form moves into brackets', async
       `the imported set should land on "${libraryName}"`);
   }
 });
+
+/**
+ * The other half of the matcher, and the half that was actually broken.
+ *
+ * The old key deleted anything in brackets, so "Bench Press (Barbell)" and
+ * "Bench Press (Dumbbell)" reduced to the same string and the import filed both
+ * onto whichever row it happened to see first. 122 dumbbell sets ended up on the
+ * barbell bench press, and 26 groups in the library collapsed the same way.
+ */
+test('exercises that differ only by equipment are kept apart', async () => {
+  const variants = [
+    ['Bench Press (Barbell)', 'Bench Press (Dumbbell)'],
+    ['Row (Dumbbell)', 'Row (T Bar)'],
+    ['Squat (Barbell)', 'Squat (Smith Machine)'],
+    ['Hip Adduction (Cable)', 'Hip Adduction (Machine)'],
+    ['Triceps Pushdown', 'Triceps Pushdown (Rope)'],
+  ];
+
+  const header = 'title,start_time,end_time,exercise_title,set_index,weight_lbs,reps,set_type';
+
+  for (const [a, b] of variants) {
+    const existing = [{ id: `id-${a}`, name: a }, { id: `id-${b}`, name: b }];
+    const csv = [
+      header,
+      `"Session","12 Jan 2026, 07:30","12 Jan 2026, 08:15","${a}",0,100,5,normal`,
+      `"Session","12 Jan 2026, 07:30","12 Jan 2026, 08:15","${b}",1,50,5,normal`,
+    ].join('\n');
+
+    const { summary, sets } = await runImport(csv, existing);
+
+    assert.equal(summary.exercises, 0, `both "${a}" and "${b}" already exist`);
+    const landed = sets.filter((s) => s.weight_lb === 100 || s.weight_lb === 50);
+    assert.ok(landed.some((s) => s.exercise_id === `id-${a}`), `a set should land on "${a}"`);
+    assert.ok(landed.some((s) => s.exercise_id === `id-${b}`), `a set should land on "${b}"`);
+  }
+});

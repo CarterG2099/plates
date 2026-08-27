@@ -66,22 +66,28 @@ export function parseHevyDate(value) {
 }
 
 /**
- * Equipment words, dropped wherever they appear rather than only inside brackets.
+ * A name reduced to its words, sorted.
  *
- * Stripping just the bracketed copy was enough while the library named things the
- * way Hevy exports them. It stopped being enough once the library moved the
- * weight form into brackets: Hevy exports "Cable Crunch", the library now stores
- * "Crunch (Cable)", and those normalise to "cablecrunch" and "crunch" — no match.
- * A re-import then created a second exercise and split the history across both.
- * Seven rows arrived that way before this was caught.
+ * Hevy and this library spell the same exercise differently — Hevy exports
+ * "Cable Crunch", the library stores "Crunch (Cable)" — so the key has to ignore
+ * word order and punctuation. Sorting the words does that.
+ *
+ * What it must NOT do is throw the equipment away. The previous version deleted
+ * anything in brackets, which made "Bench Press (Barbell)" and "Bench Press
+ * (Dumbbell)" the same key; the import then filed both onto whichever row it saw
+ * first, and 122 dumbbell sets ended up on the barbell bench press. Twenty-six
+ * groups in the library collapsed that way. Keeping the equipment as part of the
+ * key is the whole fix — checked against the live library, all 188 names produce
+ * 188 distinct keys.
  */
-const EQUIPMENT = /\b(barbell|dumbbell|kettlebell|cable|machine|smith|band|bands|rope|ez ?bar|t ?bar|plate|plates|weighted|bodyweight|body only)\b/g;
-
 const normalise = (s) => (s ?? '')
   .toLowerCase()
-  .replace(/\([^)]*\)/g, ' ')   // "Lat Pulldown (Cable)" and "Lat Pulldown" are one exercise
-  .replace(EQUIPMENT, ' ')
-  .replace(/[^a-z0-9]/g, '');
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim()
+  .split(' ')
+  .filter(Boolean)
+  .sort()
+  .join(' ');
 
 const num = (v) => {
   const n = Number(v);
