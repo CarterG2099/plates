@@ -463,3 +463,129 @@ test('searchCombos ranks meals by how well the name matches', () => {
   assert.deepEqual(food.searchCombos(mine, 'zzz'), []);
   assert.equal(food.searchCombos(mine, '').length, 2);
 });
+
+// ---- ways of saying how much -----------------------------------------------
+//
+// Four lenses onto one stored number. The property that matters is the round
+// trip: whichever one you type in, what lands in the log is a quantity in the
+// food's own unit, and reading it back through the same lens gives you what you
+// typed. Anything else and switching chips would walk the amount.
+
+const YOGHURT = {                       // logged in servings, one serving = 170 g
+  serving_unit: 'serving', serving_qty: 1,
+  serving_size: 170, serving_size_unit: 'g',
+  calories: 150, protein_g: 15,
+};
+
+const RICE = {                          // logged by weight, macros per 100 g
+  serving_unit: 'g', serving_qty: 100,
+  serving_size: null, serving_size_unit: null,
+  calories: 130, protein_g: 2.7,
+};
+
+const SODA = {                          // a volume, so millilitres and fl oz
+  serving_unit: 'serving', serving_qty: 1,
+  serving_size: 355, serving_size_unit: 'ml',
+  calories: 140,
+};
+
+test('a food logged in servings can be seen four ways', () => {
+  assert.deepEqual(food.lensesFor(YOGHURT).map((l) => l.key),
+    ['serving', 'measure', 'imperial', 'kcal']);
+  assert.deepEqual(food.lensesFor(YOGHURT).map((l) => l.label),
+    ['Servings', 'g', 'oz', 'kcal']);
+});
+
+test('a volume offers millilitres and fluid ounces, not grams', () => {
+  assert.deepEqual(food.lensesFor(SODA).map((l) => l.label), ['Servings', 'ml', 'fl oz', 'kcal']);
+});
+
+test('a food logged by weight is already its own measure', () => {
+  // No serving size on record, and it does not need one: grams are the unit.
+  const keys = food.lensesFor(RICE).map((l) => l.key);
+  assert.deepEqual(keys, ['measure', 'imperial', 'kcal']);
+  assert.equal(keys.includes('serving'), false, 'nothing says what a serving of it is');
+});
+
+test('one serving reads the same amount through every lens', () => {
+  assert.equal(food.fromQuantity(YOGHURT, 1, 'serving'), 1);
+  assert.equal(food.fromQuantity(YOGHURT, 1, 'measure'), 170);
+  assert.equal(food.fromQuantity(YOGHURT, 1, 'imperial'), 6);      // 170 g ≈ 5.996 oz
+  assert.equal(food.fromQuantity(YOGHURT, 1, 'kcal'), 150);
+});
+
+test('every lens round-trips back to the quantity that gets stored', () => {
+  // Quantities in each food's own unit, so these are amounts someone eats:
+  // servings for the yoghurt and the can, grams for the rice.
+  for (const [item, lenses, amounts] of [
+    [YOGHURT, ['serving', 'measure', 'imperial', 'kcal'], [0.5, 1, 2.25, 7]],
+    [RICE, ['measure', 'imperial', 'kcal'], [10, 45, 100, 225]],
+    [SODA, ['serving', 'measure', 'imperial', 'kcal'], [0.5, 1, 2]],
+  ]) {
+    for (const lens of lenses) {
+      for (const quantity of amounts) {
+        const shown = food.fromQuantity(item, quantity, lens);
+        const back = food.toQuantity(item, shown, lens);
+        // Relative, because the trip goes through a rounded display on purpose.
+        assert.ok(Math.abs(back - quantity) / quantity < 0.02,
+          `${lens} walked ${quantity} to ${back} via ${shown}`);
+      }
+    }
+  }
+});
+
+test('tapping through every chip and back comes home to the same amount', () => {
+  // What setSheetLens does on each tap: read the quantity through the lens you
+  // are leaving, write it through the one you are arriving at. Four hops must
+  // not walk the amount, or the number drifts every time you change your mind.
+  const hop = (item, quantity, lens) => food.toQuantity(item, food.fromQuantity(item, quantity, lens), lens);
+
+  for (const [item, order, start] of [
+    [YOGHURT, ['serving', 'measure', 'imperial', 'kcal', 'serving'], 2],
+    [SODA, ['serving', 'imperial', 'measure', 'kcal', 'serving'], 1],
+    [RICE, ['measure', 'imperial', 'kcal', 'measure'], 150],
+  ]) {
+    let quantity = start;
+    for (const lens of order) quantity = hop(item, quantity, lens);
+    assert.ok(Math.abs(quantity - start) / start < 0.02,
+      `${order.join(' -> ')} walked ${start} to ${quantity}`);
+  }
+});
+
+test('a coarse lens cannot describe a fine amount, and does not pretend to', () => {
+  // Half a gram of rice is 0.65 kcal. Shown as a whole number of calories — which
+  // is the right display for every amount anyone eats — it reads 1, and 1 kcal of
+  // rice is 0.77 g. The loss is in the lens, not the arithmetic: switch to a unit
+  // coarser than the amount and the amount is gone.
+  assert.equal(food.fromQuantity(RICE, 0.5, 'kcal'), 1);
+  assert.equal(food.toQuantity(RICE, 1, 'kcal'), 0.77);
+
+  // Which is why the ones people use keep their precision.
+  assert.equal(food.toQuantity(RICE, food.fromQuantity(RICE, 100, 'kcal'), 'kcal'), 100);
+});
+
+test('grams convert to ounces at the real ratio, not a rounded one', () => {
+  assert.equal(food.toQuantity(RICE, 1, 'imperial'), 28.35, 'one ounce of rice, in grams');
+  assert.equal(food.fromQuantity(RICE, 100, 'imperial'), 3.53);
+  assert.equal(food.toQuantity(SODA, 12, 'imperial'), 1,
+    'a twelve fl oz can is one 355 ml serving');
+});
+
+test('calories are a lens like any other, and scale the macros with them', () => {
+  // 300 kcal of yoghurt is two servings, which is 340 g and 30 g of protein.
+  const q = food.toQuantity(YOGHURT, 300, 'kcal');
+  assert.equal(q, 2);
+  assert.equal(food.fromQuantity(YOGHURT, q, 'measure'), 340);
+  assert.equal(food.scaleMacros(YOGHURT, q).protein_g, 30);
+});
+
+test('a food with no calories on it cannot be logged by calories', () => {
+  const unknown = { ...RICE, calories: null };
+  assert.equal(food.lensesFor(unknown).some((l) => l.key === 'kcal'), false);
+  assert.equal(food.toQuantity(unknown, 300, 'kcal'), 0, 'and never divides by nothing');
+});
+
+test('the slider means the same thing on every food', () => {
+  assert.deepEqual(food.LENS_MAX, { serving: 10, measure: 500, imperial: 20, kcal: 1500 });
+  assert.deepEqual(food.LENS_STEP, { serving: 0.25, measure: 5, imperial: 0.25, kcal: 10 });
+});

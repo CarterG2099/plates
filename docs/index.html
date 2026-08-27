@@ -758,16 +758,35 @@
                 </div>
               </div>
 
-              <div class="qty">
-                <button class="qty-step" @click="step(-10)" aria-label="Decrease">−</button>
-                <label class="qty-amount">
-                  <input type="number" inputmode="decimal" step="any" min="0" x-model.number="sheet.quantity">
-                  <small x-text="sheet.unit === 'serving' && sheet.quantity !== 1 ? 'servings' : sheet.unit"></small>
-                </label>
-                <button class="qty-step" @click="step(10)" aria-label="Increase">+</button>
+              <!-- Four ways of saying the same amount. Whichever is lit, what
+                   gets stored is a quantity in the food's own unit — so the chip
+                   is a spelling, not a second number. -->
+              <div class="chips" x-show="sheetLenses.length > 1">
+                <template x-for="l in sheetLenses" :key="l.key">
+                  <button class="chip" :class="sheet.lens === l.key && 'is-active'"
+                          @click="setSheetLens(l.key)" x-text="l.label"></button>
+                </template>
               </div>
 
+              <div class="qty">
+                <button class="qty-step" @click="step(-1)" aria-label="Decrease">−</button>
+                <label class="qty-amount">
+                  <input type="number" inputmode="decimal" step="any" min="0"
+                         x-model.number="sheet.amount">
+                  <small x-text="sheetUnitLabel"></small>
+                </label>
+                <button class="qty-step" @click="step(1)" aria-label="Increase">+</button>
+              </div>
+
+              <!-- The slider is the fast way and the box is the exact one; both
+                   write the same number. Fixed range per unit, so the travel
+                   means the same thing on every food. -->
+              <input class="qty-slider" type="range" min="0"
+                     :max="sheetMax()" :step="sheetStep()" x-model.number="sheet.amount"
+                     :aria-label="`Amount in ${sheetUnitLabel}`">
+
               <p class="prefill" x-show="sheet.prefilled">↺ Your usual amount</p>
+              <p class="prefill" x-show="sheetStoredLabel" x-text="sheetStoredLabel"></p>
 
               <div class="macros">
                 <template x-for="m in [

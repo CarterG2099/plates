@@ -475,6 +475,117 @@ export function basisLabel(draft) {
   return measure && measure !== 'one serving' ? `one serving = ${measure}` : 'per serving';
 }
 
+// ---- ways of saying how much ------------------------------------------------
+//
+// Four lenses onto one number. Whichever you type in, what gets stored is a
+// quantity in the food's own `serving_unit` — the basis scaleMacros divides by —
+// so the entry does not care which one you used and history stays comparable.
+
+const G_PER_OZ = 28.349523125;
+const ML_PER_FL_OZ = 29.5735295625;
+
+const IMPERIAL_OF = { g: 'oz', ml: 'fl oz' };
+
+/** Fixed, so the slider means the same thing on every food. */
+export const LENS_MAX = { serving: 10, measure: 500, imperial: 20, kcal: 1500 };
+
+/** What one drag-step moves, so a slider lands on a number worth reading. */
+export const LENS_STEP = { serving: 0.25, measure: 5, imperial: 0.25, kcal: 10 };
+
+const per = (food) => Number(food?.serving_qty) || 1;
+
+/** What one serving physically measures, and in what — null when unrecorded. */
+function measure(food) {
+  const size = Number(food?.serving_size) || null;
+  const unit = (food?.serving_size_unit ?? '').trim().toLowerCase();
+  return size && IMPERIAL_OF[unit] ? { size, unit } : null;
+}
+
+/**
+ * Which lenses this food can actually be seen through.
+ *
+ * A food logged in grams already is its own measure, so it needs no serving
+ * size to offer one; a food logged in servings needs one before grams mean
+ * anything. Calories need a calorie figure that is not zero, or the conversion
+ * divides by nothing.
+ */
+export function lensesFor(food) {
+  if (!food) return [];
+
+  const unit = (food.serving_unit ?? '').trim().toLowerCase();
+  const own = IMPERIAL_OF[unit] ? { size: 1, unit } : null;   // already a measure
+  const m = own ?? measure(food);
+
+  const out = [];
+  if (unit === 'serving') out.push({ key: 'serving', label: 'Servings', unit: 'serving' });
+  if (m) {
+    out.push({ key: 'measure', label: m.unit, unit: m.unit });
+    out.push({ key: 'imperial', label: IMPERIAL_OF[m.unit], unit: IMPERIAL_OF[m.unit] });
+  }
+  if (unit !== 'serving' && !m) out.push({ key: 'measure', label: unit || 'amount', unit: unit || '' });
+  if (Number(food.calories) > 0) out.push({ key: 'kcal', label: 'kcal', unit: 'kcal' });
+
+  return out;
+}
+
+/** How many of the food's own units one unit of `lens` is worth. */
+function factorFor(food, lens) {
+  const unit = (food?.serving_unit ?? '').trim().toLowerCase();
+  const m = IMPERIAL_OF[unit] ? { size: 1, unit } : measure(food);
+
+  switch (lens) {
+    case 'serving':  return unit === 'serving' ? 1 : (m ? m.size : null);
+    case 'measure':  return unit === 'serving' ? (m ? 1 / m.size : null) : 1;
+    case 'imperial': {
+      if (!m) return null;
+      const g = m.unit === 'ml' ? ML_PER_FL_OZ : G_PER_OZ;
+      return unit === 'serving' ? g / m.size : g;
+    }
+    default: return null;
+  }
+}
+
+/**
+ * Display rounding that keeps small amounts intact.
+ *
+ * Two decimals is right for the amounts anyone eats and wrong at the bottom of
+ * the scale: half a gram is 0.0176 oz, and 0.02 is a different amount by a
+ * seventh. Below a tenth, two more places.
+ */
+function show(n, dp) {
+  if (!Number.isFinite(n)) return 0;
+  return round(n, n !== 0 && Math.abs(n) < 0.1 ? dp + 2 : dp);
+}
+
+/** The amount to show, given a stored quantity. */
+export function fromQuantity(food, quantity, lens) {
+  const q = Number(quantity) || 0;
+
+  if (lens === 'kcal') {
+    const kcal = Number(food?.calories) || 0;
+    return round(q * (kcal / per(food)), 0);
+  }
+
+  const factor = factorFor(food, lens);
+  if (!factor) return q;
+  return show(q / factor, lens === 'measure' ? 1 : 2);
+}
+
+/** And back again — this is the number that gets stored. */
+export function toQuantity(food, amount, lens) {
+  const a = Number(amount) || 0;
+
+  if (lens === 'kcal') {
+    const kcal = Number(food?.calories) || 0;
+    if (!kcal) return 0;
+    return round((a * per(food)) / kcal, 2);
+  }
+
+  const factor = factorFor(food, lens);
+  if (!factor) return a;
+  return round(a * factor, 2);
+}
+
 export function amountLabel(quantity, unit) {
   const n = Number(quantity) || 0;
   if (unit !== 'serving') return `${n}${unit}`;

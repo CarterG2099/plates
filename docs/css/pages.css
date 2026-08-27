@@ -435,6 +435,59 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   place-items: center;
 }
 
+/* The fast way to an amount, next to the exact one.
+ *
+ * Styled rather than left to the browser because the default thumb is around
+ * 12px, and this is the one control on the screen you drag with a thumb. The
+ * track keeps its own height for contrast; the hit area comes from the padding,
+ * which is why the element is taller than the line it draws. */
+.qty-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: none;
+  padding: var(--space-3) 0;      /* 44px of target around a 4px track */
+  margin: 0;
+  touch-action: none;             /* the drag is the gesture, not a page scroll */
+}
+
+.qty-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+}
+
+.qty-slider::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+}
+
+.qty-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -10px;              /* centred on a 4px track */
+  border-radius: 50%;
+  background: var(--color-primary-hover);
+  border: 2px solid var(--color-surface);
+  box-shadow: var(--shadow-md);
+  cursor: grab;
+}
+
+.qty-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-primary-hover);
+  border: 2px solid var(--color-surface);
+  box-shadow: var(--shadow-md);
+  cursor: grab;
+}
+
+.qty-slider:active::-webkit-slider-thumb { cursor: grabbing; }
+
 .qty-amount { flex: 1; text-align: center; }
 
 .qty-amount input {

@@ -1145,8 +1145,9 @@ Alpine.data('logPage', () => ({
     this.sheet = {
       food: { ...draft },
       pending: { ...draft },
-      quantity: draft.default_qty ?? draft.serving_qty ?? 1,
       unit: draft.serving_unit ?? 'g',
+      lens: food.lensesFor(draft)[0]?.key ?? 'measure',
+      amount: draft.default_qty ?? draft.serving_qty ?? 1,
       prefilled: false,
     };
   },
@@ -1157,8 +1158,10 @@ Alpine.data('logPage', () => ({
       pending: null,
       // What you ate last wins; then the label's serving; then the basis the
       // macros are stored against, which is only a sensible amount by accident.
-      quantity: item.lastQuantity ?? item.default_qty ?? item.serving_qty ?? 1,
       unit: item.lastUnit ?? item.serving_unit ?? 'g',
+      // Opened on the food's own unit, which is the one it was logged in.
+      lens: food.lensesFor(item)[0]?.key ?? 'measure',
+      amount: item.lastQuantity ?? item.default_qty ?? item.serving_qty ?? 1,
       prefilled: item.lastQuantity != null,
     };
   },
@@ -1170,9 +1173,60 @@ Alpine.data('logPage', () => ({
    * ten cans of Fresca. `delta` is a direction, not an amount.
    */
   step(direction) {
-    const size = this.sheet.unit === 'serving' ? 0.5 : 10;
-    const next = Number(this.sheet.quantity) + Math.sign(direction) * size;
-    this.sheet.quantity = Math.max(0, Math.round(next * 10) / 10);
+    const size = food.LENS_STEP[this.sheet.lens] ?? 1;
+    const next = this.sheetAmount + Math.sign(direction) * size;
+    this.sheet.amount = Math.max(0, Math.round(next * 100) / 100);
+  },
+
+  // ---- the four ways of saying how much ------------------------------------
+
+  /** Which chips this food can offer — a weight needs no serving size, and a
+   *  food with no calorie figure cannot be logged by calories. */
+  get sheetLenses() { return this.sheet ? food.lensesFor(this.sheet.food) : []; },
+
+  /**
+   * The number in the box, which is the state.
+   *
+   * Held rather than derived from the quantity, because a box whose value is
+   * recomputed on every keystroke fights the person typing into it: "1." is
+   * Number 1, which renders as "1", which deletes the point they just pressed.
+   * The edit sheet has kept its own amount for the same reason.
+   */
+  get sheetAmount() { return Number(this.sheet?.amount) || 0; },
+
+  /** What the amount comes to in the food's own unit — the only thing stored. */
+  get sheetQuantity() {
+    if (!this.sheet) return 0;
+    return food.toQuantity(this.sheet.food, this.sheetAmount, this.sheet.lens);
+  },
+
+  /**
+   * Switching chips respells the amount, it does not change it. Through the
+   * quantity both ways, so grams → ounces → calories → grams comes home to the
+   * number it started on rather than drifting a little each time.
+   */
+  setSheetLens(lens) {
+    if (!this.sheet || this.sheet.lens === lens) return;
+    const quantity = this.sheetQuantity;
+    this.sheet.lens = lens;
+    this.sheet.amount = food.fromQuantity(this.sheet.food, quantity, lens);
+  },
+
+  sheetMax() { return food.LENS_MAX[this.sheet?.lens] ?? 100; },
+  sheetStep() { return food.LENS_STEP[this.sheet?.lens] ?? 1; },
+
+  /** The unit beside the number, pluralised where that reads better. */
+  get sheetUnitLabel() {
+    const lens = this.sheetLenses.find((l) => l.key === this.sheet?.lens);
+    if (!lens) return '';
+    if (lens.key !== 'serving') return lens.unit;
+    return this.sheetAmount === 1 ? 'serving' : 'servings';
+  },
+
+  /** What actually gets written, whenever that is not what the box says. */
+  get sheetStoredLabel() {
+    if (!this.sheet || this.sheetLenses[0]?.key === this.sheet.lens) return '';
+    return `Logged as ${food.amountLabel(this.sheetQuantity, this.sheet.unit)}`;
   },
 
   get sheetMacros() {
@@ -1180,11 +1234,12 @@ Alpine.data('logPage', () => ({
     // markup after `sheet` is cleared but before the template unmounts, so a
     // null here throws on every macro binding as the sheet closes.
     if (!this.sheet) return {};
-    return food.scaleMacros(this.sheet.food, this.sheet.quantity);
+    return food.scaleMacros(this.sheet.food, this.sheetQuantity);
   },
 
   async confirmSheet() {
-    const { pending, quantity, unit } = this.sheet;
+    const { pending, unit } = this.sheet;
+    const quantity = this.sheetQuantity;
 
     // A food from a lookup is written here, on the way to logging it, rather
     // than in a step of its own beforehand.
