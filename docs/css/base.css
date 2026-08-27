@@ -40,6 +40,15 @@ a { color: var(--color-primary-hover); text-decoration: none; }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 
+/* iOS Safari zooms the page in whenever a focused field's text is smaller than
+   16px, and it does not zoom back out when the field is blurred. The app is left
+   slightly enlarged and pannable, which is why an edge was being clipped and why
+   which edge kept changing — it was wherever the page had last been panned.
+   --text-base is 15.2px, so `font: inherit` above was enough to trigger it on
+   every field in the app. 16px is the threshold, so 16px is the floor. A field
+   that wants to be bigger still can, by its own class. */
+input, select, textarea { font-size: 16px; }
+
 button {
   background: none;
   border: 0;
