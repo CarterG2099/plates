@@ -813,12 +813,77 @@ Alpine.data('todayPage', () => ({
 
   openEdit(entry) {
     const item = this.data.foods.find((f) => f.id === entry.food_id) ?? null;
-    this.edit = { entry, item, amount: Number(entry.quantity), lens: 'native' };
+    const basis = this.basisFor(entry, item);
+    this.edit = {
+      entry, item,
+      amount: Number(entry.quantity),
+      // Opened on the unit it was logged in, whatever that was.
+      lens: food.lensesFor(basis)[0]?.key ?? 'measure',
+    };
     this.sizeInput = '';
     this.sizeUnit = item?.serving_size_unit ?? 'g';
   },
 
   closeEdit() { this.edit = null; },
+
+  /**
+   * What to convert against: the entry's own snapshot, dressed as a food.
+   *
+   * The snapshot, not the food row, because that is what scaleEntry scales from
+   * — fixing an amount you mis-tapped must not quietly pull in a food that has
+   * been edited or rescanned since. The serving size is the one thing borrowed
+   * from the food, since an entry never recorded one.
+   */
+  basisFor(entry, item) {
+    const qty = Number(entry?.quantity) || 0;
+
+    // A zero-amount entry holds no ratio, so the food it came from is the only
+    // basis left — the same fallback scaleEntry makes, for the same reason.
+    if (!qty) return item ?? null;
+
+    return {
+      serving_unit: entry.unit,
+      serving_qty: qty,
+      calories: entry.calories,
+      serving_size: item?.serving_size ?? null,
+      serving_size_unit: item?.serving_size_unit ?? null,
+    };
+  },
+
+  get editBasis() {
+    return this.edit ? this.basisFor(this.edit.entry, this.edit.item) : null;
+  },
+
+  /**
+   * The chips this entry can offer.
+   *
+   * The measure chip is offered even when nothing is on record for what one
+   * serving weighs — selecting it is how the food gets told, via the notice
+   * underneath. Every other chip only appears once it can be honoured.
+   */
+  get editLenses() {
+    const lenses = this.editBasis ? food.lensesFor(this.editBasis) : [];
+    if (this.canMeasure && !this.servingSize && !lenses.some((l) => l.key === 'measure')) {
+      lenses.splice(1, 0, { key: 'measure', label: this.servingSizeUnit, unit: this.servingSizeUnit });
+    }
+    return lenses;
+  },
+
+  editMax() { return food.LENS_MAX[this.edit?.lens] ?? 100; },
+  editStepSize() { return food.LENS_STEP[this.edit?.lens] ?? 1; },
+
+  get editUnitLabel() {
+    const lens = this.editLenses.find((l) => l.key === this.edit?.lens);
+    if (!lens) return '';
+    if (lens.key !== 'serving') return lens.unit;
+    return this.editAmount === 1 ? 'serving' : 'servings';
+  },
+
+  /** Only worth saying when the box is not already showing what gets stored. */
+  get editStoredLabel() {
+    if (!this.edit || this.editLenses[0]?.key === this.edit.lens) return '';
+    return `Logged as ${food.amountLabel(this.editQuantity, this.edit.entry.unit)}`;
+  },
 
   /**
    * What one serving of this food measures. Null is not a failure — it means
@@ -845,17 +910,22 @@ Alpine.data('todayPage', () => ({
    */
   get editAmount() { return Number(this.edit?.amount) || 0; },
 
-  /** Switching lens converts the number in the box. The entry is not touched. */
+  /**
+   * Switching chips respells the amount; the entry is not touched.
+   *
+   * Through the quantity both ways, so tapping around the row and back comes
+   * home to the number it started on rather than drifting on each hop.
+   */
   setLens(lens) {
     if (!this.edit || this.edit.lens === lens) return;
 
-    const per = this.servingSize;
-    if (per) {
-      this.edit.amount = lens === 'measure'
-        ? Math.round(this.editAmount * per * 10) / 10
-        : Math.round((this.editAmount / per) * 100) / 100;
-    }
+    const quantity = this.editQuantity;
     this.edit.lens = lens;
+
+    // Nothing to convert against yet — the notice below the chips is about to
+    // ask, and applyServingSize picks the amount back up.
+    const basis = this.editBasis;
+    if (basis) this.edit.amount = food.fromQuantity(basis, quantity, lens);
   },
 
   /**
@@ -880,18 +950,15 @@ Alpine.data('todayPage', () => ({
 
   /** The number in the box, back in the entry's own unit. */
   get editQuantity() {
-    if (!this.edit) return 0;
-    const per = this.servingSize;
-    if (this.edit.lens === 'measure' && per) {
-      return Math.round((this.editAmount / per) * 100) / 100;
-    }
-    return this.editAmount;
+    const basis = this.editBasis;
+    if (!basis) return this.editAmount;
+    return food.toQuantity(basis, this.editAmount, this.edit.lens);
   },
 
   /** The step follows the lens: half a serving, or ten of whatever it weighs. */
   editStep(direction) {
     if (!this.edit) return;
-    const size = this.edit.lens === 'measure' || this.edit.entry.unit !== 'serving' ? 10 : 0.5;
+    const size = food.LENS_STEP[this.edit.lens] ?? 1;
     const next = this.editAmount + Math.sign(direction) * size;
     this.edit.amount = Math.max(0, Math.round(next * 100) / 100);
   },

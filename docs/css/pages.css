@@ -446,7 +446,10 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   appearance: none;
   width: 100%;
   background: none;
-  padding: var(--space-3) 0;      /* 44px of target around a 4px track */
+  /* 20px either side of a 4px track is a 44px target. --space-3 gave 28, which
+     is under the minimum and measurably so — the thumb looked right and the
+     area you could actually hit did not. */
+  padding: 20px 0;
   margin: 0;
   touch-action: none;             /* the drag is the gesture, not a page scroll */
 }

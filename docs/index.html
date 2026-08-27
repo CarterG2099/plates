@@ -196,16 +196,14 @@
 
               <div style="font-weight: 600;" x-text="edit.entry.description"></div>
 
-              <!-- Weight is a lens, not a second unit: whichever box you type
-                   in, the entry is stored and shown the way it was logged. -->
-              <template x-if="canMeasure">
-                <div class="chips">
-                  <button class="chip" :class="edit.lens === 'native' && 'is-active'"
-                          @click="setLens('native')">Servings</button>
-                  <button class="chip" :class="edit.lens === 'measure' && 'is-active'"
-                          @click="setLens('measure')" x-text="servingSizeUnit"></button>
-                </div>
-              </template>
+              <!-- A lens, not a second unit: whichever chip is lit, the entry
+                   is stored and shown the way it was logged. -->
+              <div class="chips" x-show="editLenses.length > 1">
+                <template x-for="l in editLenses" :key="l.key">
+                  <button class="chip" :class="edit.lens === l.key && 'is-active'"
+                          @click="setLens(l.key)" x-text="l.label"></button>
+                </template>
+              </div>
 
               <!-- Asked once per food, then never again — applyServingSize()
                    writes it onto the food itself. -->
@@ -228,20 +226,24 @@
                 </div>
               </template>
 
-              <template x-if="edit.lens === 'native' || servingSize">
-                <div class="qty">
-                  <button class="qty-step" @click="editStep(-1)" aria-label="Decrease">−</button>
-                  <label class="qty-amount">
-                    <input type="number" inputmode="decimal" step="any" min="0" x-model.number="edit.amount">
-                    <small x-text="edit.lens === 'measure' ? servingSizeUnit
-                      : (edit.entry.unit === 'serving' && edit.amount !== 1 ? 'servings' : edit.entry.unit)"></small>
-                  </label>
-                  <button class="qty-step" @click="editStep(1)" aria-label="Increase">+</button>
+              <template x-if="edit.lens !== 'measure' || servingSize">
+                <div style="display: contents;">
+                  <div class="qty">
+                    <button class="qty-step" @click="editStep(-1)" aria-label="Decrease">−</button>
+                    <label class="qty-amount">
+                      <input type="number" inputmode="decimal" step="any" min="0" x-model.number="edit.amount">
+                      <small x-text="editUnitLabel"></small>
+                    </label>
+                    <button class="qty-step" @click="editStep(1)" aria-label="Increase">+</button>
+                  </div>
+
+                  <input class="qty-slider" type="range" min="0"
+                         :max="editMax()" :step="editStepSize()" x-model.number="edit.amount"
+                         :aria-label="`Amount in ${editUnitLabel}`">
                 </div>
               </template>
 
-              <p class="prefill" x-show="edit.lens === 'measure' && servingSize"
-                 x-text="`Logged as ${amountLabel(editQuantity, edit.entry.unit)}`"></p>
+              <p class="prefill" x-show="editStoredLabel" x-text="editStoredLabel"></p>
 
               <div class="macros">
                 <template x-for="m in [
