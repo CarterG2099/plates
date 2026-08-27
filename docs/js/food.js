@@ -566,10 +566,33 @@ export function toQuantity(food, amount, lens) {
   return round(a * factor, 2);
 }
 
+/** Units printed the way a label prints them, hard against the number. */
+const TIGHT_UNITS = new Set(['g', 'kg', 'mg', 'ml', 'l', 'oz', 'lb']);
+
+/** Written short: a space, because "1fl oz" is not a word, but never an s. */
+const ABBREVIATED = new Set(['fl oz', 'tsp', 'tbsp', 'kcal', 'cal']);
+
+/**
+ * "170g", "1 cup", "2 servings".
+ *
+ * The rule used to be that `serving` was the only unit reading as a word, so it
+ * alone took a space and a plural. Anything else that reads as a word came out
+ * as "1cup" — and once meals stopped sectioning Today, every entry showed its
+ * amount in one list where that was hard to miss.
+ */
 export function amountLabel(quantity, unit) {
   const n = Number(quantity) || 0;
-  if (unit !== 'serving') return `${n}${unit}`;
-  return `${n} ${n === 1 ? 'serving' : 'servings'}`;
+  const u = (unit ?? '').trim();
+  if (!u) return String(n);
+
+  const key = u.toLowerCase();
+  if (TIGHT_UNITS.has(key)) return `${n}${u}`;
+  if (ABBREVIATED.has(key)) return `${n} ${u}`;
+
+  // A word. Plural for anything that is not exactly one, which includes zero —
+  // "0 servings", as it always has. Never doubled on a unit already plural.
+  const plural = n === 1 || u.endsWith('s') ? u : `${u}s`;
+  return `${n} ${plural}`;
 }
 
 // ---- writes ----------------------------------------------------------------

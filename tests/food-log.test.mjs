@@ -25,8 +25,10 @@ const OATS = {
 };
 
 // ---- amountLabel -------------------------------------------------------------
-// The reported bug was "1serving". `serving` is the only unit that reads as a
-// word, so it is the only one that takes a space and a plural.
+// First the reported bug was "1serving", and `serving` was made the exception.
+// Then it was "1cup", because the exception was one unit rather than one kind of
+// unit. A symbol prints hard against the number; a word takes a space and a
+// plural, whichever word it happens to be.
 
 test('one serving keeps its space', () => {
   assert.equal(food.amountLabel(1, 'serving'), '1 serving');
@@ -39,17 +41,46 @@ test('anything but one is plural', () => {
   assert.equal(food.amountLabel(0, 'serving'), '0 servings');
 });
 
+test('every word unit is spaced and pluralised, not just serving', () => {
+  assert.equal(food.amountLabel(1, 'cup'), '1 cup');
+  assert.equal(food.amountLabel(2, 'cup'), '2 cups');
+  assert.equal(food.amountLabel(1, 'slice'), '1 slice');
+  assert.equal(food.amountLabel(3, 'slice'), '3 slices');
+  assert.equal(food.amountLabel(2, 'piece'), '2 pieces');
+  assert.equal(food.amountLabel(0, 'cup'), '0 cups');
+});
+
+test('a unit that is already plural does not get a second s', () => {
+  assert.equal(food.amountLabel(2, 'slices'), '2 slices');
+  assert.equal(food.amountLabel(1, 'slices'), '1 slices', 'left as entered');
+});
+
 test('symbol units stay tight against the number and never pluralise', () => {
   assert.equal(food.amountLabel(170, 'g'), '170g');
   assert.equal(food.amountLabel(1, 'g'), '1g');
   assert.equal(food.amountLabel(2, 'ml'), '2ml');
-  assert.equal(food.amountLabel(1, 'fl oz'), '1fl oz');
+  assert.equal(food.amountLabel(200, 'lb'), '200lb');
+  assert.equal(food.amountLabel(4, 'oz'), '4oz');
+});
+
+test('an abbreviation takes the space but never the plural', () => {
+  // "1fl oz" is not a word and does not read as one.
+  assert.equal(food.amountLabel(1, 'fl oz'), '1 fl oz');
+  assert.equal(food.amountLabel(12, 'fl oz'), '12 fl oz');
+  assert.equal(food.amountLabel(2, 'tbsp'), '2 tbsp');
+  assert.equal(food.amountLabel(3, 'tsp'), '3 tsp');
 });
 
 test('a missing quantity reads as zero rather than NaN', () => {
   assert.equal(food.amountLabel(undefined, 'serving'), '0 servings');
   assert.equal(food.amountLabel(null, 'g'), '0g');
   assert.equal(food.amountLabel('', 'serving'), '0 servings');
+});
+
+test('a missing unit says the number and nothing else', () => {
+  assert.equal(food.amountLabel(2, ''), '2');
+  assert.equal(food.amountLabel(2, null), '2');
+  assert.equal(food.amountLabel(2, undefined), '2');
 });
 
 // ---- scaleEntry ---------------------------------------------------------------
