@@ -2230,8 +2230,31 @@ Alpine.data('trainPage', () => ({
 
   toggleReorder() { this.reordering = !this.reordering; },
 
+  /** The grouped reorder list: category headers interleaved with routine rows. */
+  get reorderRows() { return workout.reorderRows(this.data.routines, this.email); },
+
+  /**
+   * One drag does both jobs: where the routine sits, and which category it is in.
+   *
+   * The category is written before the reindex, so a failure between the two
+   * leaves the routine in the right group at a stale position — which the next
+   * reorder fixes — rather than in the wrong group entirely.
+   */
   async reorderRoutineTo(id, toIndex) {
-    await workout.reindexRoutines(workout.orderRoutines(this.routines, id, toIndex));
+    const rows = this.reorderRows;
+    const drop = workout.dropRoutineInto(rows, id, toIndex);
+    if (!drop) return;
+
+    const routine = rows.find((r) => r.kind === 'routine' && r.routine.id === id)?.routine;
+    if (routine && (routine.category ?? null) !== drop.category) {
+      await workout.upsertRoutine(
+        { id, name: routine.name, category: drop.category ?? '' },
+        this.email, this.data.routines,
+      );
+      Alpine.store('ui').flash(drop.category ? `Moved to ${drop.category}` : 'Category cleared');
+    }
+
+    await workout.reindexRoutines(drop.routines);
     await Alpine.store('data').refreshTraining();
   },
   // `history` lives with the past-session code below, since it depends on

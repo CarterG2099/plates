@@ -693,6 +693,40 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
+  /* Every row in the stack is exactly this tall, headings included. $dragCard
+     measures one stride from the first two cards and applies it to every slot,
+     so a heading that sized to its own smaller text would make every index past
+     it drift by the difference — the card would land one place off, and further
+     off the more headings it passed. */
+  min-height: 52px;
+}
+
+/* A category heading in the stack. Not a card to look at — no border, no lift,
+   and flush with the section edge — but exactly a card's height, per above. */
+.cardstack > .card.row-card.is-group {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.cardstack > .card.row-card.is-group small {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* The handle and the name. They sit in a wrapper now, because the row's contents
+   are one branch of an x-if and a template renders a single child. */
+.row-drag {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
 }
 
 .grip {

@@ -1289,3 +1289,75 @@ test('the opening size follows the most recent session, not the biggest one', ()
   assert.equal(workout.openingSets(prior.get('bp').previous), 2,
     'two working sets last time, not the four from the older session and not the warm-up');
 });
+
+// ---- dragging a routine into a category ------------------------------------
+
+const catRows = [
+  routine('Push A', 0, 'Upper'),
+  routine('Pull A', 1, 'Upper'),
+  routine('Legs', 2, 'Lower'),
+  routine('Odd one', 3, null),
+];
+
+test('reorderRows interleaves a header before each group', () => {
+  const rows = workout.reorderRows(catRows, ME);
+  assert.deepEqual(rows.map((r) => r.kind === 'header' ? `#${r.category}` : r.routine.name),
+    ['#Upper', 'Push A', 'Pull A', '#Lower', 'Legs', '#null', 'Odd one']);
+});
+
+test('reorderRows adds no header when nothing is categorised', () => {
+  const rows = workout.reorderRows([routine('A', 0), routine('B', 1)], ME);
+  assert.deepEqual(rows.map((r) => r.kind), ['routine', 'routine']);
+});
+
+test('a routine dropped under another header takes that category', () => {
+  const rows = workout.reorderRows(catRows, ME);
+  // Push A (index 1) dropped to index 4, which is just under the Lower header.
+  const result = workout.dropRoutineInto(rows, 'r-Push A', 4);
+
+  assert.equal(result.category, 'Lower');
+  assert.deepEqual(result.routines.map((r) => r.name), ['Pull A', 'Legs', 'Push A', 'Odd one']);
+});
+
+test('dropping into the uncategorised block clears the category', () => {
+  const rows = workout.reorderRows(catRows, ME);
+  const result = workout.dropRoutineInto(rows, 'r-Push A', 6);
+  assert.equal(result.category, null);
+});
+
+test('dropping above the first header also clears it', () => {
+  const rows = workout.reorderRows(catRows, ME);
+  const result = workout.dropRoutineInto(rows, 'r-Legs', 0);
+  assert.equal(result.category, null, 'there is no header above it to belong to');
+  assert.equal(result.routines[0].name, 'Legs');
+});
+
+test('moving within a group keeps the category and only reorders', () => {
+  const rows = workout.reorderRows(catRows, ME);
+  // Pull A (index 2) up to index 1: still inside Upper.
+  const result = workout.dropRoutineInto(rows, 'r-Pull A', 1);
+  assert.equal(result.category, 'Upper');
+  assert.deepEqual(result.routines.map((r) => r.name), ['Pull A', 'Push A', 'Legs', 'Odd one']);
+});
+
+test('dropRoutineInto returns every routine exactly once', () => {
+  const rows = workout.reorderRows(catRows, ME);
+  for (const to of [0, 1, 2, 3, 4, 5, 6, 7]) {
+    const result = workout.dropRoutineInto(rows, 'r-Legs', to);
+    const names = result.routines.map((r) => r.name);
+    assert.equal(names.length, 4, `to=${to}`);
+    assert.equal(new Set(names).size, 4, `to=${to} lost or duplicated a routine`);
+  }
+});
+
+test('dropRoutineInto refuses an id that is not in the list', () => {
+  const rows = workout.reorderRows(catRows, ME);
+  assert.equal(workout.dropRoutineInto(rows, 'r-nope', 2), null);
+});
+
+test('dropRoutineInto clamps an index past the end', () => {
+  const rows = workout.reorderRows(catRows, ME);
+  const result = workout.dropRoutineInto(rows, 'r-Push A', 999);
+  assert.equal(result.category, null, 'the last block is uncategorised');
+  assert.equal(result.routines[result.routines.length - 1].name, 'Push A');
+});

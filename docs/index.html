@@ -938,17 +938,41 @@
 
               <!-- Reordering: one column at any width, so the drag's single
                    vertical stride is always the right measurement. -->
+              <!-- Reordering: one column at any width, so the drag's single
+                   vertical stride is always the right measurement. The category
+                   headers are rows in the same list rather than wrappers around
+                   it — that is what lets one drag say both "third" and "and now
+                   it is a Lower routine". They are the same height as the cards
+                   for the same reason: the stride is measured once. -->
               <div class="cardstack" x-show="reordering" x-ref="routinestack">
-                <template x-for="r in routines" :key="r.id">
-                  <div class="card row-card" data-card :data-key="r.id">
-                    <span class="grip" aria-hidden="true"
-                          x-init="$dragCard($el,
-                                    () => [...$refs.routinestack.querySelectorAll('[data-card]')],
-                                    (to, key) => reorderRoutineTo(key, to))">⠿</span>
-                    <div class="row-text"><b x-text="r.name"></b></div>
+                <template x-for="(row, i) in reorderRows"
+                          :key="row.kind === 'header' ? `h${row.category}` : row.routine.id">
+                  <div class="card row-card"
+                       :class="row.kind === 'header' && 'is-group'"
+                       data-card
+                       :data-key="row.kind === 'header' ? '' : row.routine.id">
+                    <template x-if="row.kind === 'header'">
+                      <div class="row-text">
+                        <small x-text="row.category ?? 'Uncategorised'"></small>
+                      </div>
+                    </template>
+                    <template x-if="row.kind === 'routine'">
+                      <div class="row-drag">
+                        <span class="grip" aria-hidden="true"
+                              x-init="$dragCard($el,
+                                        () => [...$refs.routinestack.querySelectorAll('[data-card]')],
+                                        (to, key) => reorderRoutineTo(key, to))">⠿</span>
+                        <div class="row-text"><b x-text="row.routine.name"></b></div>
+                      </div>
+                    </template>
                   </div>
                 </template>
               </div>
+
+              <p class="empty" x-show="reordering && reorderRows.some(r => r.kind === 'header')"
+                 style="padding:var(--space-2) 0; text-align:left" x-cloak>
+                Drag a routine under a heading to move it there.
+              </p>
 
               <!-- One block per category, each foldable. A single uncategorised
                    group gets no heading at all: there is nothing to fold it away

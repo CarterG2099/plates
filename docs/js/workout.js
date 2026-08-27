@@ -512,6 +512,59 @@ export function nextRoutinePosition(routines, ownerEmail) {
     .reduce((next, r) => Math.max(next, (r.position ?? 0) + 1), 0);
 }
 
+/**
+ * The grouped reorder list: a category header followed by its routines.
+ *
+ * Headers are rows in the same array as the routines rather than wrappers around
+ * them, because $dragCard works on one flat list of equal-height cards and hands
+ * back an index into it. Interleaving them is what lets a single drag express
+ * both "third in the list" and "and now it is a Lower routine".
+ *
+ * No headers at all when nothing is categorised: there is only one group, and a
+ * lone heading is a row that cannot be dropped anywhere useful.
+ */
+export function reorderRows(routines, ownerEmail) {
+  const groups = groupRoutinesByCategory(routines, ownerEmail);
+  if (groups.length < 2 && groups[0]?.category == null) {
+    return (groups[0]?.routines ?? []).map((routine) => ({ kind: 'routine', routine }));
+  }
+
+  return groups.flatMap((group) => [
+    { kind: 'header', category: group.category },
+    ...group.routines.map((routine) => ({ kind: 'routine', routine })),
+  ]);
+}
+
+/**
+ * Where a routine ends up when it is dragged in that list.
+ *
+ * Its category is whichever header it came to rest after — so moving it into
+ * another group and moving it within its own group are the same gesture, and
+ * dropping it in the uncategorised block clears it. Above the first header it
+ * keeps nothing, which is the same thing.
+ *
+ * Pure: hands back the category and the new routine order, and writes neither.
+ */
+export function dropRoutineInto(rows, fromId, toIndex) {
+  const from = rows.findIndex((r) => r.kind === 'routine' && r.routine.id === fromId);
+  if (from === -1) return null;
+
+  const next = rows.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(Math.max(0, Math.min(next.length, toIndex)), 0, moved);
+
+  const landed = next.indexOf(moved);
+  let category = null;
+  for (let i = landed - 1; i >= 0; i--) {
+    if (next[i].kind === 'header') { category = next[i].category; break; }
+  }
+
+  return {
+    category,
+    routines: next.filter((r) => r.kind === 'routine').map((r) => r.routine),
+  };
+}
+
 /** Routines in display order, which is what a reorder rearranges. */
 export function orderRoutines(routines, fromId, toIndex) {
   return moveTo(routines, (r) => r.id === fromId, toIndex);
