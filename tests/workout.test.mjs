@@ -1246,3 +1246,46 @@ test('a category can be cleared on purpose', async () => {
   const cleared = await workout.upsertRoutine({ id: first.id, name: 'Legs', category: '' }, ME, []);
   assert.equal(cleared.category, null);
 });
+
+/**
+ * Adding an exercise mid-workout opens it at the size you last did it.
+ *
+ * It used to open with a single blank row regardless, so a four-set exercise
+ * took three taps of "add set" before you could start — while the same exercise
+ * arriving from a routine already opened with its planned count.
+ */
+test('openingSets matches the number of working sets you did last time', () => {
+  assert.equal(workout.openingSets([{ reps: 8 }, { reps: 8 }, { reps: 6 }]), 3);
+  assert.equal(workout.openingSets([{ reps: 5 }]), 1);
+});
+
+test('openingSets falls back to one when there is no history', () => {
+  assert.equal(workout.openingSets([]), 1, 'a first-time exercise still opens with a row');
+  assert.equal(workout.openingSets(undefined), 1, 'and so does one with no prior entry at all');
+  assert.equal(workout.openingSets(null), 1);
+});
+
+/**
+ * The count comes from priorForm's `previous`, which is the most recent session
+ * only — not a best-of, and not every session merged. Warm-ups and unchecked
+ * sets are already excluded there, so they cannot inflate the opening size.
+ */
+test('the opening size follows the most recent session, not the biggest one', () => {
+  const sessions = [
+    { id: 'old', owner_email: ME, started_at: '2026-01-01T10:00:00Z' },
+    { id: 'recent', owner_email: ME, started_at: '2026-02-01T10:00:00Z' },
+  ];
+  const sets = [
+    ...[1, 2, 3, 4].map((n) => ({
+      id: `o${n}`, session_id: 'old', exercise_id: 'bp', set_index: n,
+      weight_lb: 100, reps: 8, completed_at: 'x',
+    })),
+    { id: 'r1', session_id: 'recent', exercise_id: 'bp', set_index: 0, weight_lb: 110, reps: 5, completed_at: 'x' },
+    { id: 'r2', session_id: 'recent', exercise_id: 'bp', set_index: 1, weight_lb: 110, reps: 5, completed_at: 'x' },
+    { id: 'rw', session_id: 'recent', exercise_id: 'bp', set_index: 2, weight_lb: 45, reps: 10, completed_at: 'x', is_warmup: true },
+  ];
+
+  const prior = workout.priorForm(workout.buildIndex(sets, sessions, ME), null);
+  assert.equal(workout.openingSets(prior.get('bp').previous), 2,
+    'two working sets last time, not the four from the older session and not the warm-up');
+});

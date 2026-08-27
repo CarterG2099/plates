@@ -89,6 +89,23 @@ export function groupByExercise(sets) {
   return [...groups.values()];
 }
 
+/**
+ * How many sets to open an exercise with when you add it mid-workout.
+ *
+ * As many as you did last time it appeared, and never fewer than one. Adding an
+ * exercise used to give a single blank row, so a four-set exercise meant three
+ * taps of "add set" before you could start — while the same exercise arriving
+ * from a routine opened with its planned count.
+ *
+ * The rows stay empty on purpose, exactly like the planned ones: last time's
+ * numbers show as placeholders per position, and checking a set without typing
+ * adopts them. Writing the values in instead would mean clearing a box to change
+ * one, which is the thing the placeholder convention exists to avoid.
+ */
+export function openingSets(previous) {
+  return Math.max(1, (previous ?? []).length);
+}
+
 export async function addSet({ session, exercise, weight, reps, isWarmup, ownerEmail, existingSets }) {
   const forExercise = existingSets.filter((s) => (s.exercise_id ?? s.exercise_name) === (exercise.id ?? exercise.name));
   const nextIndex = existingSets.length;
