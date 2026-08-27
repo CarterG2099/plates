@@ -743,7 +743,6 @@ Alpine.data('todayPage', () => ({
 
   get totals() { return food.sumTotals(this.entries); },
 
-  get meals() { return food.groupByMeal(this.entries); },
 
   get calorieTarget() { return Number(this.goal?.calorie_target) || null; },
 
@@ -772,7 +771,6 @@ Alpine.data('todayPage', () => ({
 
   round(n) { return Math.round(Number(n) || 0); },
 
-  mealLabel(slot) { return slot.charAt(0).toUpperCase() + slot.slice(1); },
 
   /** Plates on the bar: width is each macro's share of the calorie target. */
   get plates() {
@@ -1172,7 +1170,6 @@ Alpine.data('logPage', () => ({
   },
 
   get date() { return Alpine.store('ui').date; },
-  get mealSlot() { return food.inferMealSlot(); },
 
   /** The one-tap path: log at the amount you last used for this food. */
   async quickLog(item) {
@@ -1466,7 +1463,6 @@ Alpine.data('logPage', () => ({
    * in your food list would poison the search you rely on.
    */
   async logEstimate() {
-    const slot = food.inferMealSlot();
     let logged = 0;
 
     for (const item of this.estimate.items) {
@@ -1486,7 +1482,6 @@ Alpine.data('logPage', () => ({
         },
         quantity: 1,
         unit: 'serving',
-        mealSlot: slot,
         ownerEmail: this.email,
         date: this.date,
       });
@@ -2389,11 +2384,22 @@ Alpine.data('trainPage', () => ({
     this.pickerTerm = '';
   },
 
+  /** Opens with as many sets as last time — see workout.openingSets. */
   async addExercise(exercise) {
-    await workout.addSet({
-      session: this.session, exercise, weight: null, reps: null,
-      isWarmup: false, ownerEmail: this.email, existingSets: this.sets,
-    });
+    const previous = this.data.prior.get(exercise.id ?? exercise.name)?.previous ?? [];
+
+    // `existingSets` is threaded by hand because addSet takes the next set_index
+    // from its length, and `this.sets` will not have grown until the refresh
+    // below. Without this every seeded set lands on the same index.
+    let existing = this.sets;
+    for (let n = 0; n < workout.openingSets(previous); n++) {
+      const { set } = await workout.addSet({
+        session: this.session, exercise, weight: null, reps: null,
+        isWarmup: false, ownerEmail: this.email, existingSets: existing,
+      });
+      existing = [...existing, set];
+    }
+
     this.closePicker();
     await Alpine.store('data').refreshTraining();
   },

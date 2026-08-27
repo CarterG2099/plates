@@ -101,6 +101,30 @@ test('logging snapshots the scaled macros and a readable description', async () 
   assert.equal(entry.unit, 'serving');
 });
 
+test('logging to another day lands on that day, and invents no meal', async () => {
+  // The bug this replaces: the slot came from inferMealSlot() with no argument,
+  // so it read the wall clock rather than the day being logged to. Adding
+  // yesterday's dinner over breakfast filed it under breakfast.
+  const yesterday = new Date(Date.now() - 86_400_000);
+  const entry = await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: yesterday });
+
+  assert.equal(new Date(entry.logged_at).toDateString(), yesterday.toDateString(),
+    'stamped on the day you chose');
+  assert.equal(entry.meal_slot, null, 'and no meal guessed from a clock that was not there');
+});
+
+test('two entries added to a past day keep the order they were added in', async () => {
+  const day = new Date(Date.now() - 3 * 86_400_000);
+  const first = await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: day });
+  const second = await food.logFood({ food: OATS, quantity: 2, ownerEmail: ME, date: day });
+
+  // Both used to be stamped at the meal's nominal hour, which made them
+  // simultaneous and left the day in whatever order it came out of the store.
+  assert.ok(first.logged_at <= second.logged_at);
+  const ordered = food.entriesForDay(await local.all('food_log'), ME, day);
+  assert.deepEqual(ordered.map((e) => e.quantity), [1, 2]);
+});
+
 test('a food with no brand still gets a description', async () => {
   const entry = await food.logFood({
     food: { ...OATS, brand: null }, quantity: 1, ownerEmail: ME, date: new Date(),

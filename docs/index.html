@@ -167,26 +167,21 @@
           <p class="empty">Nothing logged yet today.</p>
         </template>
 
-        <template x-for="meal in meals" :key="meal.slot">
-          <div class="stack">
-            <div class="section-head">
-              <span x-text="mealLabel(meal.slot)"></span>
-              <span x-text="round(meal.totals.calories)"></span>
+        <!-- One list, in the order things were logged. Meals used to section
+             this, guessed from the clock — which was wrong for anything added
+             to another day, and was answering a question nobody asked. -->
+        <div class="rows" x-show="entries.length">
+          <template x-for="entry in entries" :key="entry.id">
+            <div class="row">
+              <button class="row-text" @click="openEdit(entry)">
+                <b x-text="entry.description"></b>
+                <small x-text="amountLabel(entry.quantity, entry.unit)"></small>
+              </button>
+              <span class="row-num" x-text="round(entry.calories)"></span>
+              <button class="tap" @click="removeEntry(entry.id)" :aria-label="`Remove ${entry.description}`">×</button>
             </div>
-            <div class="rows">
-              <template x-for="entry in meal.entries" :key="entry.id">
-                <div class="row">
-                  <button class="row-text" @click="openEdit(entry)">
-                    <b x-text="entry.description"></b>
-                    <small x-text="amountLabel(entry.quantity, entry.unit)"></small>
-                  </button>
-                  <span class="row-num" x-text="round(entry.calories)"></span>
-                  <button class="tap" @click="removeEntry(entry.id)" :aria-label="`Remove ${entry.description}`">×</button>
-                </div>
-              </template>
-            </div>
-          </div>
-        </template>
+          </template>
+        </div>
 
         <!-- Edit a logged amount ---------------------------------------------- -->
         <template x-if="edit">
@@ -382,7 +377,7 @@
         </div>
 
         <div class="section-head">
-          <span x-text="mealSlot"></span>
+          <span>Foods</span>
           <span x-text="`${results.length} shown`"></span>
         </div>
 

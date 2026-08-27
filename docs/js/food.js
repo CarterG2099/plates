@@ -33,19 +33,6 @@ export function isSameDay(iso, date = new Date()) {
  * picked. Boundaries are deliberately generous — a late breakfast is still
  * breakfast.
  */
-export function inferMealSlot(date = new Date()) {
-  const h = date.getHours();
-  if (h < 11) return 'breakfast';
-  if (h < 16) return 'lunch';
-  if (h < 21) return 'dinner';
-  return 'snack';
-}
-
-export const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
-
-/** Nominal times, used when logging to a day that isn't today. */
-const SLOT_HOURS = { breakfast: 8, lunch: 12, dinner: 18, snack: 15 };
-
 export function addDays(date, n) {
   const d = new Date(date);
   d.setDate(d.getDate() + n);
@@ -74,14 +61,17 @@ export function isFuture(date, now = new Date()) {
 }
 
 /**
- * When to stamp an entry. Logging to today means now; logging to another day
- * uses the meal's nominal hour, so planned days still sort sensibly.
+ * When to stamp an entry: the day you are logging to, at the time you logged it.
+ *
+ * Used to be the nominal hour of a guessed meal, which put every entry added to
+ * another day at the same instant and left the day in no particular order. The
+ * clock is the honest answer and it sorts: things added later come later.
  */
-export function timestampFor(date, mealSlot, now = new Date()) {
+export function timestampFor(date, now = new Date()) {
   if (dayBounds(date).start.getTime() === dayBounds(now).start.getTime()) return now;
 
   const at = new Date(date);
-  at.setHours(SLOT_HOURS[mealSlot] ?? 12, 0, 0, 0);
+  at.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), 0);
   return at;
 }
 
@@ -115,16 +105,6 @@ export function entriesForDay(log, ownerEmail, date = new Date()) {
   return log
     .filter((e) => e.owner_email === ownerEmail && !e.deleted_at && isSameDay(e.logged_at, date))
     .sort((a, b) => (a.logged_at < b.logged_at ? -1 : 1));
-}
-
-export function groupByMeal(entries) {
-  return MEAL_ORDER
-    .map((slot) => ({
-      slot,
-      entries: entries.filter((e) => (e.meal_slot ?? 'snack') === slot),
-    }))
-    .filter((g) => g.entries.length)
-    .map((g) => ({ ...g, totals: sumTotals(g.entries) }));
 }
 
 /** How many times this food has been logged today — drives the undo affordance. */
@@ -598,12 +578,13 @@ export function amountLabel(quantity, unit) {
  * Log a food. Macros are snapshotted onto the entry rather than referenced, so
  * editing or deleting the food later cannot rewrite what you already ate.
  */
-export async function logFood({ food, quantity, unit, mealSlot, ownerEmail, date }) {
-  const slot = mealSlot ?? inferMealSlot();
-
+export async function logFood({ food, quantity, unit, ownerEmail, date }) {
   const entry = await local.save('food_log', {
-    logged_at: timestampFor(date ?? new Date(), slot).toISOString(),
-    meal_slot: slot,
+    logged_at: timestampFor(date ?? new Date()).toISOString(),
+    // Left null rather than guessed. The column and everything already in it
+    // stay put, so this is reversible; what stops is inventing a meal from the
+    // clock and being wrong about it every time you log to another day.
+    meal_slot: null,
     food_id: food.id ?? null,
     recipe_id: food.recipe_id ?? null,
     description: food.brand ? `${food.name} · ${food.brand}` : food.name,
@@ -714,8 +695,7 @@ export function searchCombos(combos, term) {
 }
 
 /** Log every item of a saved combo in one go. */
-export async function logCombo({ combo, foodsById, mealSlot, ownerEmail, date }) {
-  const slot = mealSlot ?? inferMealSlot();
+export async function logCombo({ combo, foodsById, ownerEmail, date }) {
   const logged = [];
 
   for (const item of combo.items ?? []) {
@@ -725,7 +705,6 @@ export async function logCombo({ combo, foodsById, mealSlot, ownerEmail, date })
       food,
       quantity: item.quantity,
       unit: item.unit,
-      mealSlot: slot,
       ownerEmail,
       date,
     }));
@@ -738,7 +717,6 @@ export async function logCombo({ combo, foodsById, mealSlot, ownerEmail, date })
 /** The fields that make an entry reproducible on another day. */
 function portable(entry) {
   return {
-    meal_slot: entry.meal_slot,
     food_id: entry.food_id ?? null,
     recipe_id: entry.recipe_id ?? null,
     description: entry.description,
@@ -792,7 +770,7 @@ export async function applyDayTemplate({ template, ownerEmail, date }) {
 function logEntry(item, date, ownerEmail) {
   return local.save('food_log', {
     ...item,
-    logged_at: timestampFor(date, item.meal_slot).toISOString(),
+    logged_at: timestampFor(date).toISOString(),
   }, ownerEmail);
 }
 

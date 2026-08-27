@@ -26,18 +26,6 @@ test('isSameDay is inclusive of midnight and exclusive of the next', () => {
   assert.equal(food.isSameDay(nextMidnight, day), false);
 });
 
-test('inferMealSlot covers every boundary hour', () => {
-  const at = (h) => food.inferMealSlot(new Date(2026, 7, 10, h));
-  assert.equal(at(0), 'breakfast');
-  assert.equal(at(10), 'breakfast');
-  assert.equal(at(11), 'lunch');     // boundary
-  assert.equal(at(15), 'lunch');
-  assert.equal(at(16), 'dinner');    // boundary
-  assert.equal(at(20), 'dinner');
-  assert.equal(at(21), 'snack');     // boundary
-  assert.equal(at(23), 'snack');
-});
-
 test('toDateOnly pads and stays local, never UTC-shifted', () => {
   assert.equal(food.toDateOnly(new Date(2026, 0, 5)), '2026-01-05');
   // Late evening must not roll into tomorrow via UTC.
@@ -58,18 +46,24 @@ test('dayLabel names the neighbouring days', () => {
   assert.match(food.dayLabel(new Date(2026, 7, 4), now), /Aug/);
 });
 
-test('timestampFor uses now for today and the meal hour for other days', () => {
+test('timestampFor stamps the day you are logging to, at the time you did it', () => {
   const now = new Date(2026, 7, 10, 14, 30);
-  assert.equal(food.timestampFor(new Date(2026, 7, 10), 'dinner', now).getTime(), now.getTime());
+  assert.equal(food.timestampFor(new Date(2026, 7, 10), now).getTime(), now.getTime());
 
-  const planned = food.timestampFor(new Date(2026, 7, 12), 'dinner', now);
-  assert.equal(planned.getHours(), 18);
-  assert.equal(planned.getDate(), 12);
+  const planned = food.timestampFor(new Date(2026, 7, 12), now);
+  assert.equal(planned.getDate(), 12, 'the day you chose');
+  assert.equal(planned.getHours(), 14, 'the time you chose it');
+  assert.equal(planned.getMinutes(), 30);
 });
 
-test('timestampFor falls back to midday for an unknown slot', () => {
-  const at = food.timestampFor(new Date(2026, 7, 12), 'brunch', new Date(2026, 7, 10));
-  assert.equal(at.getHours(), 12);
+test('entries added to another day sort in the order they were added', () => {
+  // The old nominal-hour stamp put every entry on a past day at the same
+  // instant, so the day came back in no order at all. The clock breaks the tie
+  // by construction, which is the whole reason it is the clock.
+  const day = new Date(2026, 7, 12);
+  const first = food.timestampFor(day, new Date(2026, 7, 10, 9, 0));
+  const second = food.timestampFor(day, new Date(2026, 7, 10, 9, 1));
+  assert.ok(first < second);
 });
 
 // ---- goals -----------------------------------------------------------------
@@ -132,18 +126,6 @@ test('entriesForDay excludes other owners and deleted rows', () => {
 test('entriesForDay returns oldest first', () => {
   const entries = food.entriesForDay(log, ME, new Date('2026-08-10T12:00:00'));
   assert.ok(entries[0].logged_at < entries[entries.length - 1].logged_at);
-});
-
-test('groupByMeal keeps meal order and drops empty meals', () => {
-  const entries = food.entriesForDay(log, ME, new Date('2026-08-10T12:00:00'));
-  const groups = food.groupByMeal(entries);
-  assert.deepEqual(groups.map((g) => g.slot), ['breakfast', 'lunch', 'dinner']);
-  assert.equal(groups[0].totals.calories, 100);
-});
-
-test('groupByMeal treats a missing slot as a snack', () => {
-  const groups = food.groupByMeal([{ logged_at: 'x', calories: 10 }]);
-  assert.deepEqual(groups.map((g) => g.slot), ['snack']);
 });
 
 test('countLoggedToday counts only that food, and nothing without an id', () => {
