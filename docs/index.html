@@ -378,8 +378,10 @@
                   @click="filter === 'recipes' ? filter = '' : browseRecipes()">Recipes</button>
         </div>
 
-        <div class="section-head">
-          <span>Foods</span>
+        <!-- Says which filter is on, so a tap that changes the set but not the
+             rows on screen still visibly does something. -->
+        <div class="section-head" x-show="filter !== 'recipes'">
+          <span x-text="filter === 'mine' ? 'My foods' : filter === 'recent' ? 'Recent foods' : 'Foods'"></span>
           <span x-text="`${results.length} shown`"></span>
         </div>
 
@@ -524,7 +526,7 @@
 
         <div class="notice notice-error" x-show="photoError" x-text="photoError"></div>
 
-        <template x-if="combos.length && !term">
+        <template x-if="combos.length && !term && filter !== 'recipes'">
           <div class="stack">
             <div class="section-head"><span>My meals</span></div>
             <div class="rows">

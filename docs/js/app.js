@@ -1140,6 +1140,10 @@ Alpine.data('logPage', () => ({
   },
 
   get results() {
+    // The recipes view is recipes only. Appending them under sixty foods put
+    // them below the fold, and tapping the chip looked like it did nothing.
+    if (this.filter === 'recipes') return [];
+
     let list = food.searchFoods(this.ranked, this.term);
     if (this.filter === 'recent') {
       list = list.filter((f) => f.lastLoggedAt)
