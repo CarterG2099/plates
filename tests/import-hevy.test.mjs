@@ -187,3 +187,43 @@ test('a repeated workout title becomes a routine, a one-off does not', async () 
   const summary = await hevy.importHevy(rows.join('\n'), { ownerEmail: 'me@example.com', existingExercises: [] });
   assert.equal(summary.routines, 1);
 });
+
+/**
+ * The library renames its exercises to put the weight form in brackets —
+ * "Crunch (Cable)" where Hevy exports "Cable Crunch". The importer must still
+ * recognise those as the same exercise.
+ *
+ * A regression test, not a hypothetical: the rename shipped while the matcher
+ * only stripped bracketed equipment, so "cablecrunch" never matched "crunch".
+ * A re-import matched none of the renamed rows and created seven duplicate
+ * exercises, splitting real logged sets across both copies of each.
+ */
+test('a Hevy name still matches once the weight form moves into brackets', async () => {
+  const pairs = [
+    ['Cable Crunch', 'Crunch (Cable)'],
+    ['Cable Pull Through', 'Pull Through (Cable)'],
+    ['Low Cable Fly Crossovers', 'Low Fly Crossovers (Cable)'],
+    ['Rowing Machine', 'Rowing (Machine)'],
+    ['Seated Cable Row - Bar Wide Grip', 'Seated Row - Bar Wide Grip (Cable)'],
+    ['Triceps Rope Pushdown', 'Triceps Pushdown (Rope)'],
+    ['Barbell Bench Press', 'Bench Press (Barbell)'],
+    ['Dumbbell Row', 'Row (Dumbbell)'],
+  ];
+
+  const header = 'title,start_time,end_time,exercise_title,set_index,weight_lbs,reps,set_type';
+
+  for (const [hevyName, libraryName] of pairs) {
+    const id = `id-${libraryName}`;
+    const csv = [
+      header,
+      `"Session","12 Jan 2026, 07:30","12 Jan 2026, 08:15","${hevyName}",0,100,5,normal`,
+    ].join('\n');
+
+    const { summary, sets } = await runImport(csv, [{ id, name: libraryName }]);
+
+    assert.equal(summary.exercises, 0,
+      `"${hevyName}" should match "${libraryName}" rather than create a new exercise`);
+    assert.ok(sets.some((s) => s.exercise_id === id),
+      `the imported set should land on "${libraryName}"`);
+  }
+});

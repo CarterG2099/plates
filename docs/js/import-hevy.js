@@ -65,9 +65,22 @@ export function parseHevyDate(value) {
   return new Date(Number(y), MONTHS[mon], Number(d), Number(hh), Number(mm));
 }
 
+/**
+ * Equipment words, dropped wherever they appear rather than only inside brackets.
+ *
+ * Stripping just the bracketed copy was enough while the library named things the
+ * way Hevy exports them. It stopped being enough once the library moved the
+ * weight form into brackets: Hevy exports "Cable Crunch", the library now stores
+ * "Crunch (Cable)", and those normalise to "cablecrunch" and "crunch" — no match.
+ * A re-import then created a second exercise and split the history across both.
+ * Seven rows arrived that way before this was caught.
+ */
+const EQUIPMENT = /\b(barbell|dumbbell|kettlebell|cable|machine|smith|band|bands|rope|ez ?bar|t ?bar|plate|plates|weighted|bodyweight|body only)\b/g;
+
 const normalise = (s) => (s ?? '')
   .toLowerCase()
-  .replace(/\([^)]*\)/g, '')    // "Lat Pulldown (Cable)" and "Lat Pulldown" are one exercise
+  .replace(/\([^)]*\)/g, ' ')   // "Lat Pulldown (Cable)" and "Lat Pulldown" are one exercise
+  .replace(EQUIPMENT, ' ')
   .replace(/[^a-z0-9]/g, '');
 
 const num = (v) => {
