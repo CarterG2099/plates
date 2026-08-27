@@ -13,6 +13,7 @@ import * as local from './local.js';
 import * as sync from './sync.js';
 import * as food from './food.js';
 import { lookupBarcode, draftsFromProducts } from './lookup.js';
+import * as recipes from './recipes.js';
 import * as scanner from './scanner.js';
 import * as photo from './photo.js';
 import * as workout from './workout.js';
@@ -1088,7 +1089,12 @@ function blankDraft(name = '') {
 
 Alpine.data('logPage', () => ({
   term: '',
-  filter: '',       // '' | 'recent' | 'mine'
+  filter: '',       // '' | 'recent' | 'mine' | 'recipes'
+
+  // Recipes from Mom's Kitchen, fetched once per page and searched locally.
+  // Fifteen rows; not worth a cache store, and never on the logging path — the
+  // log itself is still a local write.
+  recipeBook: { list: [], status: 'idle', error: '' },
   sheet: null,      // { food, quantity, unit }
   creating: false,
   draft: null,
@@ -1354,6 +1360,39 @@ Alpine.data('logPage', () => ({
     this.closeMenu();
     action();
   },
+
+  // ---- recipes -------------------------------------------------------------
+  // The other app's table, read here so a recipe logs like any other food.
+
+  /** All recipes, fetched once. Returns [] rather than throwing so search never breaks on it. */
+  async loadRecipes() {
+    if (this.recipeBook.status === 'done') return this.recipeBook.list;
+    if (!navigator.onLine) return this.recipeBook.list;
+    this.recipeBook.status = 'loading';
+    try {
+      this.recipeBook.list = await recipes.fetchRecipes();
+      this.recipeBook = { ...this.recipeBook, status: 'done', error: '' };
+    } catch (e) {
+      this.recipeBook = { ...this.recipeBook, status: 'error', error: e.message ?? String(e) };
+    }
+    return this.recipeBook.list;
+  },
+
+  /** The recipes view: every recipe, the ones with nutrition tappable. */
+  browseRecipes() {
+    this.term = '';
+    this.filter = 'recipes';
+    this.closeMenu();
+    this.loadRecipes();
+  },
+
+  get recipeRows() { return recipes.searchRecipes(this.recipeBook.list, this.term); },
+  recipeHasNutrition(r) { return recipes.hasNutrition(r); },
+  recipeEditUrl(r) { return recipes.recipeUrl(r, { edit: true }); },
+  recipeMissing(r) { return recipes.missingMacros(r); },
+
+  /** Straight to the amount sheet; the food is written on Log, like a lookup hit. */
+  logRecipe(r) { this.openDraftSheet(recipes.recipeToDraft(r)); },
 
   // ---- photos --------------------------------------------------------------
   // A label is transcription; a meal is estimation. They are different kinds of
@@ -1756,7 +1795,12 @@ Alpine.data('logPage', () => ({
 
     // USDA first on a collision: its values are lab-measured or label-verified,
     // where OFF is whatever the last person to scan it typed in.
-    const results = food.mergeDrafts([usda, off], term);
+    // Your own recipes first: on a name collision "banana bread" should be the
+    // one your mom wrote, not USDA's reference loaf. A failed recipe fetch costs
+    // nothing but the recipes — the other two sources are already in hand.
+    const ownRecipes = recipes.toResults(recipes.searchRecipes(await this.loadRecipes(), term));
+
+    const results = food.mergeDrafts([ownRecipes, usda, off], term);
 
     return {
       results,
@@ -2055,6 +2099,9 @@ Alpine.data('logPage', () => ({
       fat_g: numeric(d.fat_g),
       fiber_g: numeric(d.fiber_g),
       sodium_mg: numeric(d.sodium_mg),
+      // Provenance for a food made from a recipe. plates.foods has the column;
+      // the log stamps it again from the food, so history keeps the link too.
+      recipe_id: d.recipe_id ?? null,
       source: d.source ?? 'manual',
     }, this.email);
   },

@@ -374,6 +374,8 @@
                   @click="filter = filter === 'recent' ? '' : 'recent'">Recent</button>
           <button class="chip" :class="filter === 'mine' && 'is-active'"
                   @click="filter = filter === 'mine' ? '' : 'mine'">My foods</button>
+          <button class="chip" :class="filter === 'recipes' && 'is-active'"
+                  @click="filter === 'recipes' ? filter = '' : browseRecipes()">Recipes</button>
         </div>
 
         <div class="section-head">
@@ -429,8 +431,52 @@
           </template>
         </div>
 
-        <template x-if="!results.length && !term">
+        <template x-if="!results.length && !term && filter !== 'recipes'">
           <p class="empty">No foods yet — add the first one.</p>
+        </template>
+
+        <!-- Recipes from Mom's Kitchen. One serving of each is a food; the ones
+             without nutrition yet link to where it gets added. -->
+        <template x-if="filter === 'recipes'">
+          <div class="stack">
+            <div class="section-head">
+              <span>Mom's Kitchen</span>
+              <span x-show="recipeBook.status === 'loading'" class="spinner" style="width:12px;height:12px"></span>
+            </div>
+            <div class="notice notice-error" x-show="recipeBook.status === 'error'" x-text="recipeBook.error"></div>
+            <p class="empty" x-show="recipeBook.status === 'done' && !recipeRows.length">
+              <span x-show="term">No recipe matches that.</span>
+              <span x-show="!term">No recipes yet.</span>
+            </p>
+            <p class="empty" x-show="recipeBook.status === 'idle' && !navigator.onLine">Recipes need a connection.</p>
+
+            <div class="rows">
+              <template x-for="r in recipeRows" :key="r.id">
+                <div>
+                  <button class="row" x-show="recipeHasNutrition(r)" @click="logRecipe(r)">
+                    <div class="row-text">
+                      <b x-text="r.title"></b>
+                      <small>
+                        <span x-text="Math.round(r.calories ?? 0)"></span> kcal per serving
+                        <span x-show="r.servings_count" x-text="`· makes ${r.servings_count}`"></span>
+                        <span x-show="r.nutrition_source === 'gemini'">· estimated</span>
+                      </small>
+                    </div>
+                    <span class="pill" x-show="recipeMissing(r).length"
+                          :title="recipeMissing(r).join(', ')"
+                          x-text="`${recipeMissing(r).length} missing`"></span>
+                    <span class="tap">›</span>
+                  </button>
+                  <a class="row" x-show="!recipeHasNutrition(r)" :href="recipeEditUrl(r)" target="_blank" rel="noopener" style="opacity:.6">
+                    <div class="row-text">
+                      <b x-text="r.title"></b>
+                      <small>No nutrition yet — add it in Mom's Kitchen ↗</small>
+                    </div>
+                  </a>
+                </div>
+              </template>
+            </div>
+          </div>
         </template>
 
         <!-- The same search, continued. Your own foods are above; these arrive a
@@ -530,6 +576,7 @@
               </div>
 
               <button class="btn btn-block" @click="browseMine()">My foods &amp; meals</button>
+              <button class="btn btn-block" @click="browseRecipes()">From a recipe</button>
               <button class="btn btn-ghost btn-block" @click="closeMenu()">Cancel</button>
             </div>
           </div>

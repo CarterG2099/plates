@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v112';
+const CACHE_VERSION = 'plates-v113';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -58,6 +58,7 @@ const SHELL = [
   '/js/import-hevy.js',
   '/js/stats.js',
   '/js/push.js',
+  '/js/recipes.js',
   '/js/vendor/alpine.esm.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
