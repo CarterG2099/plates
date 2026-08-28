@@ -976,26 +976,29 @@
                 <input id="f-brand" type="text" x-model="draft.brand" autocomplete="off">
               </div>
 
-              <div class="field-grid">
-                <!-- "Amount", not "Serving": this pair is the basis the macros
-                     below are stored against, which is a serving only when the
-                     unit happens to be one. For a per-100g food it is 100 g. -->
-                <div class="field">
-                  <label for="f-qty">Amount</label>
-                  <input id="f-qty" type="number" inputmode="decimal" step="any" x-model.number="draft.serving_qty">
-                </div>
-                <div class="field">
-                  <label for="f-unit">Unit</label>
-                  <input id="f-unit" type="text" x-model="draft.serving_unit">
+              <!-- This pair is the basis: the quantity the macros below are
+                   measured against, which is a serving only when the unit
+                   happens to be one. It was labelled "Amount", which reads as
+                   "how much am I eating" — the one thing it does not mean. The
+                   label is a sentence now, so the two boxes finish it. -->
+              <div class="field basis-field">
+                <label for="f-qty">The numbers below are for</label>
+                <div class="basis-row">
+                  <input id="f-qty" type="number" inputmode="decimal" step="any"
+                         x-model.number="draft.serving_qty" aria-label="Basis amount">
+                  <input id="f-unit" type="text" x-model="draft.serving_unit"
+                         aria-label="Basis unit">
+                  <span>of this food</span>
                 </div>
               </div>
 
               <!-- Only when OFF gave no serving size. One number off the
-                   label converts the whole draft. -->
+                   label converts the whole draft. The line that used to restate
+                   the basis here is gone: the field above now says it once. -->
               <template x-if="draft.serving_unit !== 'serving'">
                 <div class="notice">
-                  These numbers are per <span x-text="draft.serving_qty"></span><span x-text="draft.serving_unit"></span>.
-                  If the label gives a serving, set it and the macros follow.
+                  Eating it by the <span x-text="draft.serving_unit"></span> is rarely how it works.
+                  Put the real serving off the label here and every number above follows.
                   <div class="serving-fix">
                     <label class="field">
                       <span>One serving is</span>

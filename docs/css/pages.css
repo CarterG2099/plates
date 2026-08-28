@@ -623,7 +623,13 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 /* ---- forms ---------------------------------------------------------------- */
 
-.field { display: flex; flex-direction: column; gap: var(--space-1); }
+/* min-width: 0 because a .field is usually a grid or flex item, and those
+   default to min-width: auto — which for an <input> is its intrinsic size=20
+   width, about 180px. Two of those in a two-column .field-grid cannot fit a
+   390px phone, so the row overflowed and the right-hand field ran off the
+   screen. The input is told to fill its field rather than size to itself. */
+.field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.field input, .field select, .field textarea { min-width: 0; width: 100%; }
 
 .field label {
   font-family: var(--font-mono);
@@ -641,6 +647,24 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   outline: none;
 }
 .field input:focus { border-color: var(--color-primary); }
+
+/* The basis line: "The numbers below are for [100] [g] of this food." The two
+   inputs are sized to their content rather than stretched across a grid, so the
+   row reads as a sentence instead of as two unrelated form fields. */
+.basis-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.basis-row input[type="number"] { width: 5.5rem; flex: none; }
+.basis-row input[type="text"]   { width: 6.5rem; flex: none; }
+
+.basis-row span {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
 
 .field-grid {
   display: grid;
