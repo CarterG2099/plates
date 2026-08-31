@@ -877,6 +877,17 @@ Alpine.data('todayPage', () => ({
     return food.amountLabel(this.editQuantity, this.edit.entry.unit);
   },
 
+  /**
+   * What one serving is in the source's own words, for the line under the
+   * label's serving size.
+   *
+   * Its own line rather than folded into the amount above, because it describes
+   * one serving while that line describes however many are being logged —
+   * "1.5 servings (2 skewers)" would be false, and pluralising it into
+   * "3 skewers" would be inventing a figure nobody published.
+   */
+  get editServingText() { return this.edit?.item?.serving_text || ''; },
+
   editMax() { return food.LENS_MAX[this.edit?.lens] ?? 100; },
   editStepSize() { return food.LENS_STEP[this.edit?.lens] ?? 1; },
 
@@ -1306,6 +1317,9 @@ Alpine.data('logPage', () => ({
     if (!this.sheet) return '';
     return food.amountLabel(this.sheetQuantity, this.sheet.unit);
   },
+
+  /** See editServingText — same line, same reasoning. */
+  get sheetServingText() { return this.sheet?.food?.serving_text || ''; },
 
   sheetMax() { return food.LENS_MAX[this.sheet?.lens] ?? 100; },
   sheetStep() { return food.LENS_STEP[this.sheet?.lens] ?? 1; },
@@ -2135,6 +2149,7 @@ Alpine.data('logPage', () => ({
       serving_unit: d.serving_unit.trim() || 'g',
       serving_size: numeric(d.serving_size),
       serving_size_unit: (d.serving_size_unit ?? '').trim() || null,
+      serving_text: (d.serving_text ?? '').trim() || null,
       default_qty: d.default_qty == null || d.default_qty === '' ? null : Number(d.default_qty),
       calories: numeric(d.calories),
       protein_g: numeric(d.protein_g),

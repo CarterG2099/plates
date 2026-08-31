@@ -269,6 +269,10 @@
                 <div class="nf-serving">
                   <span>Serving size</span><span x-text="editServingLabel"></span>
                 </div>
+                <!-- What the box calls one serving, when it calls it anything. -->
+                <div class="nf-serving nf-serving-text" x-show="editServingText" x-cloak>
+                  <span>One serving is</span><span x-text="editServingText"></span>
+                </div>
 
                 <div class="nf-calories">
                   <span>Calories</span><b x-text="editLabel.calories ?? '—'"></b>
@@ -926,6 +930,10 @@
                 <div class="nf-title">Nutrition Facts</div>
                 <div class="nf-serving">
                   <span>Serving size</span><span x-text="sheetServingLabel"></span>
+                </div>
+                <!-- What the box calls one serving, when it calls it anything. -->
+                <div class="nf-serving nf-serving-text" x-show="sheetServingText" x-cloak>
+                  <span>One serving is</span><span x-text="sheetServingText"></span>
                 </div>
 
                 <div class="nf-calories">

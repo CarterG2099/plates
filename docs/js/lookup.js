@@ -130,6 +130,8 @@ function toDraft(product, code) {
     // what lets the amount sheet offer grams as a lens over servings.
     serving_size: size?.qty ?? null,
     serving_size_unit: size?.unit ?? null,
+    // The phrase off the box, when the phrase says more than the number does.
+    serving_text: descriptiveServing(product.serving_size),
     // Nothing to override: one serving is already the amount you want.
     default_qty: null,
     calories: basis.read('energy-kcal') ?? kjToKcal(basis.raw('energy')),
@@ -242,6 +244,34 @@ function parseServing(product) {
     unit: match[2].toLowerCase(),
     label: text,
   };
+}
+
+/**
+ * The serving as words, but only when the words earn their place.
+ *
+ * OFF's serving_size is free text and is usually just the measure again — "114
+ * g", "1 portion (30g)". Storing that would print "114 g" twice on the label.
+ * What is worth keeping is the phrasing that names the thing: "2 skewers", "3
+ * cookies", "1 slice". So the text is kept only if it contains a word that is
+ * not the unit and not a stop word — anything the number alone cannot tell you.
+ *
+ * Read straight off the product rather than from parseServing's result, because
+ * parseServing gives up when there is no gram or millilitre figure to extract —
+ * and "1 slice", with no weight at all, is exactly the case where the words are
+ * the only thing there is.
+ */
+const SERVING_STOP_WORDS = new Set([
+  'g', 'kg', 'mg', 'ml', 'l', 'cl', 'dl', 'oz', 'floz', 'fl', 'about', 'approx',
+  'approximately', 'serving', 'servings', 'portion', 'portions', 'per',
+]);
+
+function descriptiveServing(raw) {
+  const text = String(raw ?? '').trim();
+  if (!text) return null;
+
+  const words = text.toLowerCase().match(/[a-z]+/g) ?? [];
+  const describes = words.some((w) => !SERVING_STOP_WORDS.has(w));
+  return describes ? text : null;
 }
 
 function num(value) {

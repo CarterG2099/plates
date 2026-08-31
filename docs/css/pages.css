@@ -523,6 +523,24 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   color: var(--color-text-muted);
 }
 
+/* The source's own phrase for a serving, under the amount. Quieter than the
+   line above it: that one is what is being logged, this is a description. */
+.nf-serving-text {
+  border-top: 0;
+  padding-top: 0;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+/* The signature rule belongs under the serving block as a whole. With the
+   description present that is two lines, so the first one gives its rule up and
+   the second carries it — otherwise the label appears to have two headers.
+   :has() is already how .app-bar and the sheet-backdrop lock work here. */
+.nf-serving:has(+ .nf-serving-text) {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
 .nf-calories {
   display: flex;
   align-items: baseline;

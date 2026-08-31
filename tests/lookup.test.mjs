@@ -234,3 +234,47 @@ test('the raw serving fields are reported for diagnosis', async () => {
   assert.match(draft.servingRaw, /serving_size/);
   assert.match(draft.servingRaw, /serving_quantity/);
 });
+
+// ---- the serving in the source's own words ---------------------------------
+
+const draftFor = (servingSize, extra = {}) => lookup.draftsFromProducts([{
+  code: '123',
+  product_name: 'Chicken Skewers',
+  serving_size: servingSize,
+  nutriments: { 'energy-kcal_serving': 190, proteins_serving: 22 },
+  ...extra,
+}])[0].draft;
+
+test('a serving that names the thing is kept', () => {
+  assert.equal(draftFor('2 skewers (114 g)').serving_text, '2 skewers (114 g)');
+  assert.equal(draftFor('3 cookies (30g)').serving_text, '3 cookies (30g)');
+  assert.equal(draftFor('1 slice').serving_text, '1 slice');
+});
+
+test('a serving that is only the measure again is dropped', () => {
+  // Printing these would put "114 g" on the label twice.
+  assert.equal(draftFor('114 g').serving_text, null);
+  assert.equal(draftFor('30ml').serving_text, null);
+  assert.equal(draftFor('1 portion (30 g)').serving_text, null);
+  assert.equal(draftFor('about 100 g').serving_text, null);
+});
+
+test('no serving text at all is null, not an empty string', () => {
+  assert.equal(draftFor('').serving_text, null);
+  assert.equal(draftFor(undefined).serving_text, null);
+});
+
+test('the phrase does not disturb the numbers it came with', () => {
+  const draft = draftFor('2 skewers (114 g)');
+  assert.equal(draft.serving_size, 114);
+  assert.equal(draft.serving_size_unit, 'g');
+  assert.equal(draft.serving_unit, 'serving');
+});
+
+test('a serving with words but no weight still keeps its words', () => {
+  // parseServing finds nothing to measure here, which is precisely when the
+  // phrase is the only description there is.
+  const draft = draftFor('1 slice');
+  assert.equal(draft.serving_text, '1 slice');
+  assert.equal(draft.serving_size, null, 'and no measure is invented');
+});
