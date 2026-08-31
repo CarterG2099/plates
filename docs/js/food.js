@@ -504,18 +504,37 @@ function round(n, dp) {
  * amount of zero, which leaves no ratio to scale by — then the food is the
  * only basis left, and if it is gone too the macros go with it.
  */
-export function scaleEntry(entry, quantity, food) {
+export function scaleEntry(entry, quantity, food, { fillGaps = false } = {}) {
   const previous = Number(entry.quantity);
   if (!(previous > 0)) return food ? scaleMacros(food, quantity) : emptyTotals();
 
   const factor = (Number(quantity) || 0) / previous;
+  // Only consulted for figures the entry never recorded — see below, and only
+  // when the entry is counted in the food's own unit. scaleMacros says plainly
+  // that it does no cross-unit conversion, so 100 g logged against a food sold
+  // by the serving would scale it a hundredfold. A blank beats a number that
+  // wrong.
+  const comparable = food && String(entry.unit ?? '') === String(food.serving_unit ?? '');
+  const current = fillGaps && comparable ? scaleMacros(food, quantity) : null;
+
   const out = {};
   for (const m of MACROS) {
     // Null stays null. A macro nobody recorded is not a macro that is zero, and
     // changing an amount is no occasion to decide otherwise — note that
     // Number(null) is 0 and finite, so this cannot be left to Number.isFinite.
     const value = entry[m] == null ? NaN : Number(entry[m]);
-    out[m] = Number.isFinite(value) ? round(value * factor, 1) : null;
+    if (Number.isFinite(value)) {
+      out[m] = round(value * factor, 1);
+      continue;
+    }
+
+    // A gap is not history. Where the entry recorded nothing there is nothing to
+    // protect, so the food's current figure fills it rather than printing a
+    // blank next to numbers the same food supplied. A figure the entry *did*
+    // record is never touched, which is the whole point of the snapshot: what
+    // you ate does not change because Open Food Facts was edited afterwards.
+    const filled = current?.[m];
+    out[m] = filled == null || !Number.isFinite(Number(filled)) ? null : Number(filled);
   }
   return out;
 }

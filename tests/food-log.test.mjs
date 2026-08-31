@@ -296,3 +296,59 @@ test('basisLabel survives a half-typed form', () => {
   assert.equal(food.basisLabel({ serving_qty: null, serving_unit: 'g' }), 'per 1 g',
     'a blank amount reads as one rather than zero or NaN');
 });
+
+// ---- filling an entry's gaps from its food ---------------------------------
+
+test('a blank the entry never recorded is filled from the food', () => {
+  // Logged before the food learned its saturated fat, which is every entry
+  // written before the label carried more than six figures.
+  const entry = { ...ENTRY, quantity: 1, calories: 150, saturated_fat_g: null };
+  const backing = { calories: 150, saturated_fat_g: 3, serving_qty: 1, serving_unit: 'serving' };
+
+  const shown = food.scaleEntry(entry, 2, backing, { fillGaps: true });
+  assert.equal(shown.calories, 300, 'the recorded figure still scales');
+  assert.equal(shown.saturated_fat_g, 6, 'and the blank is filled at the same amount');
+});
+
+test('a figure the entry did record is never replaced by the food', () => {
+  // The snapshot exists for exactly this: the food was rescanned and now says
+  // something else. What was eaten does not change.
+  const entry = { ...ENTRY, quantity: 1, calories: 150 };
+  const rewritten = { calories: 999, serving_qty: 1, serving_unit: 'serving' };
+
+  assert.equal(food.scaleEntry(entry, 1, rewritten, { fillGaps: true }).calories, 150);
+});
+
+test('filling gaps is off unless asked for', () => {
+  const entry = { ...ENTRY, quantity: 1, saturated_fat_g: null };
+  const backing = { calories: 150, saturated_fat_g: 3, serving_qty: 1, serving_unit: 'serving' };
+
+  assert.equal(food.scaleEntry(entry, 1, backing).saturated_fat_g, null);
+});
+
+test('a gap stays a gap when the food has nothing either', () => {
+  const entry = { ...ENTRY, quantity: 1, saturated_fat_g: null };
+  const backing = { calories: 150, saturated_fat_g: null, serving_qty: 1, serving_unit: 'serving' };
+
+  assert.equal(food.scaleEntry(entry, 1, backing, { fillGaps: true }).saturated_fat_g, null);
+  assert.equal(food.scaleEntry(entry, 1, null, { fillGaps: true }).saturated_fat_g, null,
+    'and when the food is gone entirely');
+});
+
+test('a gap is not filled across units, where the factor would be nonsense', () => {
+  // 100 g of kettle corn against a food sold by the serving. scaleMacros does no
+  // cross-unit conversion, so consulting it here would multiply by a hundred.
+  const entry = { ...ENTRY, quantity: 100, unit: 'g', calories: 459.4, sugars_g: null };
+  const backing = { calories: 130, sugars_g: 3, serving_qty: 1, serving_unit: 'serving' };
+
+  const shown = food.scaleEntry(entry, 100, backing, { fillGaps: true });
+  assert.equal(shown.sugars_g, null, 'blank beats three hundred grams of sugar');
+  assert.equal(shown.calories, 459.4, 'and what was recorded is untouched');
+});
+
+test('the same food logged in its own unit does fill', () => {
+  const entry = { ...ENTRY, quantity: 1, unit: 'serving', calories: 130, sugars_g: null };
+  const backing = { calories: 130, sugars_g: 3, serving_qty: 1, serving_unit: 'serving' };
+
+  assert.equal(food.scaleEntry(entry, 1, backing, { fillGaps: true }).sugars_g, 3);
+});

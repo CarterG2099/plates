@@ -1014,7 +1014,9 @@ Alpine.data('todayPage', () => ({
     // flushes this sheet's bindings after `edit` is cleared but before the
     // template unmounts, and a null throws on every one of them.
     if (!this.edit) return {};
-    return food.scaleEntry(this.edit.entry, this.editQuantity, this.edit.item);
+    // fillGaps: an entry logged before its food learned its saturated fat should
+    // still show it. Only the blanks are filled; recorded figures stay frozen.
+    return food.scaleEntry(this.edit.entry, this.editQuantity, this.edit.item, { fillGaps: true });
   },
 
   async saveEdit() {
