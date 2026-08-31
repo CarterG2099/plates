@@ -2132,7 +2132,9 @@ Alpine.data('logPage', () => ({
     const unit = this.draft.serving_unit || 'g';
     const factor = size / basis;
 
-    for (const key of ['calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg']) {
+    // All of them, or a label rebased to its real serving keeps per-100g
+    // saturated fat next to per-serving calories.
+    for (const key of food.MACROS) {
       const value = this.draft[key];
       if (value === '' || value == null) continue;
       this.draft[key] = Math.round(Number(value) * factor * 10) / 10;
@@ -2178,12 +2180,11 @@ Alpine.data('logPage', () => ({
       serving_size_unit: (d.serving_size_unit ?? '').trim() || null,
       serving_text: (d.serving_text ?? '').trim() || null,
       default_qty: d.default_qty == null || d.default_qty === '' ? null : Number(d.default_qty),
-      calories: numeric(d.calories),
-      protein_g: numeric(d.protein_g),
-      carbs_g: numeric(d.carbs_g),
-      fat_g: numeric(d.fat_g),
-      fiber_g: numeric(d.fiber_g),
-      sodium_mg: numeric(d.sodium_mg),
+      // Every nutrient the label can print, not just the six Today totals.
+      // Naming them individually here is what quietly threw away the saturated
+      // fat, sugars, cholesterol and micros that the lookup had already read —
+      // the columns were there and the draft was carrying them.
+      ...Object.fromEntries(food.MACROS.map((m) => [m, numeric(d[m])])),
       // Provenance for a food made from a recipe. plates.foods has the column;
       // the log stamps it again from the food, so history keeps the link too.
       recipe_id: d.recipe_id ?? null,

@@ -1050,7 +1050,7 @@ export function goalHistory(goals, ownerEmail) {
 
 /** What a refresh is allowed to overwrite: the figures, never the identity. */
 const REFRESHABLE_FIELDS = [
-  'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg',
+  ...MACROS,
   'serving_qty', 'serving_unit', 'serving_size', 'serving_size_unit', 'serving_text',
 ];
 
@@ -1066,7 +1066,7 @@ const REFRESHABLE_FIELDS = [
  * fdcId (there is no column for it), so there is no id to look them up by; their
  * barcode would resolve against a different database and quietly swap sources.
  */
-export function refreshableFoods(foods, ownerEmail, { now = Date.now(), maxAgeDays = 30, limit = 3 } = {}) {
+export function refreshableFoods(foods, ownerEmail, { now = Date.now(), maxAgeDays = 30, limit = 8 } = {}) {
   const cutoff = now - maxAgeDays * 86_400_000;
 
   return foods

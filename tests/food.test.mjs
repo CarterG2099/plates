@@ -781,7 +781,7 @@ test('a food checked recently is left alone', () => {
 
 test('the batch is capped so a big library cannot flood the network', () => {
   const foods = Array.from({ length: 20 }, (_, i) => apiFood(`f${i}`));
-  assert.equal(food.refreshableFoods(foods, ME, { now: NOW_MS }).length, 3);
+  assert.equal(food.refreshableFoods(foods, ME, { now: NOW_MS }).length, 8);
 });
 
 test('mergeRefresh reports what actually moved', () => {
@@ -877,4 +877,47 @@ test('refreshApiFoods leaves hand-entered foods entirely alone', async () => {
   assert.equal(called, false, 'not even looked up');
   assert.equal(out.checked, 0);
   assert.equal((await local.get('foods', 'typed')).calories, 100);
+});
+
+test('a refresh carries the whole label, not just the six', async () => {
+  const stored = apiFood('Oreo', { id: 'oreo', calories: 160, saturated_fat_g: null });
+  await local.save('foods', stored, ME);
+
+  const lookup = async () => ({
+    status: 'found',
+    draft: {
+      calories: 160, saturated_fat_g: 2.5, sugars_g: 14, cholesterol_mg: 0,
+      calcium_mg: 20, iron_mg: 1.1, potassium_mg: 55, vitamin_d_mcg: 0.2,
+    },
+  });
+  await food.refreshApiFoods([stored], ME, lookup, { now: NOW_MS });
+
+  const after = await local.get('foods', 'oreo');
+  assert.equal(after.saturated_fat_g, 2.5);
+  assert.equal(after.sugars_g, 14);
+  assert.equal(after.calcium_mg, 20);
+  assert.equal(after.potassium_mg, 55);
+  assert.equal(after.vitamin_d_mcg, 0.2);
+});
+
+test('every nutrient the label can print is refreshable', () => {
+  // The label reads food.MACROS; anything missing from the refresh set would be
+  // a row that can never be filled in after the fact.
+  const draft = Object.fromEntries(food.MACROS.map((m) => [m, 7]));
+  const result = food.mergeRefresh({}, draft);
+  assert.deepEqual(Object.keys(result.fields).sort(), [...food.MACROS].sort());
+});
+
+test('the draft save enumerates nothing — it spreads food.MACROS', async () => {
+  // This is the bug that lost saturated fat, sugars, cholesterol and every
+  // micronutrient on 27 scanned foods: lookup.js read them, the columns existed
+  // to hold them, and the save named its fields one by one and dropped the rest.
+  const { readFile } = await import('node:fs/promises');
+  const { fileURLToPath } = await import('node:url');
+  const src = await readFile(fileURLToPath(new URL('../docs/js/app.js', import.meta.url)), 'utf8');
+
+  assert.match(src, /\.\.\.Object\.fromEntries\(food\.MACROS\.map\(\(m\) => \[m, numeric\(d\[m\]\)\]\)\)/,
+    'the food draft must save every nutrient, not a hand-written subset');
+  assert.doesNotMatch(src, /fiber_g: numeric\(d\.fiber_g\)/,
+    'the enumerated list should be gone, not merely supplemented');
 });
