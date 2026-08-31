@@ -182,8 +182,36 @@ function toDraft(product, code) {
  *  3. Nothing about servings at all — per 100 g, because there is no serving to
  *     express it in. Rare, and the review form can fix it.
  */
-function servingBasis(n, size) {
+/**
+ * Whether OFF's per-serving figures are the per-100g ones pasted into the wrong
+ * field, which is the most common way this data is wrong.
+ *
+ * Golden Oreo arrives claiming 484 kcal for a 22 g serving. 484 is its per-100g
+ * figure; three cookies are about 160. Trusting it would log four and a half
+ * times what was eaten, which is worse than any rounding error this check could
+ * cause — so where the two figures agree while the serving is plainly not 100 g,
+ * the typed number loses to the derived one.
+ *
+ * Deliberately narrow. It fires only on that exact signature: a known serving
+ * meaningfully different from 100, and per-serving calories within a whisker of
+ * per-100g. A genuine 100 g serving is left alone, because for it the two really
+ * are the same number.
+ */
+function perServingIsReally100g(n, size) {
+  if (!size || (size.unit !== 'g' && size.unit !== 'ml')) return false;
+  if (!(size.qty > 0) || Math.abs(size.qty - 100) / 100 <= 0.1) return false;
+
   const perServing = num(n['energy-kcal_serving']) ?? kjToKcal(n.energy_serving);
+  const per100 = num(n['energy-kcal_100g']) ?? kjToKcal(n.energy_100g);
+  if (perServing == null || per100 == null || per100 <= 0) return false;
+
+  return Math.abs(perServing - per100) / per100 < 0.05;
+}
+
+function servingBasis(n, size) {
+  const perServing = perServingIsReally100g(n, size)
+    ? null
+    : num(n['energy-kcal_serving']) ?? kjToKcal(n.energy_serving);
 
   if (perServing != null) {
     return {
@@ -269,7 +297,16 @@ function descriptiveServing(raw) {
   const text = String(raw ?? '').trim();
   if (!text) return null;
 
+  // OFF is crowd-entered and this field collects debris: markup, image
+  // placeholders, whole sentences. "1 [image of a flowpack] (22 g)" is a real
+  // one. A serving is a short phrase — anything bracketed, tagged, or long
+  // enough to be prose is not a serving description and is dropped whole.
+  if (/[[\]<>{}|]/.test(text)) return null;
+  if (text.length > 40) return null;
+
   const words = text.toLowerCase().match(/[a-z]+/g) ?? [];
+  if (words.length > 5) return null;
+
   const describes = words.some((w) => !SERVING_STOP_WORDS.has(w));
   return describes ? text : null;
 }

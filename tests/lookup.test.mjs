@@ -278,3 +278,47 @@ test('a serving with words but no weight still keeps its words', () => {
   assert.equal(draft.serving_text, '1 slice');
   assert.equal(draft.serving_size, null, 'and no measure is invented');
 });
+
+test('debris in the serving field is dropped, not printed', () => {
+  // All real shapes from Open Food Facts. The flowpack one reached the label.
+  assert.equal(draftFor('1 [image of a flowpack] (22 g)').serving_text, null);
+  assert.equal(draftFor('<b>2 cookies</b>').serving_text, null);
+  assert.equal(
+    draftFor('a serving is roughly one third of the tub, or thereabouts, 85g').serving_text,
+    null, 'prose is not a serving description');
+  // And the good ones still survive the new filter.
+  assert.equal(draftFor('2 skewers (114 g)').serving_text, '2 skewers (114 g)');
+  assert.equal(draftFor('3 cookies (34g)').serving_text, '3 cookies (34g)');
+});
+
+test('a per-serving figure that is really the per-100g one is refused', () => {
+  // Golden Oreo: OFF says 484 kcal for a 22 g serving, which is its per-100g
+  // number. The derived 484 * 0.22 is what a serving actually is.
+  const draft = draftFor('22 g', {
+    nutriments: {
+      'energy-kcal_serving': 484, 'energy-kcal_100g': 484,
+      carbohydrates_serving: 69, carbohydrates_100g: 69,
+    },
+  });
+
+  assert.equal(draft.serving_unit, 'serving');
+  assert.ok(draft.calories < 150,
+    `expected a real serving, got ${draft.calories} kcal`);
+  assert.equal(draft.calories, 106.5, '484 * 0.22, to the tenth num() keeps');
+});
+
+test('a genuine 100 g serving is left alone', () => {
+  // Here the two figures agreeing is correct, not a mistake.
+  const draft = draftFor('100 g', {
+    nutriments: { 'energy-kcal_serving': 250, 'energy-kcal_100g': 250 },
+  });
+  assert.equal(Math.round(draft.calories), 250);
+});
+
+test('a per-serving figure that disagrees with per-100g is trusted', () => {
+  // The normal case: 34 g of a 480 kcal/100g biscuit is 163, and OFF says so.
+  const draft = draftFor('34 g', {
+    nutriments: { 'energy-kcal_serving': 163, 'energy-kcal_100g': 480 },
+  });
+  assert.equal(Math.round(draft.calories), 163, 'the published serving wins');
+});

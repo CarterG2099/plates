@@ -4,6 +4,8 @@ import { installBrowser, NOW, daysAgo, atTime } from './helpers/browser.mjs';
 
 installBrowser();
 const food = await import('../docs/js/food.js');
+// The refresh tests read back what saveFood wrote, through the real store.
+const local = await import('../docs/js/local.js');
 
 const ME = 'me@example.com';
 const OTHER = 'aana@example.com';
@@ -741,4 +743,138 @@ test('micros print separately when the source has them', () => {
   const label = food.nutritionLabel({ calories: 100, calcium_mg: 260, iron_mg: 1.8 });
   assert.deepEqual(label.printedMicros.map((r) => r.key), ['calcium_mg', 'iron_mg']);
   assert.equal(label.printedMicros[0].percent, 20, '260 of 1300');
+});
+
+// ---- refreshing API foods --------------------------------------------------
+
+const NOW_MS = Date.parse('2026-08-31T12:00:00Z');
+const daysBefore = (n) => new Date(NOW_MS - n * 86_400_000).toISOString();
+
+const apiFood = (name, over = {}) => ({
+  id: name, owner_email: ME, name, source: 'off', barcode: '123', ...over,
+});
+
+test('only API foods with a barcode are ever refreshed', () => {
+  const foods = [
+    apiFood('scanned'),
+    apiFood('typed', { source: 'manual' }),
+    apiFood('photographed', { source: 'label_photo', barcode: null }),
+    apiFood('usda', { source: 'usda' }),
+    apiFood('no barcode', { barcode: null }),
+    apiFood('someone else', { owner_email: 'her@example.com' }),
+    apiFood('deleted', { deleted_at: daysBefore(1) }),
+  ];
+  const due = food.refreshableFoods(foods, ME, { now: NOW_MS, limit: 99 });
+  assert.deepEqual(due.map((f) => f.name), ['scanned']);
+});
+
+test('a food checked recently is left alone', () => {
+  const foods = [
+    apiFood('fresh', { refreshed_at: daysBefore(2) }),
+    apiFood('stale', { refreshed_at: daysBefore(40) }),
+    apiFood('never'),
+  ];
+  const due = food.refreshableFoods(foods, ME, { now: NOW_MS, limit: 99 });
+  assert.deepEqual(due.map((f) => f.name), ['never', 'stale'],
+    'longest unchecked first, and the recent one not at all');
+});
+
+test('the batch is capped so a big library cannot flood the network', () => {
+  const foods = Array.from({ length: 20 }, (_, i) => apiFood(`f${i}`));
+  assert.equal(food.refreshableFoods(foods, ME, { now: NOW_MS }).length, 3);
+});
+
+test('mergeRefresh reports what actually moved', () => {
+  const existing = { calories: 190, protein_g: 22, serving_size: 114, serving_text: null };
+  const draft = { calories: 210, protein_g: 22, serving_size: 120, serving_text: '2 skewers' };
+  const result = food.mergeRefresh(existing, draft);
+
+  assert.equal(result.changed, true);
+  assert.deepEqual(Object.keys(result.fields).sort(),
+    ['calories', 'serving_size', 'serving_text']);
+  assert.deepEqual(result.changes.find((c) => c.key === 'calories'), { key: 'calories', from: 190, to: 210 });
+});
+
+test('an unchanged food produces no write at all', () => {
+  const same = { calories: 190, protein_g: 22, serving_unit: 'serving' };
+  const result = food.mergeRefresh(same, { ...same });
+  assert.equal(result.changed, false);
+  assert.deepEqual(result.fields, {});
+});
+
+test('a figure the source has dropped does not blank the stored one', () => {
+  // OFF entries lose values to unrelated edits; a label that empties itself is
+  // worse than one a month out of date.
+  const existing = { calories: 190, fiber_g: 3, sodium_mg: 400 };
+  const result = food.mergeRefresh(existing, { calories: 190, fiber_g: null, sodium_mg: undefined });
+  assert.equal(result.changed, false);
+  assert.deepEqual(result.fields, {});
+});
+
+test('mergeRefresh never touches identity, only the figures', () => {
+  const existing = { name: 'Mine', brand: 'Mine', barcode: '123', calories: 100 };
+  const draft = { name: 'Theirs', brand: 'Theirs', barcode: '999', calories: 120 };
+  const result = food.mergeRefresh(existing, draft);
+
+  assert.deepEqual(Object.keys(result.fields), ['calories']);
+});
+
+test('a numeric string is not a change worth writing', () => {
+  const result = food.mergeRefresh({ serving_size: 355 }, { serving_size: '355' });
+  assert.equal(result.changed, false);
+});
+
+test('refreshApiFoods writes what moved and stamps what it checked', async () => {
+  const stored = apiFood('Skewers', { calories: 190, serving_text: null });
+  await local.save('foods', stored, ME);
+
+  const lookup = async () => ({
+    status: 'found',
+    draft: { calories: 210, serving_text: '2 skewers (114 g)' },
+  });
+  const out = await food.refreshApiFoods([stored], ME, lookup, { now: NOW_MS });
+
+  assert.equal(out.checked, 1);
+  assert.equal(out.updated.length, 1);
+  assert.deepEqual(out.updated[0].changes.map((c) => c.key), ['calories', 'serving_text']);
+
+  const after = await local.get('foods', stored.id);
+  assert.equal(after.calories, 210);
+  assert.equal(after.serving_text, '2 skewers (114 g)');
+  assert.ok(after.refreshed_at, 'stamped, so it is not re-checked tomorrow');
+});
+
+test('a failed lookup leaves the food alone and unstamped', async () => {
+  const stored = apiFood('Flaky', { id: 'flaky', calories: 190 });
+  await local.save('foods', stored, ME);
+
+  const out = await food.refreshApiFoods([stored], ME, async () => { throw new Error('offline'); },
+    { now: NOW_MS });
+
+  assert.equal(out.checked, 0);
+  const after = await local.get('foods', 'flaky');
+  assert.equal(after.calories, 190);
+  assert.equal(after.refreshed_at ?? null, null, 'so it comes round again next time');
+});
+
+test('a barcode the source no longer knows is not treated as an empty food', async () => {
+  const stored = apiFood('Gone', { id: 'gone', calories: 190 });
+  await local.save('foods', stored, ME);
+
+  await food.refreshApiFoods([stored], ME, async () => ({ status: 'not_found' }), { now: NOW_MS });
+
+  const after = await local.get('foods', 'gone');
+  assert.equal(after.calories, 190, 'the local copy is the fallback, not the casualty');
+});
+
+test('refreshApiFoods leaves hand-entered foods entirely alone', async () => {
+  const mine = apiFood('Typed', { id: 'typed', source: 'manual', calories: 100 });
+  await local.save('foods', mine, ME);
+
+  let called = false;
+  const out = await food.refreshApiFoods([mine], ME, async () => { called = true; }, { now: NOW_MS });
+
+  assert.equal(called, false, 'not even looked up');
+  assert.equal(out.checked, 0);
+  assert.equal((await local.get('foods', 'typed')).calories, 100);
 });

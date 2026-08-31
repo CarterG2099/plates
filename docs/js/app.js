@@ -337,6 +337,7 @@ Alpine.store('auth', {
       sync.start();
       Alpine.store('data').refreshTraining();
       this.verify();                       // deliberately not awaited
+      Alpine.store('data').refreshApiFoods();   // upkeep, also not awaited
 
       // A granted permission is not a subscription. Re-establishing it here
       // rather than only from the reminders toggle, because the toggle lives
@@ -400,6 +401,7 @@ Alpine.store('auth', {
       await Alpine.store('data').refreshCore();
       sync.start();
       Alpine.store('data').refreshTraining();
+      Alpine.store('data').refreshApiFoods();
     } else {
       writeMembership(null);
     }
@@ -528,6 +530,31 @@ Alpine.store('data', {
     Object.assign(raw, { goals, foods, log, combos, templates, weightLog });
     this.ready = true;
     this.version++;
+  },
+
+  /**
+   * Bring API-sourced foods back in step with Open Food Facts.
+   *
+   * Deliberately here and not on the food sheet. Nothing in the logging path may
+   * touch the network, and a lookup while the sheet is open could move the
+   * calories between reading them and pressing Log.
+   *
+   * Not awaited by its caller and swallows its own failures: this is upkeep, and
+   * upkeep must never be the reason the app did not start.
+   */
+  async refreshApiFoods() {
+    const email = Alpine.store('auth').email;
+    if (!email) return;
+
+    try {
+      const { updated } = await food.refreshApiFoods(raw.foods, email, lookupBarcode);
+      if (!updated.length) return;
+
+      await this.refreshCore();
+      Alpine.store('ui').flash(updated.length === 1
+        ? `Updated ${updated[0].name} from Open Food Facts`
+        : `Updated ${updated.length} foods from Open Food Facts`);
+    } catch { /* upkeep; the local copy stands */ }
   },
 
   /**

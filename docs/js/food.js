@@ -1045,3 +1045,113 @@ export function goalHistory(goals, ownerEmail) {
     .filter((g) => g.owner_email === ownerEmail && !g.deleted_at)
     .sort((a, b) => (a.starts_on < b.starts_on ? 1 : -1));
 }
+
+// ---- keeping API foods in step with their source ----------------------------
+
+/** What a refresh is allowed to overwrite: the figures, never the identity. */
+const REFRESHABLE_FIELDS = [
+  'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg',
+  'serving_qty', 'serving_unit', 'serving_size', 'serving_size_unit', 'serving_text',
+];
+
+/**
+ * Foods due a re-check against the API that produced them.
+ *
+ * Only `off` rows with a barcode: they are a mirror of an Open Food Facts record
+ * rather than anything anyone here wrote, so replacing them loses nothing. A
+ * hand-entered food, a label photo, a recipe — those are the owner's own record
+ * and are never touched, which is the whole distinction being drawn.
+ *
+ * USDA rows are excluded despite also coming from an API. plates.foods keeps no
+ * fdcId (there is no column for it), so there is no id to look them up by; their
+ * barcode would resolve against a different database and quietly swap sources.
+ */
+export function refreshableFoods(foods, ownerEmail, { now = Date.now(), maxAgeDays = 30, limit = 3 } = {}) {
+  const cutoff = now - maxAgeDays * 86_400_000;
+
+  return foods
+    .filter((f) => f.owner_email === ownerEmail && !f.deleted_at)
+    .filter((f) => f.source === 'off' && f.barcode)
+    .filter((f) => !f.refreshed_at || Date.parse(f.refreshed_at) < cutoff)
+    // Longest unchecked first, so nothing starves behind a big library.
+    .sort((a, b) => (Date.parse(a.refreshed_at ?? 0) || 0) - (Date.parse(b.refreshed_at ?? 0) || 0))
+    .slice(0, limit);
+}
+
+/**
+ * What a fresh lookup would change about a stored food.
+ *
+ * Pure, and reports rather than writes, so the decision to save is the caller's
+ * and the comparison can be tested without a network or a database.
+ *
+ * A field the source has stopped publishing is left alone rather than blanked:
+ * OFF entries lose figures as often as they gain them, usually to an edit that
+ * was tidying something else, and a nutrition label that silently empties is
+ * worse than one that is a month out of date.
+ */
+export function mergeRefresh(existing, draft) {
+  const changes = [];
+  const fields = {};
+
+  for (const key of REFRESHABLE_FIELDS) {
+    const next = draft?.[key];
+    if (next === undefined || next === null || next === '') continue;
+
+    const before = existing?.[key];
+    // Numbers compare as numbers; 355 and "355" are not a change worth writing.
+    const same = typeof next === 'number' || typeof before === 'number'
+      ? Number(before) === Number(next)
+      : String(before ?? '') === String(next);
+    if (same) continue;
+
+    fields[key] = next;
+    changes.push({ key, from: before ?? null, to: next });
+  }
+
+  return { changed: changes.length > 0, changes, fields };
+}
+
+/**
+ * Re-check a few API foods against Open Food Facts and write back what moved.
+ *
+ * Runs off the background sync, never off a tap. The rule is that nothing in the
+ * logging path touches the network, and it would be a poor trade anyway: a
+ * lookup while the sheet is open could change the calories under the reader
+ * between seeing them and pressing Log.
+ *
+ * Best-effort throughout. A lookup that fails leaves the food exactly as it was
+ * and simply does not stamp it, so it comes round again next time — the local
+ * copy is always the fallback, never the casualty.
+ *
+ * @param lookup  injected so this is testable without a network
+ */
+export async function refreshApiFoods(foods, ownerEmail, lookup, options = {}) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return { checked: 0, updated: [] };
+
+  const due = refreshableFoods(foods, ownerEmail, options);
+  const updated = [];
+  let checked = 0;
+
+  for (const item of due) {
+    let result;
+    try {
+      result = await lookup(String(item.barcode));
+    } catch {
+      continue;                       // offline, rate-limited, whatever: try later
+    }
+    if (result?.status !== 'found' || !result.draft) continue;
+
+    checked += 1;
+    const { changed, changes, fields } = mergeRefresh(item, result.draft);
+
+    await saveFood({
+      ...item,
+      ...fields,
+      refreshed_at: new Date().toISOString(),
+    }, ownerEmail);
+
+    if (changed) updated.push({ name: item.name, changes });
+  }
+
+  return { checked, updated };
+}
