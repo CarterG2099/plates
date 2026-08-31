@@ -1869,22 +1869,64 @@ Alpine.data('logPage', () => ({
       return;
     }
 
+    this.applyScanResult(result);
+    this.startScanLoop(video);
+  },
+
+  /** One place turns a start/switch result into scan state; both paths use it. */
+  applyScanResult(result) {
     this.scan = {
       status: 'ready',
-      decoder: result.decoder,
+      decoder: result.decoder ?? this.scan?.decoder ?? '',
       focus: result.focus,
       focusAt: null,
+      zoom: result.zoom,
+      torch: result.torch,
+      torchOn: false,          // a fresh track always starts with the torch off
+      canSwitch: result.canSwitch,
       // Say so rather than letting it look broken: on iOS there is no focus
       // control, and the camera app is the answer.
       message: result.focus === 'unavailable'
         ? 'This browser can’t control focus — use the camera app if it won’t read.'
         : 'Tap the preview to focus.',
     };
+  },
 
+  startScanLoop(video) {
     scanner.startDecoding(video, {
       onResult: (code) => this.acceptCode(code),
       onError: (error) => { this.scan = { status: 'error', message: error.message, decoder: '' }; },
     });
+  },
+
+  async setScanZoom(value) {
+    const applied = await scanner.setZoom(value);
+    if (applied != null && this.scan?.zoom) this.scan.zoom = { ...this.scan.zoom, value: applied };
+  },
+
+  async toggleTorch() {
+    if (!this.scan) return;
+    this.scan.torchOn = await scanner.setTorch(!this.scan.torchOn);
+  },
+
+  /**
+   * Cycle rear lenses. The auto-pick is a heuristic over labels, and the phone
+   * it guesses wrong on is always the one in your hand — this is the way out.
+   * The lens that works is remembered, so it is a once-per-phone tap.
+   */
+  async switchScanCamera() {
+    const video = this.$refs.video;
+    scanner.stopDecoding();
+    this.scan = { ...this.scan, status: 'starting', message: '' };
+
+    const result = await scanner.switchCamera(video);
+    if (result.ok || result.zoom !== undefined) {
+      this.applyScanResult(result);
+      if (!result.ok) this.scan.message = result.reason;
+    } else {
+      this.scan = { ...this.scan, status: 'ready', message: result.reason };
+    }
+    this.startScanLoop(video);
   },
 
   /**

@@ -7,16 +7,44 @@ installBrowser();
 /**
  * A fake camera.
  *
- * `queue` is what the "camera" sees, one frame per decode. Everything else is
- * the minimum getUserMedia surface start() touches.
+ * `queue` is what the "camera" sees, one frame per decode. `camera` is the
+ * hardware: which devices exist, which one facingMode hands over, what the
+ * track can do, and — via `applied` and `settings` — what the code actually
+ * asked of it. The track is a singleton on purpose: several tests monkey-patch
+ * its methods, and a per-stream track would silently detach them.
  */
 let queue = [];
 
+const camera = {
+  devices: [
+    { kind: 'videoinput', deviceId: 'cam-main', label: 'camera2 0, facing back' },
+    { kind: 'videoinput', deviceId: 'cam-ultra', label: 'Back Ultra Wide Camera' },
+    { kind: 'videoinput', deviceId: 'cam-front', label: 'Front Camera' },
+  ],
+  granted: 'cam-ultra',   // facingMode hands over the wrong lens, as phones do
+  capabilities: {
+    focusMode: ['continuous', 'single-shot'],
+    pointsOfInterest: true,
+    zoom: { min: 1, max: 8, step: 0.1 },
+    torch: true,
+  },
+  applied: [],            // every advanced constraint, in order
+  settings: {},           // what getSettings() reports back
+  opens: [],              // the video constraints of every getUserMedia call
+};
+
 const track = {
   stop() {},
-  getCapabilities: () => ({ focusMode: ['continuous', 'single-shot'], pointsOfInterest: true }),
-  getSettings: () => ({ focusMode: 'continuous' }),
-  applyConstraints: async () => {},
+  getCapabilities: () => camera.capabilities,
+  getSettings: () => ({ ...camera.settings }),
+  applyConstraints: async (c) => {
+    for (const adv of c?.advanced ?? []) {
+      camera.applied.push(adv);
+      if ('zoom' in adv) camera.settings.zoom = adv.zoom;
+      if ('torch' in adv) camera.settings.torch = adv.torch;
+      if ('focusMode' in adv) camera.settings.focusMode = adv.focusMode;
+    }
+  },
 };
 const stream = { getTracks: () => [track], getVideoTracks: () => [track] };
 
@@ -28,7 +56,14 @@ class FakeBarcodeDetector {
   }
 }
 
-navigator.mediaDevices = { getUserMedia: async () => stream };
+navigator.mediaDevices = {
+  getUserMedia: async ({ video: v }) => {
+    camera.opens.push(v);
+    camera.settings = { focusMode: 'continuous', deviceId: v?.deviceId?.exact ?? camera.granted };
+    return stream;
+  },
+  enumerateDevices: async () => camera.devices,
+};
 window.BarcodeDetector = FakeBarcodeDetector;
 window.isSecureContext = true;
 
@@ -179,5 +214,98 @@ test('isSupported requires a secure context and a camera API', () => {
     assert.equal(scanner.isSupported(), false);
   } finally {
     window.isSecureContext = real;
+  }
+});
+
+// ---- lens, zoom, torch ----------------------------------------------------------
+// The quality fixes: the browser's facingMode pick is often a rear lens that
+// cannot focus at barcode range, and a barcode brought close enough to fill the
+// frame sits inside the minimum focus distance. The lens gets corrected, and a
+// starting zoom lets the barcode fill the frame from where focus works.
+
+test('start moves off the lens the browser picked, onto the main rear camera', async () => {
+  localStorage.removeItem('plates:scanner-camera');
+  camera.opens = [];
+  await scanner.start(video);
+
+  assert.equal(camera.opens.length, 2, 'the permission open, then the corrective open');
+  assert.deepEqual(camera.opens[1].deviceId, { exact: 'cam-main' },
+    'the ultrawide is a specialist lens; camera2 0 is the main one');
+  assert.equal(localStorage.getItem('plates:scanner-camera'), 'cam-main');
+});
+
+test('start applies a starting zoom and reports the whole control surface', async () => {
+  camera.applied = [];
+  const result = await scanner.start(video);
+
+  assert.ok(camera.applied.some((a) => a.zoom === 2), 'zoom 2 lets focus happen at arm\'s length');
+  assert.deepEqual(result.zoom, { min: 1, max: 8, step: 0.1, value: 2 });
+  assert.equal(result.torch, true);
+  assert.equal(result.canSwitch, true, 'two rear lenses means the switch button shows');
+});
+
+test('a lens that worked before wins over the heuristic', async () => {
+  localStorage.setItem('plates:scanner-camera', 'cam-ultra');
+  camera.opens = [];
+  await scanner.start(video);
+
+  assert.equal(camera.opens.length, 1, 'the granted lens is the remembered one — no corrective open');
+  localStorage.removeItem('plates:scanner-camera');
+});
+
+test('setZoom clamps to what the lens can actually do', async () => {
+  await scanner.start(video);
+  assert.equal(await scanner.setZoom(50), 8);
+  assert.equal(await scanner.setZoom(0), 1);
+  assert.equal(await scanner.setZoom(3.5), 3.5);
+});
+
+test('setTorch reports the torch state the track ended up in', async () => {
+  await scanner.start(video);
+  assert.equal(await scanner.setTorch(true), true);
+  assert.equal(await scanner.setTorch(false), false);
+});
+
+test('switchCamera cycles rear lenses and remembers the choice', async () => {
+  localStorage.removeItem('plates:scanner-camera');
+  await scanner.start(video);                    // corrected onto cam-main
+
+  const result = await scanner.switchCamera(video);
+  assert.equal(result.ok, true);
+  assert.equal(camera.settings.deviceId, 'cam-ultra');
+  assert.equal(localStorage.getItem('plates:scanner-camera'), 'cam-ultra');
+
+  // The remembered lens now wins on the next start, with no corrective swap.
+  camera.opens = [];
+  await scanner.start(video);
+  assert.equal(camera.opens.length, 1);
+  assert.equal(camera.settings.deviceId, 'cam-ultra');
+  localStorage.removeItem('plates:scanner-camera');
+});
+
+test('switchCamera declines gracefully with a single rear lens', async () => {
+  const real = camera.devices;
+  camera.devices = real.filter((d) => d.deviceId !== 'cam-ultra');
+  try {
+    await scanner.start(video);
+    const result = await scanner.switchCamera(video);
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /one rear camera/i);
+  } finally {
+    camera.devices = real;
+  }
+});
+
+test('a tap still retriggers focus when the camera cannot steer by point', async () => {
+  const real = camera.capabilities;
+  camera.capabilities = { ...real, pointsOfInterest: undefined };
+  try {
+    await scanner.start(video);
+    camera.applied = [];
+    assert.equal(await scanner.focusAt(0.5, 0.5), true);
+    assert.ok(camera.applied.some((a) => a.focusMode === 'single-shot'),
+      'a bare single-shot retrigger refocuses on centre frame');
+  } finally {
+    camera.capabilities = real;
   }
 });

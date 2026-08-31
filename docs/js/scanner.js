@@ -18,6 +18,24 @@ const ZXING_URL = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.
 
 const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'];
 
+/** Which rear lens worked last time; heuristics run only until one is chosen. */
+const CAMERA_KEY = 'plates:scanner-camera';
+
+/** Barcodes are small; resolution is what decodes them. */
+const RESOLUTION = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+
+/**
+ * Hold the packet where the lens can focus, and zoom instead of leaning in.
+ *
+ * The natural move with a small barcode is to bring it close until it fills the
+ * frame — which on most phones is inside the lens's minimum focus distance, so
+ * the preview goes soft and never recovers. Starting at 2× lets the same
+ * framing happen from twice as far away, comfortably inside focus range. This
+ * is what the platform barcode scanners do; it is the single biggest reason the
+ * camera app reads a code this scanner missed.
+ */
+const DEFAULT_ZOOM = 2;
+
 let stream = null;
 let detector = null;
 let zxingReader = null;
@@ -30,25 +48,57 @@ export function isSupported() {
 }
 
 /**
- * Open the rear camera into `video`.
- * @returns {Promise<{ok: true, decoder: string} | {ok: false, reason: string}>}
+ * Open the rear camera into `video` — the right rear camera, not whichever one
+ * the browser felt like.
+ *
+ * `facingMode: environment` is a coin toss on a multi-lens phone: the browser
+ * may hand over the ultrawide, whose minimum focus distance is far beyond
+ * barcode range, so the preview looks alive and nothing ever sharpens. Labels
+ * are blank until permission is granted, so the order has to be: open any rear
+ * camera, then look at what else exists and move to the main lens if the pick
+ * was a specialist one.
+ *
+ * @returns {Promise<{ok: true, decoder: string, focus: string,
+ *   zoom: {min:number,max:number,step:number,value:number}|null,
+ *   torch: boolean, canSwitch: boolean} | {ok: false, reason: string}>}
  */
 export async function start(video) {
   if (!isSupported()) {
     return { ok: false, reason: 'Camera needs a secure connection (https).' };
   }
 
+  // focusMode deliberately NOT requested in any getUserMedia call. As a basic
+  // constraint it is required, so a device without focus control fails the
+  // whole call and you get no camera at all. Focus is asked for on the live
+  // track afterwards, where a refusal costs nothing.
+  const opened = await openCamera(video, { facingMode: { ideal: 'environment' } });
+  if (!opened.ok) return opened;
+
+  try {
+    const devices = (await navigator.mediaDevices.enumerateDevices?.()) ?? [];
+    const want = pickCamera(devices);
+    const got = videoTrack()?.getSettings?.()?.deviceId;
+    if (want && got && want !== got) {
+      const swapped = await openCamera(video, { deviceId: { exact: want } });
+      // A failed swap falls back to the lens that already worked.
+      if (!swapped.ok) await openCamera(video, { facingMode: { ideal: 'environment' } });
+    }
+    if (want) localStorage.setItem(CAMERA_KEY, want);
+  } catch { /* the browser's pick stays */ }
+
+  return { ok: true, decoder: await prepareDecoder(), ...(await tuneTrack()) };
+}
+
+/** getUserMedia + attach + play, replacing whatever stream came before. */
+async function openCamera(video, videoConstraints) {
+  if (stream) {
+    for (const track of stream.getTracks()) track.stop();
+    stream = null;
+  }
+
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 },      // barcodes are small; resolution is what decodes them
-        height: { ideal: 1080 },
-        // focusMode deliberately NOT requested here. As a basic constraint it is
-        // required, so a device without focus control fails the whole call and
-        // you get no camera at all. Focus is asked for on the live track below,
-        // where a refusal costs nothing.
-      },
+      video: { ...videoConstraints, ...RESOLUTION },
       audio: false,
     });
   } catch (e) {
@@ -61,9 +111,116 @@ export async function start(video) {
   video.srcObject = stream;
   video.setAttribute('playsinline', '');   // iOS refuses to inline-play without it
   await video.play();
+  return { ok: true };
+}
 
+const isBackCamera = (d) =>
+  d.kind === 'videoinput' && /\b(back|rear|environment)\b/i.test(d.label ?? '');
+
+/**
+ * The main rear lens, by elimination.
+ *
+ * Specialist lenses say so in their labels — "Back Ultra Wide Camera",
+ * "Back Telephoto Camera" — and the main camera is the rear one that is none of
+ * those. Ties go to enumeration order, which on Android lists the main lens
+ * first ("camera2 0, facing back"). A lens that already worked here wins over
+ * the heuristic outright.
+ */
+function pickCamera(devices) {
+  const backs = devices.filter(isBackCamera);
+  if (!backs.length) return null;
+
+  const remembered = localStorage.getItem(CAMERA_KEY);
+  if (backs.some((d) => d.deviceId === remembered)) return remembered;
+
+  const specialist = /ultra|wide[\s-]?angle|tele(photo)?|zoom|macro|depth|bokeh|infrared/i;
+  return (backs.find((d) => !specialist.test(d.label)) ?? backs[0]).deviceId;
+}
+
+/**
+ * Focus, zoom and torch on the live track, reporting what actually took.
+ * Every part is optional equipment; a camera without it just reports so.
+ */
+async function tuneTrack() {
   const focus = await requestFocus();
-  return { ok: true, decoder: await prepareDecoder(), focus };
+  const track = videoTrack();
+  const caps = track?.getCapabilities?.() ?? {};
+
+  let zoom = null;
+  if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+    const value = await setZoom(DEFAULT_ZOOM);
+    zoom = {
+      min: caps.zoom.min,
+      max: caps.zoom.max,
+      step: caps.zoom.step || 0.1,
+      value: value ?? caps.zoom.min,
+    };
+  }
+
+  let canSwitch = false;
+  try {
+    const devices = (await navigator.mediaDevices.enumerateDevices?.()) ?? [];
+    canSwitch = devices.filter(isBackCamera).length > 1;
+  } catch { /* switching just isn't offered */ }
+
+  return { focus, zoom, torch: Boolean(caps.torch), canSwitch };
+}
+
+/** @returns {Promise<number|null>} the zoom that took, clamped to the lens's range. */
+export async function setZoom(value) {
+  const track = videoTrack();
+  const caps = track?.getCapabilities?.() ?? {};
+  if (!caps.zoom) return null;
+
+  const v = Math.min(caps.zoom.max, Math.max(caps.zoom.min, Number(value) || caps.zoom.min));
+  try {
+    await track.applyConstraints({ advanced: [{ zoom: v }] });
+  } catch {
+    return null;
+  }
+  return track.getSettings?.()?.zoom ?? v;
+}
+
+/** @returns {Promise<boolean>} whether the torch is now on. */
+export async function setTorch(on) {
+  const track = videoTrack();
+  if (!track?.getCapabilities?.()?.torch) return false;
+
+  try {
+    await track.applyConstraints({ advanced: [{ torch: Boolean(on) }] });
+  } catch {
+    return false;
+  }
+  return Boolean(track.getSettings?.()?.torch ?? on);
+}
+
+/**
+ * The next rear lens. The escape hatch for when the heuristic guessed wrong —
+ * no label survey covers every phone, but a button that cycles lenses does.
+ * The lens that ends up working is remembered and wins from then on.
+ */
+export async function switchCamera(video) {
+  let devices = [];
+  try {
+    devices = (await navigator.mediaDevices.enumerateDevices?.()) ?? [];
+  } catch { /* fall through to the length check */ }
+
+  const backs = devices.filter(isBackCamera);
+  if (backs.length < 2) return { ok: false, reason: 'This device has one rear camera.' };
+
+  const current = videoTrack()?.getSettings?.()?.deviceId;
+  const at = backs.findIndex((d) => d.deviceId === current);
+  const next = backs[(at + 1) % backs.length];
+
+  const opened = await openCamera(video, { deviceId: { exact: next.deviceId } });
+  if (!opened.ok) {
+    // Recover the session rather than leaving a black viewfinder.
+    await openCamera(video, { facingMode: { ideal: 'environment' } });
+    return { ok: false, reason: 'That lens would not open.', ...(await tuneTrack()) };
+  }
+
+  localStorage.setItem(CAMERA_KEY, next.deviceId);
+  return { ok: true, ...(await tuneTrack()) };
 }
 
 export function stop(video) {
@@ -123,7 +280,19 @@ async function requestFocus() {
 export async function focusAt(x, y) {
   const track = videoTrack();
   const caps = track?.getCapabilities?.() ?? {};
-  if (!caps.pointsOfInterest) return false;
+
+  // No point steering, but a tap can still mean "focus again": re-triggering
+  // single-shot refocuses on centre frame, which is where the reticle says to
+  // hold the barcode anyway.
+  if (!caps.pointsOfInterest) {
+    if (!caps.focusMode?.includes('single-shot')) return false;
+    try {
+      await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   const point = { x: clamp01(x), y: clamp01(y) };
 

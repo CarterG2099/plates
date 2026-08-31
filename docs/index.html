@@ -813,6 +813,22 @@
                      aria-hidden="true"></div>
               </div>
 
+              <!-- Zoom is the focus fix: 2× lets the barcode fill the frame from
+                   outside the lens's minimum focus distance. -->
+              <div class="scan-controls" x-show="scan.zoom || scan.torch || scan.canSwitch" x-cloak>
+                <label class="scan-zoom" x-show="scan.zoom">
+                  <input type="range" :min="scan.zoom?.min" :max="scan.zoom?.max"
+                         :step="scan.zoom?.step" :value="scan.zoom?.value"
+                         @input="setScanZoom($event.target.value)" aria-label="Zoom">
+                  <span x-text="`${Number(scan.zoom?.value ?? 1).toFixed(1)}×`"></span>
+                </label>
+                <button class="tap" x-show="scan.torch" @click="toggleTorch()"
+                        :class="scan.torchOn && 'tap-primary'"
+                        :aria-pressed="scan.torchOn" aria-label="Torch">🔦</button>
+                <button class="tap" x-show="scan.canSwitch" @click="switchScanCamera()"
+                        aria-label="Try the other lens" title="Blurry? Try the other lens">🔁</button>
+              </div>
+
               <p class="prefill" x-show="scan.message" x-text="scan.message"></p>
 
               <div class="sync-line" x-show="scan.status === 'starting'">
