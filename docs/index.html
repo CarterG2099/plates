@@ -256,6 +256,11 @@
               </div>
 
 
+              <button class="btn btn-primary btn-block" @click="saveEdit()">
+                Save <span x-text="Math.round(editMacros.calories ?? 0)"></span> kcal
+              </button>
+              <button class="btn btn-ghost btn-block" @click="closeEdit()">Cancel</button>
+
               <!-- A nutrition label for the amount chosen, not for one serving:
                    it reads the same scaled macros the Save button does. -->
               <button class="btn btn-ghost btn-block" x-show="editLabel.hasAny"
@@ -301,11 +306,6 @@
                   the figures the source published are listed.
                 </p>
               </div>
-
-              <button class="btn btn-primary btn-block" @click="saveEdit()">
-                Save <span x-text="Math.round(editMacros.calories ?? 0)"></span> kcal
-              </button>
-              <button class="btn btn-ghost btn-block" @click="closeEdit()">Cancel</button>
             </div>
           </div>
         </template>
@@ -917,6 +917,11 @@
               </div>
 
 
+              <button class="btn btn-primary btn-block" @click="confirmSheet()">
+                Log <span x-text="Math.round(sheetMacros.calories ?? 0)"></span> kcal
+              </button>
+              <button class="btn btn-ghost btn-block" @click="closeSheet()">Cancel</button>
+
               <!-- A nutrition label for the amount chosen, not for one serving:
                    it reads the same scaled macros the Save button does. -->
               <button class="btn btn-ghost btn-block" x-show="sheetLabel.hasAny"
@@ -962,11 +967,6 @@
                   the figures the source published are listed.
                 </p>
               </div>
-
-              <button class="btn btn-primary btn-block" @click="confirmSheet()">
-                Log <span x-text="Math.round(sheetMacros.calories ?? 0)"></span> kcal
-              </button>
-              <button class="btn btn-ghost btn-block" @click="closeSheet()">Cancel</button>
             </div>
           </div>
         </template>
@@ -1147,8 +1147,8 @@
                 <div class="routine-group" x-show="!reordering">
                   <button class="group-head" x-show="g.category || routineGroups.length > 1"
                           @click="toggleCategory(g.category)"
-                          :aria-expanded="!isCollapsed(g.category)">
-                    <span class="group-caret" :class="{ 'is-shut': isCollapsed(g.category) }"
+                          :aria-expanded="!isFolded(g.category)">
+                    <span class="group-caret" :class="{ 'is-shut': isFolded(g.category) }"
                           aria-hidden="true">
                       <svg viewBox="0 0 12 12" fill="none">
                         <path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor"
@@ -1159,7 +1159,7 @@
                     <small x-text="$store.ui.count(g.routines.length, 'routine')"></small>
                   </button>
 
-                  <div class="routine-grid" x-show="!isCollapsed(g.category)" x-cloak>
+                  <div class="routine-grid" x-show="!isFolded(g.category)" x-cloak>
                     <template x-for="r in g.routines" :key="r.id">
                       <button class="routine-card" @click="openRoutine(r)" x-data="{ c: routineCard(r) }">
                         <div class="routine-top">

@@ -877,13 +877,16 @@ Alpine.data('todayPage', () => ({
 
   /** From the entry's own snapshot, so it is a label for what you ate. */
   /**
-   * Sticky, because "show me the label" is a standing preference rather than a
-   * per-food decision. Kept out of the default-open camp deliberately: the Log
-   * button sits below this panel, and opening it for everyone would push the
-   * primary action off the fold on the one screen where speed is the whole
-   * point. Open it once and it stays open; collapse it and it stays collapsed.
+   * Open by default, and sticky after that — "show me the label" is a standing
+   * preference, not a per-food decision.
+   *
+   * Default-open used to be the wrong call because Save sat underneath this
+   * panel, so every log would have started with a scroll past 370px of label on
+   * the one screen where speed is the point. Save and Cancel moved above it
+   * instead, which is what makes the default affordable: the label is there the
+   * moment the sheet opens, and the button you came for has not moved.
    */
-  labelOpen: JSON.parse(localStorage.getItem('plates:labelOpen') || 'false'),
+  labelOpen: JSON.parse(localStorage.getItem('plates:labelOpen') ?? 'true'),
 
   toggleLabel() {
     this.labelOpen = !this.labelOpen;
@@ -1319,13 +1322,16 @@ Alpine.data('logPage', () => ({
 
   /** The panel, for the amount currently chosen rather than for one serving. */
   /**
-   * Sticky, because "show me the label" is a standing preference rather than a
-   * per-food decision. Kept out of the default-open camp deliberately: the Log
-   * button sits below this panel, and opening it for everyone would push the
-   * primary action off the fold on the one screen where speed is the whole
-   * point. Open it once and it stays open; collapse it and it stays collapsed.
+   * Open by default, and sticky after that — "show me the label" is a standing
+   * preference, not a per-food decision.
+   *
+   * Default-open used to be the wrong call because Save sat underneath this
+   * panel, so every log would have started with a scroll past 370px of label on
+   * the one screen where speed is the point. Save and Cancel moved above it
+   * instead, which is what makes the default affordable: the label is there the
+   * moment the sheet opens, and the button you came for has not moved.
    */
-  labelOpen: JSON.parse(localStorage.getItem('plates:labelOpen') || 'false'),
+  labelOpen: JSON.parse(localStorage.getItem('plates:labelOpen') ?? 'true'),
 
   toggleLabel() {
     this.labelOpen = !this.labelOpen;
@@ -2334,7 +2340,13 @@ Alpine.data('trainPage', () => ({
   // to localStorage rather than through sync: collapsing a group on the phone at
   // the gym should not fold it on the laptop, and it is not worth a table.
 
-  collapsed: JSON.parse(localStorage.getItem('plates:collapsedCategories') || '[]'),
+  // NOT `collapsed`. That name already belongs to the folded-away workout a few
+  // hundred lines up, and an object literal keeps the last one written: this
+  // array won, so `session && collapsed` was true the moment a workout started
+  // — every workout opened minimised — and `collapsed = false` on expanding it
+  // then made `false.includes(...)` throw, which took the category folds with it
+  // until the tab remounted and re-read this from storage.
+  foldedCategories: JSON.parse(localStorage.getItem('plates:collapsedCategories') || '[]'),
 
   get routineGroups() {
     return workout.groupRoutinesByCategory(this.data.routines, this.email);
@@ -2347,16 +2359,16 @@ Alpine.data('trainPage', () => ({
   /** Uncategorised has no name to key on, so it gets a reserved one. */
   categoryKey(category) { return category ?? '\u0000none'; },
 
-  isCollapsed(category) { return this.collapsed.includes(this.categoryKey(category)); },
+  isFolded(category) { return this.foldedCategories.includes(this.categoryKey(category)); },
 
   toggleCategory(category) {
     const key = this.categoryKey(category);
     // Replaced rather than mutated: Alpine tracks the array, and push() on a
     // plain array read out of localStorage would not re-render the group.
-    this.collapsed = this.isCollapsed(category)
-      ? this.collapsed.filter((k) => k !== key)
-      : [...this.collapsed, key];
-    localStorage.setItem('plates:collapsedCategories', JSON.stringify(this.collapsed));
+    this.foldedCategories = this.isFolded(category)
+      ? this.foldedCategories.filter((k) => k !== key)
+      : [...this.foldedCategories, key];
+    localStorage.setItem('plates:collapsedCategories', JSON.stringify(this.foldedCategories));
   },
 
   /**
