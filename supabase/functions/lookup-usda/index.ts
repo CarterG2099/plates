@@ -47,6 +47,12 @@ const OFF_TIMEOUT_MS = 9000;
 // endpoint that answers us at all: both search endpoints on world.openfoodfacts
 // .org 503. So the servings are fetched one product at a time, for the handful
 // likely to be shown.
+//
+// Nutriments come back on the same request. The search index carries a reduced
+// set of them, which is why a searched food printed a thinner label than the
+// same food scanned — the barcode path always went to this endpoint and got
+// everything. Asking for both here costs nothing extra and makes the two paths
+// agree.
 const OFF_PRODUCT_URL = "https://world.openfoodfacts.org/api/v2/product";
 const OFF_ENRICH_LIMIT = 10;
 const OFF_ENRICH_TIMEOUT_MS = 4000;
@@ -151,7 +157,7 @@ async function enrichServings(hits: Record<string, unknown>[]): Promise<void> {
     const timer = setTimeout(() => controller.abort(), OFF_ENRICH_TIMEOUT_MS);
     try {
       const url = `${OFF_PRODUCT_URL}/${encodeURIComponent(String(hit.code))}.json`
-        + `?fields=serving_size,serving_quantity,serving_quantity_unit`;
+        + `?fields=serving_size,serving_quantity,serving_quantity_unit,nutriments`;
       const res = await fetch(url, {
         headers: { Accept: "application/json", "User-Agent": OFF_AGENT },
         signal: controller.signal,
@@ -163,6 +169,13 @@ async function enrichServings(hits: Record<string, unknown>[]): Promise<void> {
 
       for (const key of ["serving_size", "serving_quantity", "serving_quantity_unit"]) {
         if (product[key] != null) hit[key] = product[key];
+      }
+
+      // The full set replaces the index's reduced one outright rather than
+      // merging: they describe the same product on the same basis, and the
+      // product endpoint is the more complete of the two.
+      if (product.nutriments && typeof product.nutriments === "object") {
+        hit.nutriments = product.nutriments;
       }
     } catch {
       // Keep the un-enriched hit.

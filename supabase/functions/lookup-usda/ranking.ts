@@ -19,7 +19,29 @@ export const NUTRIENTS: Record<string, { id: number; number: string }> = {
   fat_g: { id: 1004, number: "204" },
   fiber_g: { id: 1079, number: "291" },
   sodium_mg: { id: 1093, number: "307" },
+
+  // The rest of the label. USDA publishes all of these and the six above were
+  // simply all anyone had asked for — which is why a searched food printed a
+  // five-row label while the same food scanned printed the full panel.
+  saturated_fat_g: { id: 1258, number: "606" },
+  trans_fat_g: { id: 1257, number: "605" },
+  cholesterol_mg: { id: 1253, number: "601" },
+  sugars_g: { id: 2000, number: "269" },
+  added_sugars_g: { id: 1235, number: "539" },
+  calcium_mg: { id: 1087, number: "301" },
+  iron_mg: { id: 1089, number: "303" },
+  potassium_mg: { id: 1092, number: "306" },
+  // D2 + D3 in micrograms, which is what the label prints.
+  vitamin_d_mcg: { id: 1114, number: "328" },
 };
+
+/** Everything the label can print, in the order plates.foods stores it. */
+export const LABEL_NUTRIENTS = [
+  "calories", "protein_g", "carbs_g", "fat_g", "fiber_g", "sodium_mg",
+  "saturated_fat_g", "trans_fat_g", "cholesterol_mg",
+  "sugars_g", "added_sugars_g",
+  "vitamin_d_mcg", "calcium_mg", "iron_mg", "potassium_mg",
+];
 
 export const REQUIRED = ["calories", "protein_g", "carbs_g", "fat_g"];
 
@@ -143,12 +165,11 @@ export function toDraft(food: UsdaFood) {
     serving_qty: serving ? 1 : 100,
     serving_unit: serving ? "serving" : "g",
     basis: serving ? serving.label : "per 100 g",
+    // Every nutrient the label prints, scaled onto the serving like the rest.
+    // Named individually before, which is exactly how the extra nine went
+    // missing from every searched food.
+    ...Object.fromEntries(LABEL_NUTRIENTS.map((k) => [k, per(k)])),
     calories: per("calories") ?? kjToKcal(per("energy_kj")),
-    protein_g: per("protein_g"),
-    carbs_g: per("carbs_g"),
-    fat_g: per("fat_g"),
-    fiber_g: per("fiber_g"),
-    sodium_mg: per("sodium_mg"),
     source: "usda",
   };
 

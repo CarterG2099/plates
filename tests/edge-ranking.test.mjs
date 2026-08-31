@@ -324,3 +324,71 @@ test('both scorers agree on the orderings that have already broken once', async 
       `"${q}": edge says ${edgeA > edgeB}, client says ${clientA > clientB} — the two scorers have drifted`);
   }
 });
+
+// ---- the whole label, not just the six -------------------------------------
+
+test('a USDA food maps every nutrient the label can print', () => {
+  // Per 100 g, with a 30 g serving, so everything should come back at 0.3x.
+  const usdaFood = {
+    fdcId: 1, description: 'Test bar', dataType: 'Branded',
+    servingSize: 30, servingSizeUnit: 'g',
+    foodNutrients: [
+      { nutrientId: 1008, value: 500 },   // calories
+      { nutrientId: 1003, value: 20 },    // protein
+      { nutrientId: 1005, value: 60 },    // carbs
+      { nutrientId: 1004, value: 20 },    // fat
+      { nutrientId: 1079, value: 10 },    // fibre
+      { nutrientId: 1093, value: 400 },   // sodium
+      { nutrientId: 1258, value: 5 },     // saturated fat
+      { nutrientId: 1257, value: 0 },     // trans fat
+      { nutrientId: 1253, value: 30 },    // cholesterol
+      { nutrientId: 2000, value: 40 },    // sugars
+      { nutrientId: 1235, value: 25 },    // added sugars
+      { nutrientId: 1087, value: 200 },   // calcium
+      { nutrientId: 1089, value: 4 },     // iron
+      { nutrientId: 1092, value: 300 },   // potassium
+      { nutrientId: 1114, value: 2 },     // vitamin D
+    ],
+  };
+
+  const { draft } = r.toDraft(usdaFood);
+
+  assert.equal(draft.calories, 150, '500 per 100 g over a 30 g serving');
+  assert.equal(draft.saturated_fat_g, 1.5);
+  assert.equal(draft.trans_fat_g, 0, 'a published zero is not a gap');
+  assert.equal(draft.cholesterol_mg, 9);
+  assert.equal(draft.sugars_g, 12);
+  assert.equal(draft.added_sugars_g, 7.5);
+  assert.equal(draft.calcium_mg, 60);
+  assert.equal(draft.iron_mg, 1.2);
+  assert.equal(draft.potassium_mg, 90);
+  assert.equal(draft.vitamin_d_mcg, 0.6);
+});
+
+test('a nutrient USDA does not publish stays null, not zero', () => {
+  const { draft } = r.toDraft({
+    fdcId: 2, description: 'Sparse', dataType: 'Branded',
+    foodNutrients: [{ nutrientId: 1008, value: 100 }, { nutrientId: 1003, value: 5 }],
+  });
+
+  assert.equal(draft.calories, 100);
+  assert.equal(draft.saturated_fat_g, null);
+  assert.equal(draft.calcium_mg, null);
+});
+
+test('nutrientNumber still works where nutrientId is absent', () => {
+  // The two identifiers are not consistently populated, which is why pick()
+  // carries both — the new rows have to honour that too.
+  const { draft } = r.toDraft({
+    fdcId: 3, description: 'By number', dataType: 'Branded',
+    foodNutrients: [
+      { nutrientNumber: '208', value: 100 },
+      { nutrientNumber: '606', value: 3 },
+      { nutrientNumber: '301', value: 150 },
+    ],
+  });
+
+  assert.equal(draft.calories, 100);
+  assert.equal(draft.saturated_fat_g, 3);
+  assert.equal(draft.calcium_mg, 150);
+});
