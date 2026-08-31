@@ -876,22 +876,6 @@ Alpine.data('todayPage', () => ({
   },
 
   /** From the entry's own snapshot, so it is a label for what you ate. */
-  /**
-   * Open by default, and sticky after that — "show me the label" is a standing
-   * preference, not a per-food decision.
-   *
-   * Default-open used to be the wrong call because Save sat underneath this
-   * panel, so every log would have started with a scroll past 370px of label on
-   * the one screen where speed is the point. Save and Cancel moved above it
-   * instead, which is what makes the default affordable: the label is there the
-   * moment the sheet opens, and the button you came for has not moved.
-   */
-  labelOpen: JSON.parse(localStorage.getItem('plates:labelOpen') ?? 'true'),
-
-  toggleLabel() {
-    this.labelOpen = !this.labelOpen;
-    localStorage.setItem('plates:labelOpen', JSON.stringify(this.labelOpen));
-  },
 
   get editLabel() { return food.nutritionLabel(this.editMacros); },
 
@@ -1321,22 +1305,6 @@ Alpine.data('logPage', () => ({
   },
 
   /** The panel, for the amount currently chosen rather than for one serving. */
-  /**
-   * Open by default, and sticky after that — "show me the label" is a standing
-   * preference, not a per-food decision.
-   *
-   * Default-open used to be the wrong call because Save sat underneath this
-   * panel, so every log would have started with a scroll past 370px of label on
-   * the one screen where speed is the point. Save and Cancel moved above it
-   * instead, which is what makes the default affordable: the label is there the
-   * moment the sheet opens, and the button you came for has not moved.
-   */
-  labelOpen: JSON.parse(localStorage.getItem('plates:labelOpen') ?? 'true'),
-
-  toggleLabel() {
-    this.labelOpen = !this.labelOpen;
-    localStorage.setItem('plates:labelOpen', JSON.stringify(this.labelOpen));
-  },
 
   get sheetLabel() { return food.nutritionLabel(this.sheetMacros); },
 
