@@ -3169,67 +3169,6 @@ Alpine.data('trainPage', () => ({
 
   // ---- muscle map ----------------------------------------------------------
   // A drawn figure with the worked muscle lit, instead of a photographed
-  // demonstration. Consistent, offline, and no licence attached.
-
-  muscleMap(exerciseId, name) {
-    return exerciseArt(this.exerciseById(exerciseId), name);
-  },
-
-  /** The drawing for the detail sheet, or front and back together without one. */
-  muscleMapPair(exerciseId, name) {
-    return exerciseArtPair(this.exerciseById(exerciseId), name);
-  },
-
-  /** Written form cues. The figure says which muscle; these say how. */
-  get detailInstructions() {
-    const raw = this.detail?.exercise?.instructions;
-    if (Array.isArray(raw)) return raw.filter(Boolean);
-    if (typeof raw === 'string' && raw.trim()) return [raw];
-    return [];
-  },
-
-  exerciseById(id) { return this.data.exercises.find((e) => e.id === id) ?? null; },
-
-  // ---- Hevy import ---------------------------------------------------------
-
-  hevy: null,
-
-  async importFile(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    this.hevy = { phase: 'reading' };
-    try {
-      const text = await file.text();
-      await importHevy(text, {
-        ownerEmail: this.email,
-        existingExercises: this.data.exercises,
-      }, (p) => { this.hevy = p; });
-
-      await Alpine.store('data').refreshTraining();
-      Alpine.store('ui').flash(
-        `Imported ${this.hevy.sessions} workouts · ${this.hevy.routines} routines`);
-    } catch (e) {
-      this.hevy = { phase: 'error', message: e.message };
-    } finally {
-      event.target.value = '';   // let the same file be picked again after a fix
-    }
-  },
-
-  get hevyLabel() {
-    if (!this.hevy) return '';
-    switch (this.hevy.phase) {
-      case 'reading':   return 'Reading file…';
-      case 'parsing':   return 'Parsing…';
-      case 'exercises': return `Exercises: ${this.hevy.created} new of ${this.hevy.total}`;
-      case 'sessions':  return `Workouts ${this.hevy.done}/${this.hevy.total} · ${this.hevy.sets} sets`;
-      case 'done':      return `Done · ${this.hevy.sessions} workouts, ${this.hevy.sets} sets, ${this.hevy.routines} routines`;
-      default:          return '';
-    }
-  },
-
-  // ---- muscle map ----------------------------------------------------------
-  // A drawn figure with the worked muscle lit, instead of a photographed
   // demonstration. Consistent across every exercise, offline, no licence
   // attached — and it matches the app rather than looking like stock imagery.
 
