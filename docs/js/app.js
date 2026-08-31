@@ -752,13 +752,6 @@ Alpine.data('todayPage', () => ({
     return Math.round(this.calorieTarget - this.totals.calories);
   },
 
-  /** Each macro's share of the calorie target, for the stacked bar. */
-  segment(macro) {
-    const perGram = macro === 'fat_g' ? 9 : 4;
-    if (!this.calorieTarget) return 0;
-    return Math.min(100, (this.totals[macro] * perGram / this.calorieTarget) * 100);
-  },
-
   target(macro) {
     const key = { protein_g: 'protein_target_g', carbs_g: 'carbs_target_g', fat_g: 'fat_target_g' }[macro];
     return Number(this.goal?.[key]) || null;
@@ -1436,23 +1429,6 @@ Alpine.data('logPage', () => ({
       // Straight to the review form, never saved on the model's say-so: this is
       // OCR of small print at an angle, and a misread digit is a wrong food.
       this.acceptLookup(result);
-    } catch (e) {
-      this.photoError = e.message ?? String(e);
-    } finally {
-      this.photoBusy = '';
-    }
-  },
-
-  /** A plate becomes a set of estimates, shown as estimates. */
-  async readMeal(event) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-
-    this.photoBusy = 'meal';
-    this.photoError = '';
-    try {
-      this.estimate = await photo.estimateMeal(file);
     } catch (e) {
       this.photoError = e.message ?? String(e);
     } finally {
@@ -3076,13 +3052,6 @@ Alpine.data('trainPage', () => ({
     });
     this.picker = false;
     this.pickerTerm = '';
-    await Alpine.store('data').refreshTraining();
-  },
-
-  async editRoutineItem(item, field, value) {
-    await workout.updateRoutineExercise(item, {
-      [field]: value === '' ? null : (field === 'target_reps' ? value : Number(value)),
-    });
     await Alpine.store('data').refreshTraining();
   },
 

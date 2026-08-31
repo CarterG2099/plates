@@ -1219,19 +1219,6 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   color: var(--color-ink);
 }
 
-.pr-flag {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--color-ink);
-  background: var(--color-carbs);
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-sm);
-}
-
 /* ============================================================================
    Desktop
    ============================================================================

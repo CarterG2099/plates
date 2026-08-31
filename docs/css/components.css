@@ -73,12 +73,6 @@
   color: var(--color-text-muted);
 }
 
-.pill-on {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  color: var(--color-text);
-}
-
 /* Inline SVG icons: no icon font, no sprite sheet, nothing to load. Sized in the
    element that holds them and coloured by currentColor. */
 .icon {

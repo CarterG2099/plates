@@ -408,19 +408,6 @@ test('a routine you do not own is not in your order', async () => {
     'and does not push my next routine down the list');
 });
 
-test('orderRoutines is pure list surgery and leaves its input alone', () => {
-  const rs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
-  const ids = (list) => list.map((r) => r.id);
-
-  assert.deepEqual(ids(workout.orderRoutines(rs, 'a', 2)), ['b', 'c', 'a']);
-  assert.deepEqual(ids(workout.orderRoutines(rs, 'c', 0)), ['c', 'a', 'b']);
-  assert.deepEqual(ids(workout.orderRoutines(rs, 'b', 1)), ['a', 'b', 'c'], 'same slot is a no-op');
-  assert.deepEqual(ids(workout.orderRoutines(rs, 'a', 99)), ['b', 'c', 'a'], 'past the end clamps');
-  assert.deepEqual(ids(workout.orderRoutines(rs, 'a', -5)), ['a', 'b', 'c'], 'before the start clamps');
-  assert.deepEqual(ids(workout.orderRoutines(rs, 'zz', 0)), ['a', 'b', 'c'], 'unknown id changes nothing');
-  assert.deepEqual(ids(rs), ['a', 'b', 'c']);
-});
-
 test('dragging a routine to the front renumbers the list behind it', async () => {
   await seedRoutines([
     { name: 'Push A', position: 0 },
@@ -428,8 +415,11 @@ test('dragging a routine to the front renumbers the list behind it', async () =>
     { name: 'Legs',   position: 2 },
   ]);
 
+  // Moved by hand rather than through a helper: what is under test is that
+  // reindexRoutines writes the positions, not how the list got rearranged.
   const ordered = workout.routinesFor(await local.all('routines'), ME);
-  await workout.reindexRoutines(workout.orderRoutines(ordered, ordered[2].id, 0));
+  const moved = [ordered[2], ordered[0], ordered[1]];
+  await workout.reindexRoutines(moved);
 
   const after = workout.routinesFor(await local.all('routines'), ME);
   assert.deepEqual(names(after), ['Legs', 'Push A', 'Pull B']);
@@ -447,7 +437,7 @@ test('reindexRoutines writes only the rows that actually moved', async () => {
   const ordered = workout.routinesFor(await local.all('routines'), ME);
   assert.equal((await workout.reindexRoutines(ordered)).length, 0, 'already in order: no writes');
 
-  const swapped = workout.orderRoutines(ordered, ordered[0].id, 1);
+  const swapped = [ordered[1], ordered[0], ordered[2]];
   assert.equal((await workout.reindexRoutines(swapped)).length, 2,
     'the top two swap; the third does not move');
 });

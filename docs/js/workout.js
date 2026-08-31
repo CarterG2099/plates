@@ -565,11 +565,6 @@ export function dropRoutineInto(rows, fromId, toIndex) {
   };
 }
 
-/** Routines in display order, which is what a reorder rearranges. */
-export function orderRoutines(routines, fromId, toIndex) {
-  return moveTo(routines, (r) => r.id === fromId, toIndex);
-}
-
 /**
  * Persist a routine order, writing only the rows that actually moved.
  *
