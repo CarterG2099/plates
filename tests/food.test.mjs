@@ -693,3 +693,52 @@ test('isCreated treats a food with no source as made, since it predates the colu
   assert.equal(food.isCreated({ source: null }), true);
   assert.equal(food.isCreated(null), true);
 });
+
+// ---- a label for ordinary foods too ----------------------------------------
+
+test('a food with only the basics still gets a label', () => {
+  // What a hand-entered or saved food usually carries. Before printedRows this
+  // produced hasDetail:false and the label was hidden outright.
+  const basic = { calories: 39, protein_g: 0, carbs_g: 17, fat_g: 0, fiber_g: 9, sodium_mg: 25 };
+  const label = food.nutritionLabel(basic);
+
+  assert.equal(label.hasAny, true, 'there is plainly something to show');
+  assert.equal(label.hasDetail, false, 'but nothing beyond the six');
+  assert.deepEqual(label.printedRows.map((r) => r.key),
+    ['fat_g', 'sodium_mg', 'carbs_g', 'fiber_g', 'protein_g']);
+  assert.deepEqual(label.printedMicros, []);
+});
+
+test('unpublished figures are omitted, not printed as dashes', () => {
+  const label = food.nutritionLabel({ calories: 100, protein_g: 5 });
+  assert.deepEqual(label.printedRows.map((r) => r.key), ['protein_g']);
+  assert.ok(label.rows.length > label.printedRows.length, 'the full list is still there');
+  assert.ok(label.rows.every((r) => 'value' in r), 'and still carries the nulls');
+});
+
+test('a food with nothing at all has no label to show', () => {
+  const label = food.nutritionLabel({});
+  assert.equal(label.hasAny, false);
+  assert.deepEqual(label.printedRows, []);
+  assert.deepEqual(label.printedMicros, []);
+});
+
+test('calories alone are enough to be worth a label', () => {
+  const label = food.nutritionLabel({ calories: 90 });
+  assert.equal(label.hasAny, true);
+  assert.equal(label.calories, 90);
+  assert.deepEqual(label.printedRows, [], 'even with no rows under it');
+});
+
+test('a zero is published data and prints; null does not', () => {
+  const label = food.nutritionLabel({ calories: 0, fat_g: 0, sugars_g: null });
+  assert.deepEqual(label.printedRows.map((r) => r.key), ['fat_g']);
+  assert.equal(label.printedRows[0].amount, '0g', 'zero fat is a fact, not a gap');
+  assert.equal(label.hasAny, true);
+});
+
+test('micros print separately when the source has them', () => {
+  const label = food.nutritionLabel({ calories: 100, calcium_mg: 260, iron_mg: 1.8 });
+  assert.deepEqual(label.printedMicros.map((r) => r.key), ['calcium_mg', 'iron_mg']);
+  assert.equal(label.printedMicros[0].percent, 20, '260 of 1300');
+});

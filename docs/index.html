@@ -258,11 +258,11 @@
 
               <!-- A nutrition label for the amount chosen, not for one serving:
                    it reads the same scaled macros the Save button does. -->
-              <button class="btn btn-ghost btn-block" x-show="editLabel.hasDetail"
-                      @click="labelOpen = !labelOpen"
+              <button class="btn btn-ghost btn-block" x-show="editLabel.hasAny"
+                      @click="toggleLabel()"
                       x-text="labelOpen ? 'Hide nutrition facts' : 'Nutrition facts'"></button>
 
-              <div class="nutrition" x-show="labelOpen && editLabel.hasDetail" x-cloak>
+              <div class="nutrition" x-show="labelOpen && editLabel.hasAny" x-cloak>
                 <div class="nf-title">Nutrition Facts</div>
                 <div class="nf-serving">
                   <span>Serving size</span><span x-text="editServingLabel"></span>
@@ -274,7 +274,7 @@
 
                 <div class="nf-dv">% Daily Value*</div>
 
-                <template x-for="r in editLabel.rows" :key="r.key">
+                <template x-for="r in editLabel.printedRows" :key="r.key">
                   <div class="nf-row" :class="[`nf-in-${r.indent}`, r.bold && 'is-major']">
                     <span class="nf-name">
                       <span x-text="r.name"></span>
@@ -284,9 +284,9 @@
                   </div>
                 </template>
 
-                <div class="nf-rule"></div>
+                <div class="nf-rule" x-show="editLabel.printedMicros.length"></div>
 
-                <template x-for="r in editLabel.micros" :key="r.key">
+                <template x-for="r in editLabel.printedMicros" :key="r.key">
                   <div class="nf-row">
                     <span class="nf-name">
                       <span x-text="r.name"></span>
@@ -297,8 +297,8 @@
                 </template>
 
                 <p class="nf-note">
-                  * Percent Daily Values are based on a 2,000 calorie diet. A dash
-                  means the source never published that figure.
+                  * Percent Daily Values are based on a 2,000 calorie diet. Only
+                  the figures the source published are listed.
                 </p>
               </div>
 
@@ -919,11 +919,11 @@
 
               <!-- A nutrition label for the amount chosen, not for one serving:
                    it reads the same scaled macros the Save button does. -->
-              <button class="btn btn-ghost btn-block" x-show="sheetLabel.hasDetail"
-                      @click="labelOpen = !labelOpen"
+              <button class="btn btn-ghost btn-block" x-show="sheetLabel.hasAny"
+                      @click="toggleLabel()"
                       x-text="labelOpen ? 'Hide nutrition facts' : 'Nutrition facts'"></button>
 
-              <div class="nutrition" x-show="labelOpen && sheetLabel.hasDetail" x-cloak>
+              <div class="nutrition" x-show="labelOpen && sheetLabel.hasAny" x-cloak>
                 <div class="nf-title">Nutrition Facts</div>
                 <div class="nf-serving">
                   <span>Serving size</span><span x-text="sheetServingLabel"></span>
@@ -935,7 +935,7 @@
 
                 <div class="nf-dv">% Daily Value*</div>
 
-                <template x-for="r in sheetLabel.rows" :key="r.key">
+                <template x-for="r in sheetLabel.printedRows" :key="r.key">
                   <div class="nf-row" :class="[`nf-in-${r.indent}`, r.bold && 'is-major']">
                     <span class="nf-name">
                       <span x-text="r.name"></span>
@@ -945,9 +945,9 @@
                   </div>
                 </template>
 
-                <div class="nf-rule"></div>
+                <div class="nf-rule" x-show="sheetLabel.printedMicros.length"></div>
 
-                <template x-for="r in sheetLabel.micros" :key="r.key">
+                <template x-for="r in sheetLabel.printedMicros" :key="r.key">
                   <div class="nf-row">
                     <span class="nf-name">
                       <span x-text="r.name"></span>
@@ -958,8 +958,8 @@
                 </template>
 
                 <p class="nf-note">
-                  * Percent Daily Values are based on a 2,000 calorie diet. A dash
-                  means the source never published that figure.
+                  * Percent Daily Values are based on a 2,000 calorie diet. Only
+                  the figures the source published are listed.
                 </p>
               </div>
 

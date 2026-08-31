@@ -876,7 +876,19 @@ Alpine.data('todayPage', () => ({
   },
 
   /** From the entry's own snapshot, so it is a label for what you ate. */
-  labelOpen: false,
+  /**
+   * Sticky, because "show me the label" is a standing preference rather than a
+   * per-food decision. Kept out of the default-open camp deliberately: the Log
+   * button sits below this panel, and opening it for everyone would push the
+   * primary action off the fold on the one screen where speed is the whole
+   * point. Open it once and it stays open; collapse it and it stays collapsed.
+   */
+  labelOpen: JSON.parse(localStorage.getItem('plates:labelOpen') || 'false'),
+
+  toggleLabel() {
+    this.labelOpen = !this.labelOpen;
+    localStorage.setItem('plates:labelOpen', JSON.stringify(this.labelOpen));
+  },
 
   get editLabel() { return food.nutritionLabel(this.editMacros); },
 
@@ -1306,7 +1318,19 @@ Alpine.data('logPage', () => ({
   },
 
   /** The panel, for the amount currently chosen rather than for one serving. */
-  labelOpen: false,
+  /**
+   * Sticky, because "show me the label" is a standing preference rather than a
+   * per-food decision. Kept out of the default-open camp deliberately: the Log
+   * button sits below this panel, and opening it for everyone would push the
+   * primary action off the fold on the one screen where speed is the whole
+   * point. Open it once and it stays open; collapse it and it stays collapsed.
+   */
+  labelOpen: JSON.parse(localStorage.getItem('plates:labelOpen') || 'false'),
+
+  toggleLabel() {
+    this.labelOpen = !this.labelOpen;
+    localStorage.setItem('plates:labelOpen', JSON.stringify(this.labelOpen));
+  },
 
   get sheetLabel() { return food.nutritionLabel(this.sheetMacros); },
 

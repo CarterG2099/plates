@@ -82,12 +82,26 @@ export function nutritionLabel(macros) {
   const micros = LABEL_MICROS.map((r) => labelRow(r, macros));
   const calories = Number(macros?.calories);
 
+  // Only the lines the source actually published. Printing the rest as dashes
+  // was why the label had to be hidden for ordinary foods: ten blanks under a
+  // "Nutrition Facts" heading is worse than no heading. Omit them and a food
+  // carrying just the basics still gets a real, if short, label.
+  const printedRows = rows.filter((r) => r.value !== null);
+  const printedMicros = micros.filter((r) => r.value !== null);
+
   return {
     calories: Number.isFinite(calories) ? Math.round(calories) : null,
     rows,
     micros,
-    // Whether there is anything below the six Today already shows. A label with
-    // every extra row blank is a worse thing to show than no label.
+    printedRows,
+    printedMicros,
+    // Anything at all worth printing — which is the question the UI actually
+    // has, now that blank rows no longer take up space.
+    hasAny: printedRows.length > 0 || printedMicros.length > 0
+      || Number.isFinite(calories),
+    // Whether there is anything below the six Today already shows. Kept because
+    // it is a different question: "is this label worth more than the macro row
+    // above it", which is not the same as "is there a label at all".
     hasDetail: [...rows, ...micros].some(
       (r) => r.value !== null && !['calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg'].includes(r.key),
     ),
