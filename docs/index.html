@@ -1624,7 +1624,11 @@
 
               <!-- Edit ------------------------------------------------------ -->
               <template x-if="builder.mode === 'edit'">
-                <div>
+                <!-- The same flex the view-mode wrapper above carries. A bare div
+                     here meant the sheet's gap stopped at the wrapper, and every
+                     control inside — name, category, Add exercise, Done —
+                     stacked with no spacing at all. -->
+                <div style="display:flex; flex-direction:column; gap:var(--space-4)">
               <div class="card-label" x-text="builder.routine ? 'Edit routine' : 'New routine'"></div>
 
               <div class="field">
@@ -1651,7 +1655,7 @@
               </div>
 
               <template x-if="builder.routine">
-                <div>
+                <div style="display:flex; flex-direction:column; gap:var(--space-4)">
                   <div class="rows" x-ref="builderrows">
                     <template x-for="row in builderExercises" :key="row.item.id">
                       <div class="row" data-card :data-key="row.item.id">

@@ -647,6 +647,11 @@ html:has(.sheet-backdrop) { overflow: hidden; }
    390px phone, so the row overflowed and the right-hand field ran off the
    screen. The input is told to fill its field rather than size to itself. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+
+/* Suggestion chips under a field's input. The field's 4px gap is right for a
+   label hugging its box, but a row of tappable chips at 4px reads as part of
+   the input — give them the step down that separates control from suggestion. */
+.field .chips { margin-top: var(--space-1); }
 .field input, .field select, .field textarea { min-width: 0; width: 100%; }
 
 .field label {
