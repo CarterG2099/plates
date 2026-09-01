@@ -1373,3 +1373,68 @@ test('dropRoutineInto clamps an index past the end', () => {
   assert.equal(result.category, null, 'the last block is uncategorised');
   assert.equal(result.routines[result.routines.length - 1].name, 'Push A');
 });
+
+// ---- fixing the end time of a forgotten workout -----------------------------
+
+test('lastActivityAt is the newest checked set, not the newest row', () => {
+  const sets = [
+    { completed_at: '2026-09-01T18:05:00.000Z' },
+    { completed_at: '2026-09-01T18:42:00.000Z' },
+    { completed_at: null },                                        // never done
+    { completed_at: '2026-09-01T19:30:00.000Z', deleted_at: '2026-09-01T19:31:00.000Z' },
+  ];
+  assert.equal(workout.lastActivityAt(sets), '2026-09-01T18:42:00.000Z');
+  assert.equal(workout.lastActivityAt([{ completed_at: null }]), null);
+  assert.equal(workout.lastActivityAt([]), null);
+});
+
+test('an end time earlier today lands on today', () => {
+  const start = new Date('2026-09-01T17:00:00');
+  const now = new Date('2026-09-01T21:30:00');
+  const end = workout.resolveEndTime(start, '18:45', now);
+  assert.equal(end.getTime(), new Date('2026-09-01T18:45:00').getTime());
+});
+
+test('a wall-clock time that has not happened yet today means yesterday', () => {
+  // Started 11pm, finishing the app at 9am; "23:40" is later than 9am, so it
+  // can only mean last night.
+  const start = new Date('2026-08-31T23:00:00');
+  const now = new Date('2026-09-01T09:00:00');
+  const end = workout.resolveEndTime(start, '23:40', now);
+  assert.equal(end.getTime(), new Date('2026-08-31T23:40:00').getTime());
+});
+
+test('an end before the start clamps to the start, where the 0m duration shows it', () => {
+  const start = new Date('2026-09-01T17:00:00');
+  const now = new Date('2026-09-01T21:30:00');
+  const end = workout.resolveEndTime(start, '16:00', now);
+  assert.equal(end.getTime(), start.getTime());
+});
+
+test('no time typed means now', () => {
+  const start = new Date('2026-09-01T17:00:00');
+  const now = new Date('2026-09-01T18:00:00');
+  assert.equal(workout.resolveEndTime(start, '', now).getTime(), now.getTime());
+  assert.equal(workout.resolveEndTime(start, 'garbage', now).getTime(), now.getTime());
+});
+
+test('finishSession stores the chosen end, not the moment the button was pressed', async () => {
+  const session = await workout.startSession({ name: 'Forgotten', ownerEmail: ME });
+  const endedAt = new Date(Date.parse(session.started_at) + 45 * 60_000);
+
+  const saved = await workout.finishSession(session, endedAt);
+  assert.equal(saved.ended_at, endedAt.toISOString());
+});
+
+test('finishSession refuses an end before the start', async () => {
+  const session = await workout.startSession({ name: 'Clamped', ownerEmail: ME });
+  const saved = await workout.finishSession(session, new Date(Date.parse(session.started_at) - 60_000));
+  assert.equal(saved.ended_at, session.started_at, 'clamped, not time-travelled');
+});
+
+test('finishSession without an override still means now', async () => {
+  const session = await workout.startSession({ name: 'Normal', ownerEmail: ME });
+  const before = Date.now();
+  const saved = await workout.finishSession(session);
+  assert.ok(Date.parse(saved.ended_at) >= before, 'the default is unchanged');
+});

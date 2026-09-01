@@ -40,10 +40,56 @@ export async function startSession({ name, routineId, ownerEmail }) {
   return session;
 }
 
-export async function finishSession(session) {
+/**
+ * When this workout last actually did anything: the newest checked set.
+ *
+ * The truth the finish sheet offers when a session was left running — the same
+ * definition the idle-workout push uses server-side, because "when you stopped"
+ * and "when you remembered the app" are different times, often by hours.
+ */
+export function lastActivityAt(sets) {
+  let newest = null;
+  for (const s of sets) {
+    if (s.deleted_at || !s.completed_at) continue;
+    if (!newest || s.completed_at > newest) newest = s.completed_at;
+  }
+  return newest;
+}
+
+/**
+ * Place a wall-clock "HH:MM" onto the calendar, for the finish sheet.
+ *
+ * "I finished at 6:45" names a time of day, not a date, so this picks the most
+ * recent 6:45 that has already happened — today's if it has passed, otherwise
+ * yesterday's. The result is clamped into [started_at, now]: a workout cannot
+ * end before it began or after the present, and the sheet shows the resulting
+ * duration, so a clamp is visible rather than silent.
+ *
+ * For a session forgotten across more than a day, a time of day is genuinely
+ * ambiguous — that is what the last-set suggestion is for, which is absolute.
+ */
+export function resolveEndTime(startedAt, timeString, now = new Date()) {
+  const start = new Date(startedAt);
+
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(timeString ?? '').trim());
+  if (!match) return now < start ? start : now;
+
+  const candidate = new Date(now);
+  candidate.setHours(Number(match[1]), Number(match[2]), 0, 0);
+  if (candidate > now) candidate.setDate(candidate.getDate() - 1);
+
+  if (candidate < start) return start;
+  return candidate;
+}
+
+/** @param endedAt  optional — for workouts finished later than they ended. */
+export async function finishSession(session, endedAt = null) {
+  const started = new Date(session.started_at);
+  const wanted = endedAt ? new Date(endedAt) : new Date();
+
   const saved = await local.save('sessions', {
     ...session,
-    ended_at: new Date().toISOString(),
+    ended_at: (wanted < started ? started : wanted).toISOString(),
   }, session.owner_email);
 
   sync.nudge();

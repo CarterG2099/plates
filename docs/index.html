@@ -1427,7 +1427,7 @@
             </div>
 
             <button class="btn btn-block" @click="openPicker()">Add exercise</button>
-            <button class="btn btn-primary btn-block" @click="finishing = true">Finish workout</button>
+            <button class="btn btn-primary btn-block" @click="openFinish()">Finish workout</button>
           </div>
         </template>
 
@@ -1686,11 +1686,28 @@
             <div class="sheet" x-init="$swipe($el, () =&gt; { finishing = false })">
               <div class="grabber"></div>
               <div class="card-label">Finish workout</div>
+              <!-- finishDuration, not the live clock: once the end time below is
+                   touched, this line is the first place the correction shows. -->
               <p style="font-size: var(--text-sm); color: var(--color-text-muted)">
                 <span x-text="groups.length"></span> exercises ·
                 <span x-text="volume.toLocaleString()"></span> lb ·
-                <span x-text="elapsed"></span>
+                <span x-text="finishDuration"></span>
               </p>
+
+              <!-- Prefilled with now, so finishing normally costs nothing. The
+                   chip is the fix for the forgotten session: the newest checked
+                   set is when the workout really stopped, and unlike the time
+                   box it knows which day it was. -->
+              <div class="field">
+                <label for="fin-at">Finished at</label>
+                <div class="finish-when">
+                  <input id="fin-at" type="time" x-model="endTime" @input="endExact = null">
+                  <button class="chip" x-show="lastSetSuggestion" x-cloak
+                          :class="endExact && 'is-active'"
+                          @click="useLastSet()"
+                          x-text="lastSetSuggestion && lastSetSuggestion.label"></button>
+                </div>
+              </div>
               <!-- Only when this workout came from a routine that still exists.
                    Off by default: a workout is usually a one-off, not a new plan. -->
               <template x-if="startedFrom">

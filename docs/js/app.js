@@ -2470,6 +2470,64 @@ Alpine.data('trainPage', () => ({
   /** Off by default: a workout is usually a one-off, not a new plan. */
   updateRoutine: false,
 
+  // ---- when the workout actually ended ---------------------------------------
+  //
+  // Forgetting to press Finish is routine, and stamping "now" on a session that
+  // ended two hours ago records a two-hour lie. The sheet opens prefilled with
+  // now, so the normal case costs nothing; the field is there for the rest.
+  //
+  // endExact is an absolute timestamp and wins over the wall-clock field. It is
+  // how the last-set suggestion stays honest across days: "18:42" typed into the
+  // box means the most recent 18:42, but the set itself knows which day it was.
+  endTime: '',
+  endExact: null,
+
+  openFinish() {
+    const now = new Date();
+    this.endTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    this.endExact = null;
+    this.finishing = true;
+  },
+
+  get finishAt() {
+    if (this.endExact) return new Date(this.endExact);
+    return workout.resolveEndTime(this.session.started_at, this.endTime);
+  },
+
+  /** The duration the chosen end produces, so a wrong time is visibly wrong. */
+  get finishDuration() {
+    const minutes = Math.max(0, Math.round(
+      (this.finishAt - new Date(this.session.started_at)) / 60_000));
+    if (minutes < 60) return `${minutes} min`;
+    return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
+  },
+
+  /** The newest checked set — when the workout really stopped, almost always. */
+  get lastSetAt() { return workout.lastActivityAt(this.sets); },
+
+  /**
+   * Offered only once it would change anything: within a quarter hour of now,
+   * "now" is already the right answer and the chip is clutter.
+   */
+  get lastSetSuggestion() {
+    const at = this.lastSetAt;
+    if (!at || Date.now() - Date.parse(at) < 15 * 60_000) return null;
+
+    const when = new Date(at);
+    const time = when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const sameDay = when.toDateString() === new Date().toDateString();
+    return {
+      label: sameDay ? `Last set · ${time}`
+        : `Last set · ${when.toLocaleDateString([], { weekday: 'short' })} ${time}`,
+    };
+  },
+
+  useLastSet() {
+    this.endExact = this.lastSetAt;
+    const when = new Date(this.lastSetAt);
+    this.endTime = `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`;
+  },
+
   async finishSession() {
     const name = this.routineName.trim();
     const source = this.startedFrom;
@@ -2491,18 +2549,21 @@ Alpine.data('trainPage', () => ({
       });
     }
 
-    // Held before finishSession clears it, for the popup underneath.
+    // Held before finishSession clears it, for the popup underneath. Duration
+    // from the chosen end, not the wall clock — the whole point of choosing one.
     const done = {
       name: this.session.name,
       volume: Math.round(this.volume),
       exercises: this.groups.length,
-      elapsed: this.elapsed,
+      elapsed: this.finishDuration,
     };
 
-    await workout.finishSession(this.session);
+    await workout.finishSession(this.session, this.finishAt);
     this.finishing = false;
     this.routineName = '';
     this.updateRoutine = false;
+    this.endTime = '';
+    this.endExact = null;
     this.endRest();
     await Alpine.store('data').refreshTraining();
 
