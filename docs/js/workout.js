@@ -280,7 +280,7 @@ export async function removeExercise(group) {
  * Set indices are left alone, so the new card lands where the old one was in the
  * workout rather than jumping to the end.
  */
-export async function replaceExercise({ session, group, exercise, prefill, ownerEmail, existingSets }) {
+export async function replaceExercise({ session, group, exercise, previous, ownerEmail, existingSets }) {
   const pending = group.sets.filter((s) => !s.completed_at);
   const kept = group.sets.filter((s) => s.completed_at);
 
@@ -292,18 +292,20 @@ export async function replaceExercise({ session, group, exercise, prefill, owner
   for (const set of kept) await updateSet(set, { replaced_at: replacedAt });
 
   // Nothing left to move. The card is finished, so the swap means "now do this
-  // one instead", which is a fresh set rather than a no-op.
+  // one instead" — fresh sets, as many as the new exercise took last time,
+  // exactly as if it had been added from the picker.
   if (!pending.length) {
-    const { set } = await addSet({
-      session,
-      exercise,
-      weight: prefill?.weight_lb ?? null,
-      reps: prefill?.reps ?? null,
-      isWarmup: false,
-      ownerEmail,
-      existingSets,
-    });
-    return [set];
+    const made = [];
+    let existing = existingSets;
+    for (let n = 0; n < openingSets(previous); n++) {
+      const { set } = await addSet({
+        session, exercise, weight: null, reps: null,
+        isWarmup: false, ownerEmail, existingSets: existing,
+      });
+      made.push(set);
+      existing = [...existing, set];
+    }
+    return made;
   }
 
   const moved = [];
@@ -311,8 +313,13 @@ export async function replaceExercise({ session, group, exercise, prefill, owner
     moved.push(await updateSet(set, {
       exercise_id: exercise.id ?? null,
       exercise_name: exercise.name,
-      weight_lb: prefill?.weight_lb ?? null,
-      reps: prefill?.reps ?? null,
+      // Cleared, not carried. This used to write the heaviest set of the new
+      // exercise's last session into every row — the same flat number repeated,
+      // sitting as a real value where a placeholder should be. Null is what
+      // lets the per-position placeholders (that exercise's actual last
+      // session, set by set) show through, and the checkmark adopts them.
+      weight_lb: null,
+      reps: null,
     }));
   }
   return moved;

@@ -2575,7 +2575,7 @@ Alpine.data('trainPage', () => ({
       session: this.session,
       group,
       exercise,
-      prefill: this.data.prior.get(exercise.id ?? exercise.name)?.best ?? null,
+      previous: this.data.prior.get(exercise.id ?? exercise.name)?.previous ?? [],
       ownerEmail: this.email,
       existingSets: this.sets,
     });

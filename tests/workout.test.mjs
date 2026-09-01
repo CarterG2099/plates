@@ -78,14 +78,19 @@ test('swapping before you start moves the whole card', async () => {
     session: SESSION,
     group: await groupNamed('row'),
     exercise: { id: 'db', name: 'Dumbbell Row' },
-    prefill: { weight_lb: 50, reps: 12 },
+    previous: [],
     ownerEmail: ME,
     existingSets: sets,
   });
 
   assert.equal(moved.length, 3);
   assert.deepEqual(await cards(), [['Dumbbell Row', 3]]);
-  assert.deepEqual([moved[0].weight_lb, moved[0].reps], [50, 12], 'prefilled from the new exercise');
+  // The swap used to write the heaviest set of the new exercise's last session
+  // into every moved row — a real value where a placeholder belongs, and the
+  // same flat number on every set. Cleared is what lets the per-position
+  // placeholders show, exactly like a planned or freshly added set.
+  assert.deepEqual([moved[0].weight_lb, moved[0].reps], [null, null],
+    'cleared, so the new exercise\'s own last-session placeholders show through');
   assert.deepEqual(moved.map((s) => s.set_index), [0, 1, 2], 'it stays where it was in the workout');
 });
 
@@ -100,7 +105,7 @@ test('swapping halfway leaves the done sets on the exercise you actually did', a
     session: SESSION,
     group: await groupNamed('row'),
     exercise: { id: 'db', name: 'Dumbbell Row' },
-    prefill: { weight_lb: 50, reps: 12 },
+    previous: [],
     ownerEmail: ME,
     existingSets: sets,
   });
@@ -121,7 +126,7 @@ test('swapping a finished card gives one fresh set rather than doing nothing', a
     session: SESSION,
     group: await groupNamed('row'),
     exercise: { id: 'db', name: 'Dumbbell Row' },
-    prefill: { weight_lb: 50, reps: 12 },
+    previous: [],
     ownerEmail: ME,
     existingSets: sets,
   });
@@ -130,6 +135,23 @@ test('swapping a finished card gives one fresh set rather than doing nothing', a
   assert.equal(made[0].exercise_name, 'Dumbbell Row');
   assert.equal(made[0].completed_at, null, 'a new set is not pre-checked');
   assert.deepEqual(await cards(), [['Barbell Row', 1], ['Dumbbell Row', 1]]);
+});
+
+test('swapping a finished card opens the new exercise at its last-time size', async () => {
+  const sets = await seedSets([{ id: 'row', name: 'Barbell Row', done: 'T1' }]);
+
+  const made = await workout.replaceExercise({
+    session: SESSION,
+    group: await groupNamed('row'),
+    exercise: { id: 'db', name: 'Dumbbell Row' },
+    previous: [{ reps: 8 }, { reps: 8 }, { reps: 6 }],
+    ownerEmail: ME,
+    existingSets: sets,
+  });
+
+  assert.equal(made.length, 3, 'as many sets as it took last time — same rule as adding it');
+  assert.equal(made.every((s) => s.weight_lb === null && s.reps === null), true,
+    'and all empty, so the placeholders carry the numbers');
 });
 
 // ---- reordering ---------------------------------------------------------------
@@ -680,7 +702,7 @@ test('replacing marks what stays behind without disturbing it', async () => {
   await workout.replaceExercise({
     session: SESSION, group: await groupNamed('row'),
     exercise: { id: 'db', name: 'Dumbbell Row' },
-    prefill: { weight_lb: 60, reps: 12 }, ownerEmail: ME, existingSets: sets,
+    previous: [], ownerEmail: ME, existingSets: sets,
   });
 
   const left = (await liveSets()).filter((s) => s.exercise_name === 'Barbell Row');
@@ -720,7 +742,7 @@ test('updating the routine leaves out the exercise you replaced away from', asyn
   await workout.replaceExercise({
     session: SESSION, group: await groupNamed('row'),
     exercise: { id: 'db', name: 'Dumbbell Row' },
-    prefill: { weight_lb: 60, reps: 12 }, ownerEmail: ME, existingSets: sets,
+    previous: [], ownerEmail: ME, existingSets: sets,
   });
 
   // Finish the exercise you switched to, so it has something to record.
@@ -744,7 +766,7 @@ test('replacing a finished card still drops it from the plan', async () => {
   await workout.replaceExercise({
     session: SESSION, group: await groupNamed('row'),
     exercise: { id: 'db', name: 'Dumbbell Row' },
-    prefill: { weight_lb: 60, reps: 12 }, ownerEmail: ME, existingSets: sets,
+    previous: [], ownerEmail: ME, existingSets: sets,
   });
 
   const routine = await local.save('routines', { name: 'Pull A' }, ME);
