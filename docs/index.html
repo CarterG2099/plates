@@ -1472,6 +1472,36 @@
                 <span aria-hidden="true">⌕</span>
                 <input type="search" placeholder="Search exercises…" x-model="pickerTerm" autocomplete="off">
               </div>
+
+              <!-- Muscle family, then that family's specific muscles, then the
+                   implement. The second row exists only while a family with more
+                   than one muscle is lit, so the common case stays two rows.
+                   When replacing, the family arrives pre-lit with the outgoing
+                   exercise's own — see openPicker. -->
+              <div class="picker-filters">
+                <div class="chips">
+                  <template x-for="g in pickerGroups" :key="g">
+                    <button class="chip" :class="pickerGroup === g && 'is-active'"
+                            @click="toggleGroup(g)" x-text="g"></button>
+                  </template>
+                </div>
+                <div class="chips" x-show="pickerMuscles.length" x-cloak>
+                  <template x-for="m in pickerMuscles" :key="m">
+                    <button class="chip" :class="pickerMuscle === m && 'is-active'"
+                            @click="toggleMuscle(m)" x-text="muscleLabel(m)"></button>
+                  </template>
+                </div>
+                <div class="chips">
+                  <template x-for="k in pickerEquipments" :key="k">
+                    <button class="chip" :class="pickerEquipment === k && 'is-active'"
+                            @click="toggleEquipment(k)" x-text="k"></button>
+                  </template>
+                </div>
+              </div>
+
+              <p class="empty" x-show="!library.length" style="padding: var(--space-4) 0">
+                Nothing matches those filters.
+              </p>
               <div class="rows">
                 <template x-for="e in library.slice(0, 40)" :key="e.id">
                   <button class="row"

@@ -2595,18 +2595,85 @@ Alpine.data('trainPage', () => ({
   // ---- sets ----------------------------------------------------------------
 
   get library() {
-    return workout.searchExercises(
+    let list = workout.searchExercises(
       workout.libraryFor(this.data.exercises, this.email), this.pickerTerm,
     );
+    list = workout.filterExercises(list, {
+      group: this.pickerGroup, muscle: this.pickerMuscle, equipment: this.pickerEquipment,
+    });
+    // Replacing: similar first, because that is what a replacement is. The
+    // alphabetical order stays for plain adding, where there is no "similar to".
+    if (this.replacing) list = workout.rankSimilar(list, this.replaceReference);
+    return list;
   },
+
+  /** The exercise being swapped out, as similarity's reference point. */
+  get replaceReference() {
+    return this.exerciseById(this.replacing?.exerciseId)
+      ?? { name: this.replacing?.name ?? '' };
+  },
+
+  // ---- picker filters --------------------------------------------------------
+
+  pickerGroup: null,      // 'arms' — a muscle family
+  pickerMuscle: null,     // 'triceps' — one of the family's specific muscles
+  pickerEquipment: null,
+
+  get pickerGroups() { return Object.keys(workout.MUSCLE_GROUPS); },
+
+  /** The selected family's specific muscles — only offered when there is a choice. */
+  get pickerMuscles() {
+    const keys = workout.MUSCLE_GROUPS[this.pickerGroup] ?? [];
+    return keys.length > 1 ? keys : [];
+  },
+
+  /** Implements actually present in the library, so no chip filters to nothing. */
+  get pickerEquipments() {
+    const found = new Set();
+    for (const e of workout.libraryFor(this.data.exercises, this.email)) {
+      const kind = workout.equipmentOf(e);
+      if (kind) found.add(kind);
+    }
+    const order = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'bands'];
+    return [...found].sort((a, b) => {
+      const i = order.indexOf(a); const j = order.indexOf(b);
+      return (i === -1 ? 99 : i) - (j === -1 ? 99 : j) || a.localeCompare(b);
+    });
+  },
+
+  toggleGroup(group) {
+    this.pickerGroup = this.pickerGroup === group ? null : group;
+    this.pickerMuscle = null;   // a new family invalidates the old specific
+  },
+
+  toggleMuscle(muscle) {
+    this.pickerMuscle = this.pickerMuscle === muscle ? null : muscle;
+  },
+
+  toggleEquipment(kind) {
+    this.pickerEquipment = this.pickerEquipment === kind ? null : kind;
+  },
+
+  /** lowerBack -> "lower back", everything else is already a word. */
+  muscleLabel(key) { return key.replace(/([A-Z])/g, ' $1').toLowerCase(); },
 
   /**
    * The picker serves three callers — add, replace, and the routine builder —
    * so which one opened it has to be remembered while it is up.
+   *
+   * Replacing pre-selects the outgoing exercise's muscle family: the list opens
+   * already narrowed to plausible substitutes, ranked most-similar first, and
+   * one tap on the lit chip widens back out.
    */
   openPicker(group = null) {
     this.replacing = group;
     this.pickerTerm = '';
+    this.pickerGroup = null;
+    this.pickerMuscle = null;
+    this.pickerEquipment = null;
+    if (group) {
+      this.pickerGroup = workout.groupOf(workout.muscleKeyOf(this.replaceReference));
+    }
     this.picker = true;
   },
 
@@ -2614,6 +2681,9 @@ Alpine.data('trainPage', () => ({
     this.picker = false;
     this.replacing = null;
     this.pickerTerm = '';
+    this.pickerGroup = null;
+    this.pickerMuscle = null;
+    this.pickerEquipment = null;
   },
 
   /** Opens with as many sets as last time — see workout.openingSets. */

@@ -1385,6 +1385,16 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   font-size: var(--text-xs);
 }
 
+/* The picker's filter rows. Their own stack with a tighter gap than the sheet's:
+   three rows of chips at the sheet's 16px read as three separate sections, and
+   they are one control. */
+.picker-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: none;
+}
+
 /* ---- routine categories ---------------------------------------------------- */
 
 .routine-group {

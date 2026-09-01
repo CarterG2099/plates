@@ -8,7 +8,7 @@
 
 import * as local from './local.js';
 import * as sync from './sync.js';
-import { muscleFor } from './muscle-map.js';
+import { muscleFor, movementFor } from './muscle-map.js';
 
 export const DEFAULT_REST_SECONDS = 120;
 
@@ -818,6 +818,118 @@ export function searchExercises(library, term) {
     e.name.toLowerCase().includes(q)
     || (e.primary_muscle ?? '').toLowerCase().includes(q)
     || (e.equipment ?? '').toLowerCase().includes(q));
+}
+
+/**
+ * The muscle families the filter chips offer, over muscle-map's specific keys.
+ *
+ * Both levels exist because both questions get asked: "something for arms" and
+ * "something for triceps" are different sizes of the same request, and folding
+ * them into one list means either six chips too vague or thirteen too many.
+ */
+export const MUSCLE_GROUPS = {
+  chest: ['chest'],
+  shoulders: ['shoulders'],
+  back: ['lats', 'traps', 'lowerBack'],
+  arms: ['biceps', 'triceps', 'forearms'],
+  legs: ['quads', 'hamstrings', 'glutes', 'calves'],
+  core: ['core'],
+};
+
+/** muscle-map's key for an exercise, from its data or failing that its name. */
+export function muscleKeyOf(exercise) {
+  return muscleFor(exercise, exercise?.name ?? '');
+}
+
+export function groupOf(muscleKey) {
+  for (const [group, keys] of Object.entries(MUSCLE_GROUPS)) {
+    if (keys.includes(muscleKey)) return group;
+  }
+  return null;
+}
+
+/**
+ * What an exercise is done with, normalised.
+ *
+ * The name's trailing parenthetical wins over the equipment field, checked
+ * against the data rather than assumed: "Triceps Extension (Dumbbell)" arrived
+ * from the import with equipment "cable", and it was passing the cable filter
+ * while saying Dumbbell on its row. The parenthetical is this library's own
+ * naming convention and the thing the user actually reads; the field is
+ * whatever the source database thought.
+ *
+ * Only the parenthetical is read from the name: scanning all of it would make
+ * "Cable Crossover" cable by accident and "Barbell Row" barbell by accident —
+ * right answers by a rule that also makes wrong ones, which is worse than null.
+ * The field remains the fallback for rows with no parenthetical at all.
+ */
+export function equipmentOf(exercise) {
+  const tail = /\(([^)]*)\)\s*$/.exec(exercise?.name ?? '')?.[1]?.toLowerCase() ?? '';
+  if (/barbell|smith/.test(tail)) return 'barbell';
+  if (/dumbbell/.test(tail)) return 'dumbbell';
+  if (/rope|cable/.test(tail)) return 'cable';
+  if (/machine|plates/.test(tail)) return 'machine';
+  if (/band/.test(tail)) return 'bands';
+  if (/weighted|bodyweight/.test(tail)) return 'bodyweight';
+
+  const field = (exercise?.equipment ?? '').trim().toLowerCase();
+  if (!field || field === 'none') return null;
+  if (field === 'body only') return 'bodyweight';
+  return field;
+}
+
+/**
+ * Narrow a library by muscle and equipment.
+ *
+ * A specific muscle beats its group when both are set, because the specific chip
+ * is only reachable through the group chip — asking for "arms, and of arms,
+ * triceps" means triceps.
+ */
+export function filterExercises(library, { group = null, muscle = null, equipment = null } = {}) {
+  return library.filter((e) => {
+    if (equipment && equipmentOf(e) !== equipment) return false;
+    if (muscle || group) {
+      const key = muscleKeyOf(e);
+      if (muscle) return key === muscle;
+      return groupOf(key) === group;
+    }
+    return true;
+  });
+}
+
+/**
+ * The library reordered by likeness to one exercise, for the replace picker.
+ *
+ * What "similar" means here, in the order it matters: the same specific muscle,
+ * then the same movement shape, then the same family, then the same implement.
+ * Weighted so one same-muscle hit beats any pile of weaker matches — replacing
+ * a triceps pushdown with another triceps exercise on a different machine is
+ * the normal case; replacing it with anything else cable-driven is not.
+ *
+ * The exercise being replaced is excluded: it is not a replacement for itself.
+ */
+export function rankSimilar(library, reference) {
+  const refMuscle = muscleKeyOf(reference);
+  const refGroup = groupOf(refMuscle);
+  const refMove = movementFor(reference, reference?.name ?? '');
+  const refEquip = equipmentOf(reference);
+  const refName = (reference?.name ?? '').toLowerCase();
+
+  const score = (e) => {
+    let s = 0;
+    const key = muscleKeyOf(e);
+    if (refMuscle && key === refMuscle) s += 6;
+    else if (refGroup && groupOf(key) === refGroup) s += 3;
+    if (refMove && movementFor(e, e.name) === refMove) s += 4;
+    if (refEquip && equipmentOf(e) === refEquip) s += 1;
+    return s;
+  };
+
+  return library
+    .filter((e) => (e.name ?? '').toLowerCase() !== refName)
+    .map((e) => ({ e, s: score(e) }))
+    .sort((a, b) => b.s - a.s || a.e.name.localeCompare(b.e.name))
+    .map((x) => x.e);
 }
 
 export async function createExercise(fields, ownerEmail) {

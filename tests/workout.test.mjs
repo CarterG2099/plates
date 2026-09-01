@@ -1438,3 +1438,114 @@ test('finishSession without an override still means now', async () => {
   const saved = await workout.finishSession(session);
   assert.ok(Date.parse(saved.ended_at) >= before, 'the default is unchanged');
 });
+
+// ---- filtering the exercise library ------------------------------------------
+
+const ex = (name, over = {}) => ({ id: name, owner_email: ME, name, ...over });
+
+test('equipmentOf trusts the name over the field, because the field lies', () => {
+  // Real row: the import stamped "cable" on a dumbbell exercise, and it was
+  // passing the cable filter while saying Dumbbell to the reader.
+  assert.equal(workout.equipmentOf(ex('Triceps Extension (Dumbbell)', { equipment: 'cable' })),
+    'dumbbell');
+  // The field still serves rows whose names carry nothing.
+  assert.equal(workout.equipmentOf(ex('Triceps Pushdown', { equipment: 'cable' })), 'cable');
+  assert.equal(workout.equipmentOf(ex('X', { equipment: 'body only' })), 'bodyweight');
+  assert.equal(workout.equipmentOf(ex('X', { equipment: 'Bodyweight ' })), 'bodyweight');
+});
+
+test('equipmentOf falls back to the trailing parenthetical only', () => {
+  assert.equal(workout.equipmentOf(ex('Bench Press (Barbell)')), 'barbell');
+  assert.equal(workout.equipmentOf(ex('Triceps Pushdown (Rope)')), 'cable');
+  assert.equal(workout.equipmentOf(ex('Shoulder Press (Machine Plates)')), 'machine');
+  assert.equal(workout.equipmentOf(ex('Triceps Dip (Weighted)')), 'bodyweight');
+  // The word barbell mid-name is not a parenthetical and must not classify:
+  // a rule that scans the whole name gets Cable Crossover wrong the same way.
+  assert.equal(workout.equipmentOf(ex('Barbell Row')), null);
+  assert.equal(workout.equipmentOf(ex('Plain Squat')), null);
+});
+
+test('groupOf places every specific muscle in exactly one family', () => {
+  const seen = new Set();
+  for (const [group, keys] of Object.entries(workout.MUSCLE_GROUPS)) {
+    for (const key of keys) {
+      assert.equal(workout.groupOf(key), group);
+      assert.ok(!seen.has(key), `${key} appears twice`);
+      seen.add(key);
+    }
+  }
+  assert.equal(workout.groupOf('nonsense'), null);
+});
+
+test('filterExercises narrows by group, muscle and equipment together', () => {
+  const library = [
+    ex('Bench Press (Barbell)', { primary_muscle: 'chest' }),
+    ex('Bicep Curl (Dumbbell)', { primary_muscle: 'biceps' }),
+    ex('Skullcrusher', { primary_muscle: 'triceps' }),
+    ex('Triceps Pushdown (Rope)', { primary_muscle: 'triceps' }),
+    ex('Squat (Barbell)', { primary_muscle: 'quads' }),
+  ];
+
+  assert.deepEqual(
+    workout.filterExercises(library, { group: 'arms' }).map((e) => e.name),
+    ['Bicep Curl (Dumbbell)', 'Skullcrusher', 'Triceps Pushdown (Rope)']);
+
+  // The specific muscle wins over its group: "arms, and of arms, triceps".
+  assert.deepEqual(
+    workout.filterExercises(library, { group: 'arms', muscle: 'triceps' }).map((e) => e.name),
+    ['Skullcrusher', 'Triceps Pushdown (Rope)']);
+
+  assert.deepEqual(
+    workout.filterExercises(library, { group: 'arms', muscle: 'triceps', equipment: 'cable' })
+      .map((e) => e.name),
+    ['Triceps Pushdown (Rope)']);
+
+  assert.equal(workout.filterExercises(library, {}).length, library.length, 'no filters, no change');
+});
+
+test('an exercise with no muscle data is classified by its name', () => {
+  const library = [ex('Hammer Curl'), ex('Leg Press')];
+  assert.deepEqual(workout.filterExercises(library, { group: 'arms' }).map((e) => e.name),
+    ['Hammer Curl']);
+});
+
+// ---- ranking replacements ----------------------------------------------------
+
+test('rankSimilar puts the same muscle first and never offers the exercise itself', () => {
+  const library = [
+    ex('Squat (Barbell)', { primary_muscle: 'quads' }),
+    ex('Skullcrusher', { primary_muscle: 'triceps' }),
+    ex('Triceps Pushdown (Rope)', { primary_muscle: 'triceps' }),
+    ex('Bicep Curl (Dumbbell)', { primary_muscle: 'biceps' }),
+    ex('Triceps Extension (Cable)', { primary_muscle: 'triceps' }),
+  ];
+  const outgoing = ex('Triceps Pushdown (Rope)', { primary_muscle: 'triceps' });
+  const ranked = workout.rankSimilar(library, outgoing).map((e) => e.name);
+
+  assert.ok(!ranked.includes('Triceps Pushdown (Rope)'), 'not a replacement for itself');
+  assert.deepEqual(ranked.slice(0, 2).sort(), ['Skullcrusher', 'Triceps Extension (Cable)'],
+    'triceps before anything else');
+  assert.equal(ranked[ranked.length - 1], 'Squat (Barbell)', 'legs last for an arm swap');
+});
+
+test('the same movement shape counts even across implements', () => {
+  const library = [
+    ex('Shoulder Press (Machine Plates)', { primary_muscle: 'shoulders' }),
+    ex('Lateral Raise', { primary_muscle: 'shoulders' }),
+  ];
+  const outgoing = ex('Overhead Press (Barbell)', { primary_muscle: 'shoulders' });
+  const ranked = workout.rankSimilar(library, outgoing).map((e) => e.name);
+
+  assert.equal(ranked[0], 'Shoulder Press (Machine Plates)',
+    'a press replaces a press before a raise does');
+});
+
+test('equipment breaks ties between equals', () => {
+  const library = [
+    ex('Incline Bench Press (Dumbbell)', { primary_muscle: 'chest' }),
+    ex('Incline Bench Press (Barbell)', { primary_muscle: 'chest' }),
+  ];
+  const outgoing = ex('Bench Press (Barbell)', { primary_muscle: 'chest' });
+  const ranked = workout.rankSimilar(library, outgoing).map((e) => e.name);
+  assert.equal(ranked[0], 'Incline Bench Press (Barbell)');
+});
