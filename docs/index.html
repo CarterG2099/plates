@@ -1694,16 +1694,20 @@
                 <span x-text="finishDuration"></span>
               </p>
 
-              <!-- Prefilled with now, so finishing normally costs nothing. The
-                   chip is the fix for the forgotten session: the newest checked
-                   set is when the workout really stopped, and unlike the time
-                   box it knows which day it was. -->
+              <!-- Prefilled with the elapsed time, so finishing normally costs
+                   nothing. The chip is the fix for the forgotten session: start
+                   to the newest checked set is how long the workout really was. -->
               <div class="field">
-                <label for="fin-at">Finished at</label>
+                <label for="fin-h">Duration</label>
                 <div class="finish-when">
-                  <input id="fin-at" type="time" x-model="endTime" @input="endExact = null">
+                  <input id="fin-h" type="number" inputmode="numeric" min="0"
+                         x-model.number="endHours" aria-label="Hours">
+                  <span>h</span>
+                  <input id="fin-m" type="number" inputmode="numeric" min="0" max="59"
+                         x-model.number="endMinutes" aria-label="Minutes">
+                  <span>m</span>
                   <button class="chip" x-show="lastSetSuggestion" x-cloak
-                          :class="endExact && 'is-active'"
+                          :class="lastSetMinutes === chosenMinutes && 'is-active'"
                           @click="useLastSet()"
                           x-text="lastSetSuggestion && lastSetSuggestion.label"></button>
                 </div>

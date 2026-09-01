@@ -1388,34 +1388,34 @@ test('lastActivityAt is the newest checked set, not the newest row', () => {
   assert.equal(workout.lastActivityAt([]), null);
 });
 
-test('an end time earlier today lands on today', () => {
+test('a stated duration lands the end that far after the start', () => {
   const start = new Date('2026-09-01T17:00:00');
   const now = new Date('2026-09-01T21:30:00');
-  const end = workout.resolveEndTime(start, '18:45', now);
-  assert.equal(end.getTime(), new Date('2026-09-01T18:45:00').getTime());
+  const end = workout.endFromDuration(start, 75, now);
+  assert.equal(end.getTime(), new Date('2026-09-01T18:15:00').getTime());
 });
 
-test('a wall-clock time that has not happened yet today means yesterday', () => {
-  // Started 11pm, finishing the app at 9am; "23:40" is later than 9am, so it
-  // can only mean last night.
+test('a duration crossing midnight needs no date guessing', () => {
+  // The whole reason duration replaced a wall-clock time: 100 minutes after
+  // 11pm is one moment, whatever day the clock face would have implied.
   const start = new Date('2026-08-31T23:00:00');
   const now = new Date('2026-09-01T09:00:00');
-  const end = workout.resolveEndTime(start, '23:40', now);
-  assert.equal(end.getTime(), new Date('2026-08-31T23:40:00').getTime());
+  const end = workout.endFromDuration(start, 100, now);
+  assert.equal(end.getTime(), new Date('2026-09-01T00:40:00').getTime());
 });
 
-test('an end before the start clamps to the start, where the 0m duration shows it', () => {
+test('more time than has elapsed clamps to now, not the future', () => {
   const start = new Date('2026-09-01T17:00:00');
-  const now = new Date('2026-09-01T21:30:00');
-  const end = workout.resolveEndTime(start, '16:00', now);
-  assert.equal(end.getTime(), start.getTime());
+  const now = new Date('2026-09-01T17:50:00');
+  assert.equal(workout.endFromDuration(start, 120, now).getTime(), now.getTime());
 });
 
-test('no time typed means now', () => {
+test('zero or nonsense means the start, where the 0m readout shows it', () => {
   const start = new Date('2026-09-01T17:00:00');
   const now = new Date('2026-09-01T18:00:00');
-  assert.equal(workout.resolveEndTime(start, '', now).getTime(), now.getTime());
-  assert.equal(workout.resolveEndTime(start, 'garbage', now).getTime(), now.getTime());
+  assert.equal(workout.endFromDuration(start, 0, now).getTime(), start.getTime());
+  assert.equal(workout.endFromDuration(start, -5, now).getTime(), start.getTime());
+  assert.equal(workout.endFromDuration(start, NaN, now).getTime(), start.getTime());
 });
 
 test('finishSession stores the chosen end, not the moment the button was pressed', async () => {

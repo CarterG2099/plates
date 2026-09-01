@@ -57,29 +57,27 @@ export function lastActivityAt(sets) {
 }
 
 /**
- * Place a wall-clock "HH:MM" onto the calendar, for the finish sheet.
+ * The end a stated duration produces, for the finish sheet.
  *
- * "I finished at 6:45" names a time of day, not a date, so this picks the most
- * recent 6:45 that has already happened — today's if it has passed, otherwise
- * yesterday's. The result is clamped into [started_at, now]: a workout cannot
- * end before it began or after the present, and the sheet shows the resulting
- * duration, so a clamp is visible rather than silent.
+ * "It was about an hour" is how Carter actually remembers a workout, and unlike
+ * a wall-clock time it carries no date ambiguity — start plus an hour is one
+ * moment whatever day it is, which is why this replaced a resolver that had to
+ * guess which day "18:42" meant.
  *
- * For a session forgotten across more than a day, a time of day is genuinely
- * ambiguous — that is what the last-set suggestion is for, which is absolute.
+ * Clamped into [started_at, now]: a workout cannot end before it began or after
+ * the present. The sheet shows the duration the clamp produces, so entering
+ * more time than has elapsed visibly falls back to "so far" rather than
+ * silently storing the future.
  */
-export function resolveEndTime(startedAt, timeString, now = new Date()) {
+export function endFromDuration(startedAt, minutes, now = new Date()) {
   const start = new Date(startedAt);
+  const wanted = Number(minutes);
 
-  const match = /^(\d{1,2}):(\d{2})$/.exec(String(timeString ?? '').trim());
-  if (!match) return now < start ? start : now;
+  if (!Number.isFinite(wanted) || wanted <= 0) return start;
 
-  const candidate = new Date(now);
-  candidate.setHours(Number(match[1]), Number(match[2]), 0, 0);
-  if (candidate > now) candidate.setDate(candidate.getDate() - 1);
-
-  if (candidate < start) return start;
-  return candidate;
+  const end = new Date(start.getTime() + Math.round(wanted) * 60_000);
+  if (end > now) return now < start ? start : now;
+  return end;
 }
 
 /** @param endedAt  optional — for workouts finished later than they ended. */

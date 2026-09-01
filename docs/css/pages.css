@@ -1611,15 +1611,27 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 }
 
 /* Value leads, label follows — the reader has the date and wants the number. */
-/* The end-time row on the finish sheet: the box and the last-set chip share a
-   line, and the box is sized to its content rather than stretched — a time is
-   five characters, and a full-width input reads as a text field to fill in. */
+/* The duration row on the finish sheet: two small number boxes, their units,
+   and the last-set chip, all on one line. The boxes are sized to their content
+   rather than stretched — a duration is at most three digits, and a full-width
+   input reads as a text field to fill in. */
 .finish-when {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
-.finish-when input[type="time"] { width: auto; flex: none; }
+
+.finish-when input[type="number"] {
+  width: 4.2rem;
+  flex: none;
+  text-align: center;
+}
+
+.finish-when > span {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
 
 /* ---- post-workout ---------------------------------------------------------- */
 

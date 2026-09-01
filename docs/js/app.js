@@ -2473,59 +2473,66 @@ Alpine.data('trainPage', () => ({
   // ---- when the workout actually ended ---------------------------------------
   //
   // Forgetting to press Finish is routine, and stamping "now" on a session that
-  // ended two hours ago records a two-hour lie. The sheet opens prefilled with
-  // now, so the normal case costs nothing; the field is there for the rest.
+  // ended two hours ago records a two-hour lie. The sheet asks for the duration
+  // — "it was about an hour" is how a workout is actually remembered — and
+  // start plus a duration is one moment whatever the day, which is why this
+  // replaced a wall-clock time that had to guess which day "18:42" meant.
   //
-  // endExact is an absolute timestamp and wins over the wall-clock field. It is
-  // how the last-set suggestion stays honest across days: "18:42" typed into the
-  // box means the most recent 18:42, but the set itself knows which day it was.
-  endTime: '',
-  endExact: null,
+  // Prefilled with the elapsed time, so the normal case costs nothing.
+  endHours: 0,
+  endMinutes: 0,
 
   openFinish() {
-    const now = new Date();
-    this.endTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    this.endExact = null;
+    const elapsed = Math.max(0, Math.floor(
+      (Date.now() - Date.parse(this.session.started_at)) / 60_000));
+    this.endHours = Math.floor(elapsed / 60);
+    this.endMinutes = elapsed % 60;
     this.finishing = true;
   },
 
-  get finishAt() {
-    if (this.endExact) return new Date(this.endExact);
-    return workout.resolveEndTime(this.session.started_at, this.endTime);
+  get chosenMinutes() {
+    return (Number(this.endHours) || 0) * 60 + (Number(this.endMinutes) || 0);
   },
 
-  /** The duration the chosen end produces, so a wrong time is visibly wrong. */
+  get finishAt() {
+    return workout.endFromDuration(this.session.started_at, this.chosenMinutes);
+  },
+
+  /**
+   * Formatted from the clamped end, not the raw fields, so typing more time
+   * than has elapsed visibly falls back to what has.
+   */
   get finishDuration() {
-    const minutes = Math.max(0, Math.round(
-      (this.finishAt - new Date(this.session.started_at)) / 60_000));
+    return this.clockLabel(Math.max(0, Math.round(
+      (this.finishAt - new Date(this.session.started_at)) / 60_000)));
+  },
+
+  clockLabel(minutes) {
     if (minutes < 60) return `${minutes} min`;
     return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
   },
 
-  /** The newest checked set — when the workout really stopped, almost always. */
-  get lastSetAt() { return workout.lastActivityAt(this.sets); },
+  /** Start to the newest checked set — how long the workout really was. */
+  get lastSetMinutes() {
+    const at = workout.lastActivityAt(this.sets);
+    if (!at) return null;
+    return Math.max(0, Math.round((Date.parse(at) - Date.parse(this.session.started_at)) / 60_000));
+  },
 
   /**
    * Offered only once it would change anything: within a quarter hour of now,
-   * "now" is already the right answer and the chip is clutter.
+   * the prefilled elapsed time is already the right answer.
    */
   get lastSetSuggestion() {
-    const at = this.lastSetAt;
+    const at = workout.lastActivityAt(this.sets);
     if (!at || Date.now() - Date.parse(at) < 15 * 60_000) return null;
-
-    const when = new Date(at);
-    const time = when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    const sameDay = when.toDateString() === new Date().toDateString();
-    return {
-      label: sameDay ? `Last set · ${time}`
-        : `Last set · ${when.toLocaleDateString([], { weekday: 'short' })} ${time}`,
-    };
+    return { label: `Last set · ${this.clockLabel(this.lastSetMinutes)}` };
   },
 
   useLastSet() {
-    this.endExact = this.lastSetAt;
-    const when = new Date(this.lastSetAt);
-    this.endTime = `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`;
+    const minutes = this.lastSetMinutes ?? 0;
+    this.endHours = Math.floor(minutes / 60);
+    this.endMinutes = minutes % 60;
   },
 
   async finishSession() {
@@ -2562,8 +2569,8 @@ Alpine.data('trainPage', () => ({
     this.finishing = false;
     this.routineName = '';
     this.updateRoutine = false;
-    this.endTime = '';
-    this.endExact = null;
+    this.endHours = 0;
+    this.endMinutes = 0;
     this.endRest();
     await Alpine.store('data').refreshTraining();
 
