@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v129';
+const CACHE_VERSION = 'plates-v130';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -100,8 +100,34 @@ self.addEventListener('activate', (event) => {
     const names = await caches.keys();
     await Promise.all(names.filter((n) => n !== CACHE_VERSION).map((n) => caches.delete(n)));
     await self.clients.claim();
+    await warmArtThumbs();
   })());
 });
+
+/**
+ * Pre-warm every exercise drawing's 128px thumbnail (~1.4MB for the whole set).
+ *
+ * The thumbnails are the first thing every exercise list paints, and a cache
+ * miss is what lets the grey fallback figure win the race and the drawing pop
+ * in late. Warmed from a manifest that tools/art.mjs regenerates alongside the
+ * images — so new drawings warm on the next activate with no sw.js edit — and
+ * best-effort throughout, like VENDOR: art is decorative, the shell is not.
+ */
+async function warmArtThumbs() {
+  try {
+    const response = await fetch('/img/exercises/t/manifest.json', { cache: 'no-store' });
+    if (!response.ok) return;
+    const slugs = await response.json();
+
+    const cache = await caches.open(CACHE_VERSION);
+    await Promise.all(slugs.map(async (slug) => {
+      const url = `/img/exercises/t/${slug}.png`;
+      if (!(await cache.match(url))) await cache.add(url).catch(() => {});
+    }));
+  } catch {
+    // Offline activate. Lists warm lazily as they render, same as before.
+  }
+}
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;

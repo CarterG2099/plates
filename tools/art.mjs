@@ -15,6 +15,7 @@
 //   node tools/art.mjs sheet <image> --cols 3 <left> <middle> <right>
 //   node tools/art.mjs single <image> <slug>
 //   node tools/art.mjs region <image> <slug> <x> <y> <w> <h>
+//   node tools/art.mjs thumbs                   regenerate every 128px thumbnail
 //
 // `region` is the escape hatch for a sheet that came back malformed — Gemini
 // sometimes ignores the grid and lays the exercises out freely on a 16:9 canvas,
@@ -28,11 +29,17 @@ import { fileURLToPath } from 'node:url';
 import { decode, encode, crop, resize, padToSquare } from './png.mjs';
 
 // 512 covers the largest place a drawing renders (about 150px) on a 3× display.
-// The list thumbnail is 44px, so this is already generous.
 const SIZE = 512;
+
+// The 44px list thumbnails get their own copy at 128px (44 × 3 dpr, rounded up).
+// A 512px PNG is ~200KB and the thumbnail is the first thing every list paints;
+// at 128px it is ~10KB, small enough that the service worker pre-warms all of
+// them and the drawing beats the fallback figure to the screen.
+const THUMB_SIZE = 128;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = path.join(ROOT, 'docs', 'img', 'exercises');
+const THUMB_DIR = path.join(OUT_DIR, 't');
 
 function die(message) {
   console.error(message);
@@ -85,16 +92,54 @@ function seamRadius(img, boundary, axis, limit = 40) {
   return radius;
 }
 
+/**
+ * The list the service worker warms its cache from. Regenerated on every write
+ * so a new drawing is pre-warmed on the next activate without touching sw.js.
+ */
+function writeManifest() {
+  const slugs = fs.readdirSync(THUMB_DIR)
+    .filter((f) => f.endsWith('.png'))
+    .map((f) => f.slice(0, -4))
+    .sort();
+  fs.writeFileSync(path.join(THUMB_DIR, 'manifest.json'), JSON.stringify(slugs) + '\n');
+}
+
 function write(image, slug) {
   if (!/^[a-z0-9-]+$/.test(slug)) die(`"${slug}" is not a slug — lowercase, digits and hyphens only.`);
+  const square = padToSquare(image);
+
   const file = path.join(OUT_DIR, `${slug}.png`);
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(file, encode(resize(padToSquare(image), SIZE)));
-  console.log(`${path.relative(ROOT, file)}  ${(fs.statSync(file).size / 1024).toFixed(0)}kB`);
+  fs.writeFileSync(file, encode(resize(square, SIZE)));
+
+  // Every drawing ships in both sizes, always — a full-size file without its
+  // thumbnail would render as the fallback figure in every list.
+  fs.mkdirSync(THUMB_DIR, { recursive: true });
+  fs.writeFileSync(path.join(THUMB_DIR, `${slug}.png`), encode(resize(square, THUMB_SIZE)));
+  writeManifest();
+
+  console.log(`${path.relative(ROOT, file)}  ${(fs.statSync(file).size / 1024).toFixed(0)}kB (+thumb)`);
 }
 
 const [command, file, ...rest] = process.argv.slice(2);
-if (!command || !file) die('usage: art.mjs sheet|single <image> ...');
+if (!command) die('usage: art.mjs sheet|single|region <image> ... | thumbs');
+
+if (command === 'thumbs') {
+  // Backfill: regenerate every thumbnail from the full-size drawings.
+  fs.mkdirSync(THUMB_DIR, { recursive: true });
+  let total = 0;
+  for (const f of fs.readdirSync(OUT_DIR).filter((f) => f.endsWith('.png')).sort()) {
+    const img = decode(fs.readFileSync(path.join(OUT_DIR, f)));
+    const out = encode(resize(img, THUMB_SIZE));
+    fs.writeFileSync(path.join(THUMB_DIR, f), out);
+    total += out.length;
+  }
+  writeManifest();
+  console.log(`thumbnails written to ${path.relative(ROOT, THUMB_DIR)} — ${(total / 1024).toFixed(0)}kB total`);
+  process.exit(0);
+}
+
+if (!file) die('usage: art.mjs sheet|single|region <image> ...');
 if (!fs.existsSync(file)) die(`no such file: ${file}`);
 
 const source = decode(fs.readFileSync(file));

@@ -294,8 +294,14 @@ export function exerciseArt(exercise, name = '') {
   const figure = muscleMap(exercise, name);
   if (!slug) return figure;
 
-  return `${figure}<img class="art" alt="" loading="lazy"`
-    + ` src="/img/exercises/${slug}.png" onerror="this.remove()">`;
+  // The 128px thumbnail, decoded synchronously and never lazy. These lists
+  // re-render on every data change and x-html rebuilds the <img> each time, so
+  // a lazy 512px image meant the grey figure repeatedly won the race and the
+  // drawing popped in late. The thumbnails are ~13KB, pre-warmed by the service
+  // worker, and a sync decode of a cached image paints in the same frame as the
+  // figure it covers.
+  return `${figure}<img class="art" alt="" decoding="sync"`
+    + ` src="/img/exercises/t/${slug}.png" onerror="this.remove()">`;
 }
 
 /**
@@ -314,7 +320,10 @@ export function exerciseArtPair(exercise, name = '') {
   const figure = muscleMap(exercise, name, { both: true });
   if (!slug) return figure;
 
-  return `${figure}<img class="art" alt="" loading="lazy"`
+  // Full size here — the detail sheet renders it at ~150px — but not lazy:
+  // the sheet is already on screen when this renders, so deferring only delays
+  // the swap from figures to drawing.
+  return `${figure}<img class="art" alt="" decoding="async"`
     + ` src="/img/exercises/${slug}.png"`
     + ` onload="this.parentElement.classList.add('has-art')" onerror="this.remove()">`;
 }

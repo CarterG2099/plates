@@ -123,8 +123,30 @@ test('artSlug never leaves a leading or trailing separator', () => {
 test('exerciseArt renders the figure and layers the image over it', () => {
   const html = mm.exerciseArt(null, 'Bench Press (Barbell)');
   assert.match(html, /<svg/, 'the figure must be present as the fallback');
-  assert.match(html, /src="\/img\/exercises\/bench-press-barbell\.png"/);
+  assert.match(html, /src="\/img\/exercises\/t\/bench-press-barbell\.png"/,
+    'lists use the 128px thumbnail — the 512px original decoding late is what made the figure flash first');
+  assert.match(html, /decoding="sync"/, 'a cached thumbnail must paint in the same frame as the figure');
+  assert.equal(html.includes('loading="lazy"'), false,
+    'x-html rebuilds the img on every re-render, so lazy meant a visible late pop-in each time');
   assert.match(html, /onerror="this\.remove\(\)"/, 'a missing file must fall back, not 404 visibly');
+});
+
+// Every thumbnail must exist for every full-size drawing, or the list falls
+// back to the figure for an exercise that has art. tools/art.mjs writes both
+// sizes on every command; this catches a file added by hand.
+test('every full-size drawing has its 128px thumbnail and a manifest entry', async () => {
+  const fs = await import('node:fs');
+  // Sorted as slugs, not filenames — "-" and "." order differently, and the
+  // manifest holds slugs.
+  const slugsIn = (dir) => fs.readdirSync(dir)
+    .filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4)).sort();
+  const full = slugsIn('docs/img/exercises');
+  const thumbs = slugsIn('docs/img/exercises/t');
+  assert.deepEqual(thumbs, full, 'run `node tools/art.mjs thumbs` to backfill');
+
+  const manifest = JSON.parse(fs.readFileSync('docs/img/exercises/t/manifest.json', 'utf8'));
+  assert.deepEqual(manifest, full,
+    'the service worker warms from the manifest, so a stale one leaves new drawings cold');
 });
 
 test('exerciseArt falls back to the figure alone when there is no name', () => {
