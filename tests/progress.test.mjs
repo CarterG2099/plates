@@ -71,6 +71,25 @@ test('a non-4-digit entry never advances the flow', async () => {
   assert.ok(step.error);
 });
 
+// The regression: opening the camera hides the page, hiding relocks, and the
+// relock tears down the unlocked template — if the file inputs live inside it,
+// they are destroyed while waiting and "Use photo" has no listener left. They
+// must sit before (outside) both lock-gated templates.
+test('the photo file inputs live outside the lock-gated markup', async () => {
+  const fs = await import('node:fs');
+  const html = fs.readFileSync('docs/index.html', 'utf8');
+
+  const camera = html.indexOf('id="pp-camera"');
+  const library = html.indexOf('id="pp-library"');
+  const lockGate = html.indexOf('x-if="photosLocked"');
+
+  assert.ok(camera !== -1 && library !== -1, 'both inputs exist');
+  assert.ok(camera < lockGate && library < lockGate,
+    'inputs must come before the lock-gated templates so a relock cannot destroy them');
+  assert.match(html.slice(camera - 200, camera + 200), /capture="environment"/,
+    'the camera input hands off to the real camera app for full quality');
+});
+
 // The regression: loadMembership selects named columns, and photo_pin_hash was
 // not among them — the hash saved fine and never came back down, so every
 // session asked for a brand-new PIN.

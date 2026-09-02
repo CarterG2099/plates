@@ -3832,16 +3832,29 @@ Alpine.data('statsPage', () => ({
   photoUrls: {},
   photoUrlQueue: new Set(),
 
+  /**
+   * True from tapping "Take photo"/"From library" until the chosen file arrives
+   * (or shortly after coming back without one). The camera and the photo picker
+   * both hide the page, and the relock-on-hide used to fire on that very hide —
+   * tearing down the section mid-pick. While a pick is in flight, don't relock.
+   */
+  pickerHeld: false,
+
   init() {
     this.relockOnHide = () => {
-      if (document.visibilityState === 'hidden') this.relockPhotos();
+      if (document.visibilityState === 'hidden') {
+        if (!this.pickerHeld) this.relockPhotos();
+      } else if (this.pickerHeld) {
+        // Back without a change event = the pick was cancelled. The event, if
+        // coming, lands right after visibility; give it a beat, then disarm.
+        setTimeout(() => { this.pickerHeld = false; }, 3000);
+      }
     };
     document.addEventListener('visibilitychange', this.relockOnHide);
   },
 
   destroy() {
     document.removeEventListener('visibilitychange', this.relockOnHide);
-    this.stopCamera();
     this.revokePhotoUrls();
   },
 
@@ -3922,7 +3935,6 @@ Alpine.data('statsPage', () => ({
     this.comparing = null;
     this.compareMode = false;
     this.compareSel = [];
-    this.closeCamera();
     this.revokePhotoUrls();
   },
 
@@ -3970,6 +3982,7 @@ Alpine.data('statsPage', () => ({
   },
 
   pickPhoto(event) {
+    this.pickerHeld = false;
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
@@ -3979,61 +3992,6 @@ Alpine.data('statsPage', () => ({
     this.addingPhoto = true;
   },
 
-  // ---- the in-app camera -----------------------------------------------------
-  //
-  // Not a capture input on purpose: that hands off to the camera app, and
-  // Android reclaims the PWA's page while it is open — "Use photo" then has no
-  // page left to receive the file. This preview never leaves the page, and the
-  // shot never exists anywhere but here.
-
-  takingPhoto: false,
-  cameraFacing: 'environment',
-  cameraStream: null,
-  cameraError: '',
-
-  async startCamera(video) {
-    this.stopCamera();
-    this.cameraError = '';
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: this.cameraFacing, width: { ideal: 1920 }, height: { ideal: 1920 } },
-        audio: false,
-      });
-      this.cameraStream = stream;
-      video.srcObject = stream;
-      await video.play().catch(() => {});
-    } catch {
-      this.cameraError = 'Could not open the camera. The library button still works.';
-    }
-  },
-
-  stopCamera() {
-    for (const track of this.cameraStream?.getTracks() ?? []) track.stop();
-    this.cameraStream = null;
-  },
-
-  closeCamera() {
-    this.stopCamera();
-    this.takingPhoto = false;
-  },
-
-  async flipCamera(video) {
-    this.cameraFacing = this.cameraFacing === 'environment' ? 'user' : 'environment';
-    await this.startCamera(video);
-  },
-
-  async snapPhoto(video) {
-    if (!this.cameraStream) return;
-    try {
-      this.photoFile = await progress.captureFrame(video);
-    } catch {
-      this.cameraError = 'Could not capture the photo.';
-      return;
-    }
-    this.closeCamera();
-    this.photoDraft = { takenOn: food.toDateOnly(new Date()), pose: 'front', note: '' };
-    this.addingPhoto = true;
-  },
 
   async savePhoto() {
     if (this.photoBusy) return;
