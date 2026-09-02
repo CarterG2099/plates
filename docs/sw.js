@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v134';
+const CACHE_VERSION = 'plates-v135';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -53,6 +53,7 @@ const SHELL = [
   '/js/lookup.js',
   '/js/scanner.js',
   '/js/photo.js',
+  '/js/progress.js',
   '/js/workout.js',
   '/js/muscle-map.js',
   '/js/import-hevy.js',

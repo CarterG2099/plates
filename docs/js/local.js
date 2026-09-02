@@ -12,7 +12,7 @@
 const DB_NAME = 'plates';
 // Bump whenever TABLES changes: onupgradeneeded is the only place object stores
 // get created, and it only runs on a version increase.
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 /**
  * Synced tables.
@@ -33,12 +33,15 @@ export const TABLES = [
   'routine_exercises',
   'sessions',
   'session_sets',
+  'progress_photos',
 ];
 
 /** Pending local writes, drained by sync.push(). */
 const OUTBOX = '_outbox';
 /** Sync cursors and other small key/value state. */
 const META = '_meta';
+/** Cached image blobs (progress photos), keyed by their storage object path. */
+const BLOBS = '_blobs';
 
 let dbPromise = null;
 
@@ -63,6 +66,9 @@ export function open() {
       }
       if (!idb.objectStoreNames.contains(META)) {
         idb.createObjectStore(META, { keyPath: 'key' });
+      }
+      if (!idb.objectStoreNames.contains(BLOBS)) {
+        idb.createObjectStore(BLOBS, { keyPath: 'path' });
       }
     };
 
@@ -231,10 +237,29 @@ export async function remove(table, id) {
   return row;
 }
 
+// ---- blob cache --------------------------------------------------------------
+//
+// Progress photos, downloaded once and kept. Local-only: nothing here syncs —
+// the bucket is the source of truth and this is just so browsing doesn't
+// redownload and works offline.
+
+export async function getBlob(path) {
+  const row = await run(BLOBS, 'readonly', (s) => s.get(path));
+  return row?.blob ?? null;
+}
+
+export function putBlob(path, blob) {
+  return run(BLOBS, 'readwrite', (s) => s.put({ path, blob }));
+}
+
+export function deleteBlob(path) {
+  return run(BLOBS, 'readwrite', (s) => s.delete(path));
+}
+
 /** Drop everything. Used on sign-out so a shared device leaks nothing. */
 export async function wipe() {
   const idb = await open();
-  const stores = [...TABLES, OUTBOX, META];
+  const stores = [...TABLES, OUTBOX, META, BLOBS];
   await new Promise((resolve, reject) => {
     const tx = idb.transaction(stores, 'readwrite');
     for (const name of stores) tx.objectStore(name).clear();

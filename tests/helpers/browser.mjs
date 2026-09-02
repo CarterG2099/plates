@@ -65,6 +65,20 @@ export function installBrowser() {
         from: () => stubQuery(),
         schema: () => ({ from: () => stubQuery(), rpc: async () => ({ data: null }) }),
         functions: { invoke: async () => ({ data: null, error: null }) },
+        // Records uploads so progress.js tests can assert the object landed
+        // before the row was written.
+        storage: {
+          _uploads: [],
+          _removed: [],
+          from(bucket) {
+            const s = this;
+            return {
+              upload: async (path, blob) => { s._uploads.push({ bucket, path, blob }); return { data: { path }, error: null }; },
+              download: async () => ({ data: null, error: { message: 'not stubbed' } }),
+              remove: async (paths) => { s._removed.push(...paths); return { data: null, error: null }; },
+            };
+          },
+        },
         channel: () => ({ on() { return this; }, subscribe() { return this; } }),
       }),
     },

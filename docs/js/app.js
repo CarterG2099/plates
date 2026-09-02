@@ -16,6 +16,7 @@ import { lookupBarcode, draftsFromProducts } from './lookup.js';
 import * as recipes from './recipes.js';
 import * as scanner from './scanner.js';
 import * as photo from './photo.js';
+import * as progress from './progress.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
 import { exerciseArt, exerciseArtPair } from './muscle-map.js';
@@ -467,6 +468,7 @@ Alpine.store('sync', {
 const raw = {
   goals: [], foods: [], log: [], combos: [], templates: [], weightLog: [],
   exercises: [], routines: [], routineExercises: [], sessions: [], sessionSets: [],
+  progressPhotos: [],
   index: workout.buildIndex([], [], ''),
   prior: new Map(),
 };
@@ -518,16 +520,17 @@ Alpine.store('data', {
 
   /** What Today needs: small, and read first so the app paints immediately. */
   async refreshCore() {
-    const [goals, foods, log, combos, templates, weightLog] = await Promise.all([
+    const [goals, foods, log, combos, templates, weightLog, progressPhotos] = await Promise.all([
       local.all('goals'),
       local.all('foods'),
       local.all('food_log'),
       local.all('meal_combos'),
       local.all('day_templates'),
       local.all('weight_log'),
+      local.all('progress_photos'),
     ]);
 
-    Object.assign(raw, { goals, foods, log, combos, templates, weightLog });
+    Object.assign(raw, { goals, foods, log, combos, templates, weightLog, progressPhotos });
     this.ready = true;
     this.version++;
   },
@@ -3794,6 +3797,249 @@ Alpine.data('statsPage', () => ({
     this.editing = false;
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash(`Started ${this.draft.phase}`);
+  },
+
+  // ---- progress photos -------------------------------------------------------
+  //
+  // Locked by default, every time. The stats page lives in a template x-if, so
+  // switching tabs destroys this component and the section arrives locked on
+  // the way back — no relock bookkeeping for navigation. Hiding the app (home
+  // button, app switcher) relocks via visibilitychange below.
+  //
+  // The PIN is a per-account curtain: the hash lives on plates.members so the
+  // same PIN unlocks on any device, and after unlock the photos shown are
+  // whatever RLS lets this account read — both of ours, under the same sharing
+  // grants the weight log uses.
+
+  photosLocked: true,
+  pinEntry: '',
+  pinFirst: '',        // holds the first entry while confirming a new PIN
+  pinStage: 'enter',   // enter | set | confirm
+  pinError: '',
+  poseFilter: 'all',
+  poses: progress.POSES,
+
+  addingPhoto: false,
+  photoFile: null,
+  photoDraft: { takenOn: '', pose: 'front', note: '' },
+  photoBusy: false,
+
+  viewingPhoto: null,
+  compareMode: false,
+  compareSel: [],
+  comparing: null,
+
+  photoUrls: {},
+  photoUrlQueue: new Set(),
+
+  init() {
+    this.relockOnHide = () => {
+      if (document.visibilityState === 'hidden') this.relockPhotos();
+    };
+    document.addEventListener('visibilitychange', this.relockOnHide);
+  },
+
+  destroy() {
+    document.removeEventListener('visibilitychange', this.relockOnHide);
+    this.revokePhotoUrls();
+  },
+
+  get myPinHash() {
+    const email = this.email.toLowerCase();
+    return Alpine.store('auth').members
+      .find((m) => m.email?.toLowerCase() === email)?.photo_pin_hash ?? null;
+  },
+
+  get photos() { return progress.photosFor(this.data.progressPhotos, this.poseFilter); },
+
+  /** The photo pad opens on "set a PIN" for the first visit ever, "enter" after. */
+  get pinPrompt() {
+    if (this.pinStage === 'confirm') return 'Enter it again to confirm';
+    if (this.pinStage === 'set' || !this.myPinHash) return 'Set a 4-digit PIN';
+    return 'Enter your PIN';
+  },
+
+  async submitPin() {
+    const pin = this.pinEntry;
+    this.pinEntry = '';
+    if (!/^\d{4}$/.test(pin)) { this.pinError = 'Four digits.'; return; }
+    this.pinError = '';
+
+    if (!this.myPinHash || this.pinStage === 'set') {
+      this.pinFirst = pin;
+      this.pinStage = 'confirm';
+      return;
+    }
+
+    if (this.pinStage === 'confirm') {
+      if (pin !== this.pinFirst) {
+        this.pinStage = this.myPinHash ? 'enter' : 'set';
+        this.pinError = 'Those didn’t match — start over.';
+        return;
+      }
+      await this.savePin(pin);
+      return;
+    }
+
+    if (await progress.hashPin(this.email, pin) === this.myPinHash) {
+      this.photosLocked = false;
+    } else {
+      this.pinError = 'Wrong PIN.';
+    }
+  },
+
+  async savePin(pin) {
+    try {
+      const hash = await progress.hashPin(this.email, pin);
+      const { error } = await supabase.schema('plates').from('members')
+        .update({ photo_pin_hash: hash }).eq('email', this.email);
+      if (error) throw error;
+
+      // Patch the in-memory copy and its localStorage cache so the lock works
+      // offline from now on without waiting for the next membership check.
+      const auth = Alpine.store('auth');
+      const me = auth.members.find((m) => m.email?.toLowerCase() === this.email.toLowerCase());
+      if (me) me.photo_pin_hash = hash;
+      writeMembership({ email: auth.email, members: auth.members, isAdmin: auth.isAdmin });
+
+      this.pinStage = 'enter';
+      this.photosLocked = false;
+    } catch (error) {
+      this.pinStage = this.myPinHash ? 'enter' : 'set';
+      this.pinError = describeError(error) || 'Could not save the PIN — are you online?';
+    }
+  },
+
+  /**
+   * Anyone holding the unlocked phone could also do this, which is the honest
+   * shape of a curtain: it resets the PIN, it never shows the photos without one.
+   */
+  resetPin() {
+    if (!confirm('Set a new PIN? The photos stay locked until you do.')) return;
+    this.pinStage = 'set';
+    this.pinFirst = '';
+    this.pinError = '';
+  },
+
+  relockPhotos() {
+    this.photosLocked = true;
+    this.pinEntry = '';
+    this.pinFirst = '';
+    this.pinStage = 'enter';
+    this.pinError = '';
+    this.viewingPhoto = null;
+    this.comparing = null;
+    this.compareMode = false;
+    this.compareSel = [];
+    this.revokePhotoUrls();
+  },
+
+  revokePhotoUrls() {
+    for (const url of Object.values(this.photoUrls)) URL.revokeObjectURL(url);
+    this.photoUrls = {};
+    this.photoUrlQueue.clear();
+  },
+
+  /**
+   * Object URL for a photo, loading it on first ask. Returns '' until the blob
+   * is here; the grid cell shows its date placeholder in the meantime.
+   */
+  photoUrl(p) {
+    const known = this.photoUrls[p.id];
+    if (known) return known;
+
+    if (!this.photoUrlQueue.has(p.id)) {
+      this.photoUrlQueue.add(p.id);
+      progress.photoBlob(p.object_path)
+        .then((blob) => {
+          if (this.photosLocked) return; // relocked while downloading
+          this.photoUrls = { ...this.photoUrls, [p.id]: URL.createObjectURL(blob) };
+        })
+        .catch(() => this.photoUrlQueue.delete(p.id));
+    }
+    return '';
+  },
+
+  ownedBy(p) {
+    if (p.owner_email === this.email) return '';
+    const other = Alpine.store('auth').members
+      .find((m) => m.email?.toLowerCase() === p.owner_email?.toLowerCase());
+    return other?.display_name || p.owner_email;
+  },
+
+  photoWeight(p) {
+    return progress.nearestWeight(this.data.weightLog, p.owner_email, p.taken_on);
+  },
+
+  photoDate(on, opts) {
+    return new Date(`${on}T12:00:00`).toLocaleDateString(undefined,
+      opts?.long ? { month: 'long', day: 'numeric', year: 'numeric' }
+                 : { month: 'short', day: 'numeric' });
+  },
+
+  pickPhoto(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    this.photoFile = file;
+    this.photoDraft = { takenOn: food.toDateOnly(new Date()), pose: 'front', note: '' };
+    this.addingPhoto = true;
+  },
+
+  async savePhoto() {
+    if (this.photoBusy) return;
+    this.photoBusy = true;
+    try {
+      await progress.addPhoto({
+        file: this.photoFile,
+        takenOn: this.photoDraft.takenOn,
+        pose: this.photoDraft.pose,
+        note: this.photoDraft.note.trim(),
+        ownerEmail: this.email,
+      });
+      this.addingPhoto = false;
+      this.photoFile = null;
+      await Alpine.store('data').refresh();
+      Alpine.store('ui').flash('Photo saved');
+    } catch (error) {
+      Alpine.store('ui').flash(describeError(error) || 'Could not save the photo');
+    } finally {
+      this.photoBusy = false;
+    }
+  },
+
+  async deletePhoto(p) {
+    if (!confirm('Delete this photo? This cannot be undone.')) return;
+    await progress.removePhoto(p);
+    this.viewingPhoto = null;
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash('Photo deleted');
+  },
+
+  /** In compare mode a tap selects; outside it, a tap opens the viewer. */
+  tapPhoto(p) {
+    if (!this.compareMode) { this.viewingPhoto = p; return; }
+
+    if (this.compareSel.includes(p.id)) {
+      this.compareSel = this.compareSel.filter((id) => id !== p.id);
+      return;
+    }
+    this.compareSel = [...this.compareSel, p.id].slice(-2);
+    if (this.compareSel.length === 2) {
+      // Older on the left, the way before/after reads.
+      const pair = this.compareSel
+        .map((id) => this.photos.find((x) => x.id === id))
+        .filter(Boolean)
+        .sort((a, b) => (a.taken_on < b.taken_on ? -1 : 1));
+      this.comparing = pair;
+    }
+  },
+
+  closeCompare() {
+    this.comparing = null;
+    this.compareSel = [];
+    this.compareMode = false;
   },
 }));
 

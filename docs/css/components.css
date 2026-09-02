@@ -559,3 +559,105 @@
   margin: 0;
   word-break: break-all;
 }
+
+/* ---- progress photos --------------------------------------------------------
+   The locked state shows a lock and a PIN field — deliberately no thumbnails,
+   no blur-that-hints. A curtain that previews its contents isn't one. */
+
+.photo-lock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+  color: var(--color-text-muted);
+}
+.photo-lock .icon { width: 28px; height: 28px; }
+.photo-lock-prompt { margin: 0; font-size: var(--text-sm); }
+.photo-lock-reset {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-decoration: underline;
+}
+
+.pin-row { display: flex; gap: var(--space-2); }
+.pin-row input {
+  width: 7.5ch;
+  text-align: center;
+  font-size: var(--text-lg);
+  letter-spacing: .35ch;
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  margin-top: var(--space-3);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.photo-cell {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: 0;
+  background: var(--color-surface-raised);
+  cursor: pointer;
+}
+.photo-cell img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.photo-cell.is-selected { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.photo-cell-date {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 2px 4px;
+  font-size: var(--text-xs);
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .55));
+  text-align: left;
+}
+.photo-cell-owner {
+  position: absolute;
+  top: 3px; right: 3px;
+  padding: 1px 6px;
+  font-size: var(--text-xs);
+  color: #fff;
+  background: rgba(0, 0, 0, .5);
+  border-radius: var(--radius-pill);
+}
+
+.photo-full {
+  width: 100%;
+  max-height: 62vh;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+.photo-caption { text-transform: capitalize; }
+
+.compare-panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.compare-pane { margin: 0; }
+.compare-pane img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+.compare-pane figcaption {
+  display: flex;
+  justify-content: space-between;
+  padding-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.compare-pane figcaption b { color: var(--color-text); }

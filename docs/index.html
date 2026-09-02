@@ -2377,6 +2377,165 @@
           </div>
         </template>
 
+        <!-- Progress photos ---------------------------------------------------
+             Locked by default every time the page opens; the PIN is a privacy
+             curtain for whoever is holding the phone, not the security boundary
+             (that is RLS + the account login). -->
+        <div class="card">
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Progress photos</div>
+              <div class="stat-sub" x-show="!photosLocked"
+                   x-text="`${photos.length} photo${photos.length === 1 ? '' : 's'}`"></div>
+            </div>
+            <button class="btn" x-show="!photosLocked" @click="relockPhotos()">Lock</button>
+          </div>
+
+          <!-- Locked: the PIN pad and nothing else. No thumbnails, no counts. -->
+          <template x-if="photosLocked">
+            <div class="photo-lock">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/>
+                <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>
+              </svg>
+              <p class="photo-lock-prompt" x-text="pinPrompt"></p>
+              <form class="pin-row" @submit.prevent="submitPin()">
+                <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+                       x-model="pinEntry" placeholder="••••" autocomplete="off" aria-label="PIN">
+                <button class="btn btn-primary" type="submit" :disabled="pinEntry.length < 4"
+                        x-text="pinStage === 'enter' && myPinHash ? 'Unlock' : 'Next'"></button>
+              </form>
+              <p class="notice notice-error" x-show="pinError" x-text="pinError"></p>
+              <button class="tap photo-lock-reset" x-show="myPinHash && pinStage === 'enter'"
+                      @click="resetPin()">Forgot? Set a new PIN</button>
+            </div>
+          </template>
+
+          <template x-if="!photosLocked">
+            <div>
+              <div class="chips">
+                <button class="chip" :class="poseFilter === 'all' && 'is-active'"
+                        @click="poseFilter = 'all'">All</button>
+                <template x-for="p in poses" :key="p">
+                  <button class="chip" :class="poseFilter === p && 'is-active'"
+                          @click="poseFilter = p" x-text="p"></button>
+                </template>
+                <button class="chip" :class="compareMode && 'is-active'"
+                        @click="compareMode = !compareMode; compareSel = []">Compare</button>
+              </div>
+
+              <p class="empty" x-show="compareMode && compareSel.length < 2"
+                 style="padding:var(--space-2) 0">
+                Pick two photos to compare.
+              </p>
+
+              <div class="photo-grid" x-show="photos.length">
+                <template x-for="p in photos" :key="p.id">
+                  <button class="photo-cell" :class="compareSel.includes(p.id) && 'is-selected'"
+                          @click="tapPhoto(p)">
+                    <img x-show="photoUrl(p)" :src="photoUrl(p) || null" alt="" loading="lazy">
+                    <span class="photo-cell-date" x-text="photoDate(p.taken_on)"></span>
+                    <span class="photo-cell-owner" x-show="ownedBy(p)" x-text="ownedBy(p)"></span>
+                  </button>
+                </template>
+              </div>
+
+              <p class="empty" x-show="!photos.length" style="padding:var(--space-3) 0">
+                No photos yet. Same spot, same light, same pose — future you will
+                want the comparison to be fair.
+              </p>
+
+              <!-- A label wrapping the input is the whole "take a photo" flow:
+                   on a phone this opens straight into camera or library. -->
+              <label class="btn btn-primary btn-block" style="margin-top:var(--space-3)">
+                Add photo
+                <input type="file" accept="image/*" hidden @change="pickPhoto($event)">
+              </label>
+            </div>
+          </template>
+        </div>
+
+        <!-- Save a progress photo --------------------------------------------- -->
+        <template x-if="addingPhoto">
+          <div class="sheet-backdrop" @click.self="addingPhoto = false">
+            <div class="sheet" x-init="$swipe($el, () => { addingPhoto = false })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2>Save photo</h2>
+                <button class="tap" @click="addingPhoto = false" aria-label="Close">×</button>
+              </div>
+              <div class="field">
+                <label for="pp-date">Taken on</label>
+                <input id="pp-date" type="date" x-model="photoDraft.takenOn">
+              </div>
+              <div class="field">
+                <label>Pose</label>
+                <div class="chips">
+                  <template x-for="p in poses" :key="p">
+                    <button class="chip" :class="photoDraft.pose === p && 'is-active'"
+                            @click="photoDraft.pose = p" x-text="p"></button>
+                  </template>
+                </div>
+              </div>
+              <div class="field">
+                <label for="pp-note">Note</label>
+                <input id="pp-note" type="text" x-model="photoDraft.note"
+                       placeholder="end of cut, week 6…" autocomplete="off">
+              </div>
+              <button class="btn btn-primary btn-block" :disabled="photoBusy"
+                      @click="savePhoto()" x-text="photoBusy ? 'Saving…' : 'Save'"></button>
+            </div>
+          </div>
+        </template>
+
+        <!-- View one photo ----------------------------------------------------- -->
+        <template x-if="viewingPhoto && !photosLocked">
+          <div class="sheet-backdrop" @click.self="viewingPhoto = null">
+            <div class="sheet" x-init="$swipe($el, () => { viewingPhoto = null })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2 x-text="photoDate(viewingPhoto.taken_on, { long: true })"></h2>
+                <button class="tap" @click="viewingPhoto = null" aria-label="Close">×</button>
+              </div>
+              <img class="photo-full" :src="photoUrl(viewingPhoto) || null" alt="Progress photo">
+              <p class="stat-sub photo-caption">
+                <span x-text="viewingPhoto.pose || ''"></span>
+                <span x-show="photoWeight(viewingPhoto)"
+                      x-text="photoWeight(viewingPhoto) ? ` · ${photoWeight(viewingPhoto)} lb` : ''"></span>
+                <span x-show="ownedBy(viewingPhoto)" x-text="` · ${ownedBy(viewingPhoto)}`"></span>
+              </p>
+              <p class="stat-sub" x-show="viewingPhoto.note" x-text="viewingPhoto.note"></p>
+              <button class="btn btn-danger btn-block" x-show="viewingPhoto.owner_email === email"
+                      @click="deletePhoto(viewingPhoto)">Delete photo</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Compare two -------------------------------------------------------- -->
+        <template x-if="comparing && !photosLocked">
+          <div class="sheet-backdrop" @click.self="closeCompare()">
+            <div class="sheet" x-init="$swipe($el, () => { closeCompare() })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2>Compare</h2>
+                <button class="tap" @click="closeCompare()" aria-label="Close">×</button>
+              </div>
+              <div class="compare-panes">
+                <template x-for="p in comparing" :key="p.id">
+                  <figure class="compare-pane">
+                    <img :src="photoUrl(p) || null" alt="Progress photo">
+                    <figcaption>
+                      <b x-text="photoDate(p.taken_on)"></b>
+                      <span x-text="photoWeight(p) ? `${photoWeight(p)} lb` : '—'"></span>
+                    </figcaption>
+                  </figure>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <!-- Log weight ------------------------------------------------------- -->
         <template x-if="weighing">
           <div class="sheet-backdrop" @click.self="weighing = false">
