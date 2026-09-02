@@ -509,3 +509,55 @@ alter default privileges in schema plates
   grant select, insert, update, delete on tables to service_role;
 alter default privileges in schema plates
   grant execute on functions to service_role;
+
+-- ---- progress photos (added 2026-09-02) ---------------------------------------
+-- Metadata rows here, the images in the private plates-progress bucket. Same
+-- sharing model as weight_log: members read each other via can_read, only the
+-- owner writes. The PIN gate in the app is a privacy curtain on the phone
+-- screen; this RLS is the actual boundary.
+
+create table plates.progress_photos (
+  id uuid primary key,
+  owner_email text not null,
+  taken_on date not null,
+  pose text,
+  note text,
+  object_path text not null,
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create index progress_photos_updated_at on plates.progress_photos (updated_at);
+
+alter table plates.progress_photos enable row level security;
+
+create policy progress_photos_read on plates.progress_photos
+  for select using (plates.can_read(owner_email));
+create policy progress_photos_write on plates.progress_photos
+  for insert with check (plates.is_member() and plates.is_owner(owner_email));
+create policy progress_photos_update on plates.progress_photos
+  for update using (plates.is_owner(owner_email)) with check (plates.is_owner(owner_email));
+create policy progress_photos_delete on plates.progress_photos
+  for delete using (plates.is_owner(owner_email));
+
+-- The unlock PIN, hashed client-side (sha256 of email:pin). Four digits is
+-- brute-forceable by anyone who can read the hash — it is deliberately a
+-- curtain, not cryptography.
+alter table plates.members add column photo_pin_hash text;
+
+-- Private bucket. 5MB cap is generous: the app downscales to ~1600px JPEG
+-- (~300KB) before upload.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('plates-progress', 'plates-progress', false, 5242880,
+        array['image/jpeg','image/webp','image/png'])
+on conflict (id) do nothing;
+
+create policy plates_progress_read on storage.objects
+  for select to authenticated
+  using (bucket_id = 'plates-progress' and plates.is_member());
+create policy plates_progress_insert on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'plates-progress' and plates.is_member());
+create policy plates_progress_delete on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'plates-progress' and plates.is_member());
