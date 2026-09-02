@@ -1549,3 +1549,44 @@ test('equipment breaks ties between equals', () => {
   const ranked = workout.rankSimilar(library, outgoing).map((e) => e.name);
   assert.equal(ranked[0], 'Incline Bench Press (Barbell)');
 });
+
+// ---- plates before the set is checked ---------------------------------------
+
+test('effectiveWeight uses the typed value when there is one', () => {
+  assert.deepEqual(workout.effectiveWeight({ weight_lb: 185 }, { weight_lb: 155 }),
+    { lb: 185, ghost: false });
+});
+
+test('an empty set borrows the placeholder, marked as tentative', () => {
+  // This is the fix: the plate calculator must answer before the set is
+  // checked, which is the only time anyone needs it.
+  assert.deepEqual(workout.effectiveWeight({ weight_lb: null }, { weight_lb: 155 }),
+    { lb: 155, ghost: true });
+});
+
+test('no value anywhere means no plates, not zero plates', () => {
+  assert.equal(workout.effectiveWeight({ weight_lb: null }, null), null);
+  assert.equal(workout.effectiveWeight({ weight_lb: '' }, { weight_lb: null }), null);
+});
+
+test('a typed zero is a value, not a gap', () => {
+  assert.deepEqual(workout.effectiveWeight({ weight_lb: 0 }, { weight_lb: 155 }),
+    { lb: 0, ghost: false });
+});
+
+// ---- exercise notes ----------------------------------------------------------
+
+test('a note on a shared exercise does not claim the row', async () => {
+  const shared = { id: 'ex-shared', owner_email: null, name: 'Bench Press (Barbell)' };
+  const saved = await workout.setExerciseNotes(shared, 'seat at 4, thumbless grip', ME);
+
+  assert.equal(saved.notes, 'seat at 4, thumbless grip');
+  assert.equal(saved.owner_email, null,
+    'owner_email must stay null or the other member loses the row');
+});
+
+test('a blank note clears rather than storing whitespace', async () => {
+  const shared = { id: 'ex-blank', owner_email: null, name: 'Squat (Barbell)', notes: 'old' };
+  const saved = await workout.setExerciseNotes(shared, '   ', ME);
+  assert.equal(saved.notes, null);
+});

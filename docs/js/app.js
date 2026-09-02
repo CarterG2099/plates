@@ -2934,10 +2934,20 @@ Alpine.data('trainPage', () => ({
 
   isRecord(set, group) { return workout.isRecord(set, this.bestBefore(group)); },
 
-  /** What to load per side. Null for anything that isn't a barbell. */
-  loadout(group, set) {
+  /**
+   * What to load per side. Null for anything that isn't a barbell.
+   *
+   * Works off the effective weight — typed value or the row's placeholder — so
+   * the plates show BEFORE the set is checked, which is the only time anyone is
+   * standing at the bar wondering what to put on it. Waiting for completion was
+   * answering the question after it stopped being one.
+   */
+  loadout(group, set, i) {
     if (!workout.usesBarbell(this.exerciseById(group.exerciseId), group.name)) return null;
-    return workout.plateMath(set.weight_lb);
+    const eff = workout.effectiveWeight(this.currentSet(set), this.placeholderFor(group, i));
+    if (!eff) return null;
+    const load = workout.plateMath(eff.lb);
+    return load ? { ...load, ghost: eff.ghost } : null;
   },
 
   plateColour(size) { return workout.PLATE_COLOURS[size] ?? 'var(--color-text-muted)'; },
@@ -2947,8 +2957,8 @@ Alpine.data('trainPage', () => ({
    * "45x4". Four separate chips did not fit beside the weight box on a phone —
    * they wrapped into a column and squeezed the input until 225 showed as "22".
    */
-  plateGroups(group, set) {
-    const load = this.loadout(group, this.currentSet(set));
+  plateGroups(group, set, i) {
+    const load = this.loadout(group, set, i);
     if (!load) return [];
 
     const groups = [];
@@ -2962,10 +2972,14 @@ Alpine.data('trainPage', () => ({
 
   /** The load in words. The row shows it as colour and number, which a screen
    *  reader cannot read out, and the "Per side" caption went with the stack. */
-  loadLabel(group, set) {
-    const load = this.loadout(group, this.currentSet(set));
-    return load ? `Per side: ${load.plates.join(' + ')} lb` : null;
+  loadLabel(group, set, i) {
+    const load = this.loadout(group, set, i);
+    if (!load) return null;
+    return `Per side: ${load.plates.join(' + ')} lb${load.ghost ? ', if you keep the suggested weight' : ''}`;
   },
+
+  /** Tentative until the weight is real — the chips dim like the placeholder. */
+  loadoutGhost(group, set, i) { return this.loadout(group, set, i)?.ghost ?? false; },
 
   // ---- rest timer ----------------------------------------------------------
 
@@ -3086,6 +3100,23 @@ Alpine.data('trainPage', () => ({
   },
 
   closeExercise() { this.detail = null; },
+
+  /**
+   * The note lives on the exercise row, which is what makes it carry from
+   * workout to workout — and between the two of us, since the library rows are
+   * shared. Saved on change, like every other field in the app.
+   */
+  async saveExerciseNote(text) {
+    const saved = await workout.setExerciseNotes(this.detail.exercise, text, this.email);
+    this.detail.exercise = saved;
+    await Alpine.store('data').refreshTraining();
+    Alpine.store('ui').flash(saved.notes ? 'Noted' : 'Note cleared');
+  },
+
+  /** The note for a workout card's exercise, shown where you need the cue. */
+  exerciseNote(group) {
+    return this.exerciseById(group.exerciseId)?.notes ?? null;
+  },
 
   get detailHistory() {
     if (!this.detail) return [];

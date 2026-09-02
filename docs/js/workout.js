@@ -932,6 +932,41 @@ export function rankSimilar(library, reference) {
     .map((x) => x.e);
 }
 
+/**
+ * The weight a set is effectively at, before it is committed.
+ *
+ * The placeholder convention stores nothing until a set is checked, which was
+ * exactly why the plate calculator only appeared after completion — the one
+ * moment it is no longer needed. What you are about to lift is the typed value
+ * when there is one, else the placeholder the row is showing; `ghost` says
+ * which, so the chips can render tentatively for a weight not yet adopted.
+ */
+export function effectiveWeight(set, placeholder) {
+  if (set?.weight_lb != null && set.weight_lb !== '') {
+    return { lb: Number(set.weight_lb), ghost: false };
+  }
+  const lb = placeholder?.weight_lb;
+  if (lb == null || lb === '') return null;
+  return { lb: Number(lb), ghost: true };
+}
+
+/**
+ * Write a personal note onto an exercise.
+ *
+ * The full row is spread so owner_email survives as-is. That is load-bearing:
+ * the library rows are owner_email null — shared — and local.save only defaults
+ * the owner when the field is absent, so spreading keeps the null and the row
+ * stays everyone's. Saving a note must not quietly claim the exercise.
+ */
+export async function setExerciseNotes(exercise, notes, ownerEmail) {
+  const saved = await local.save('exercises', {
+    ...exercise,
+    notes: String(notes ?? '').trim() || null,
+  }, ownerEmail);
+  sync.nudge();
+  return saved;
+}
+
 export async function createExercise(fields, ownerEmail) {
   const exercise = await local.save('exercises', fields, ownerEmail);
   sync.nudge();

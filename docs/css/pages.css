@@ -654,6 +654,30 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 .field .chips { margin-top: var(--space-1); }
 .field input, .field select, .field textarea { min-width: 0; width: 100%; }
 
+/* The notes box shares the input's clothes; resize stays off because a sheet
+   that scrolls plus a corner drag-handle fight over the same gesture. */
+.field textarea {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  outline: none;
+  resize: none;
+  font-family: inherit;
+}
+.field textarea:focus { border-color: var(--color-primary); }
+
+/* An exercise's note on its workout card: a cue, quieter than the name, louder
+   than the previous-session line under it. */
+.ex-note {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .field label {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -1173,6 +1197,11 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 /* ---- plate maths ----------------------------------------------------------- */
 /* Every lifter does this arithmetic between sets and occasionally gets it wrong. */
+
+/* Plates for a weight that is still a suggestion. Dimmed like the placeholder
+   digits beside them, and back to full ink the moment the weight is typed or
+   the set checked. */
+.loadout.is-ghost b { opacity: .5; }
 
 .loadout {
   display: flex;

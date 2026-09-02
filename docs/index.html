@@ -1337,6 +1337,10 @@
                     <button style="min-width:0; text-align:left"
                             @click="openExercise(group.exerciseId, group.name)">
                       <b x-text="group.name"></b>
+                      <!-- The cue, where it is needed: at the bar. Tapping the
+                           name opens the sheet the note is edited on. -->
+                      <div class="ex-note" x-show="exerciseNote(group)" x-cloak
+                           x-text="exerciseNote(group)"></div>
                       <div class="prev" x-show="previous(group)">
                         Last: <span x-text="previous(group)"></span> · tap for history
                       </div>
@@ -1407,8 +1411,12 @@
                         <!-- What to hang on the bar for THIS set, on its own row.
                              Stacked underneath, three of these read as a separate
                              list and you had to count down it to find your set. -->
-                        <div class="loadout" :aria-label="loadLabel(group, set)">
-                          <template x-for="(p, i) in plateGroups(group, set)" :key="i">
+                        <!-- pi, not i: the outer loop's set index is `i`, and the
+                             loadout call needs it — shadowing it here handed the
+                             plate index to placeholderFor. -->
+                        <div class="loadout" :aria-label="loadLabel(group, set, i)"
+                             :class="loadoutGhost(group, set, i) && 'is-ghost'">
+                          <template x-for="(p, pi) in plateGroups(group, set, i)" :key="pi">
                             <b :style="`background: ${plateColour(p.size)}`"
                                x-text="p.count > 1 ? `${p.size}×${p.count}` : p.size"></b>
                           </template>
@@ -1585,6 +1593,16 @@
                     No instructions for this one yet.
                   </p>
                 </div>
+              </div>
+
+              <!-- Only for a real library row: a name-only ghost from the Hevy
+                   import has no exercise to hang the note on, and saving would
+                   mint a duplicate row that nothing links back to. -->
+              <div class="field" x-show="detail.exercise.id">
+                <label for="ex-note">Notes</label>
+                <textarea id="ex-note" rows="2" placeholder="Seat height, grip, cues…"
+                          :value="detail.exercise.notes ?? ''"
+                          @change="saveExerciseNote($event.target.value)"></textarea>
               </div>
 
               <div class="chips">
