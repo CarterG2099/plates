@@ -2446,12 +2446,21 @@
                 want the comparison to be fair.
               </p>
 
-              <!-- A label wrapping the input is the whole "take a photo" flow:
-                   on a phone this opens straight into camera or library. -->
-              <label class="btn btn-primary btn-block" style="margin-top:var(--space-3)">
-                Add photo
-                <input type="file" accept="image/*" hidden @change="pickPhoto($event)">
-              </label>
+              <!-- Two labels, two inputs. `capture` opens the camera itself and
+                   the shot exists only as the file handed to the page — it never
+                   lands in the camera roll, which for this section is the point.
+                   The plain input is the library picker for photos that already
+                   exist. -->
+              <div class="photo-add-row">
+                <label class="btn btn-primary">
+                  Take photo
+                  <input type="file" accept="image/*" capture="environment" hidden @change="pickPhoto($event)">
+                </label>
+                <label class="btn">
+                  From library
+                  <input type="file" accept="image/*" hidden @change="pickPhoto($event)">
+                </label>
+              </div>
             </div>
           </template>
         </div>
