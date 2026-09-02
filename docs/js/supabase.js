@@ -48,7 +48,9 @@ export async function getSession() {
  * not being exposed, and that should say so instead of looking like a rejection.
  */
 export async function loadMembership() {
-  const { data, error } = await db('members').select('email, display_name, weight_unit, is_admin');
+  // photo_pin_hash rides along or the progress-photo lock asks for a brand-new
+  // PIN every session — the hash saved fine, it just never came back down.
+  const { data, error } = await db('members').select('email, display_name, weight_unit, is_admin, photo_pin_hash');
 
   if (error) {
     return { isMember: false, members: [], error };

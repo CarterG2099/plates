@@ -144,6 +144,27 @@ export async function removePhoto(photo) {
   return row;
 }
 
+/**
+ * One frame off a live <video>, as a JPEG blob.
+ *
+ * The in-app camera exists because a `capture` file input hands off to the
+ * camera app, and Android reclaims the PWA's page while it is open — tap "OK"
+ * and there is no page left to receive the photo. A getUserMedia preview never
+ * leaves the page, so the shot cannot be lost to a reload — and the photo
+ * genuinely never exists outside the app, which is the section's whole promise.
+ */
+export function captureFrame(video) {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not capture the photo.'))),
+      'image/jpeg', QUALITY);
+  });
+}
+
 async function downscale(file) {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));

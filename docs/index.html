@@ -2446,16 +2446,13 @@
                 want the comparison to be fair.
               </p>
 
-              <!-- Two labels, two inputs. `capture` opens the camera itself and
-                   the shot exists only as the file handed to the page — it never
-                   lands in the camera roll, which for this section is the point.
-                   The plain input is the library picker for photos that already
-                   exist. -->
+              <!-- The camera is in-app (getUserMedia), not a capture input: the
+                   input hands off to the camera app and Android reclaims the
+                   PWA's page while it's open, so "Use photo" had nothing left to
+                   deliver to. The library picker stays an input — no app switch
+                   happens there. -->
               <div class="photo-add-row">
-                <label class="btn btn-primary">
-                  Take photo
-                  <input type="file" accept="image/*" capture="environment" hidden @change="pickPhoto($event)">
-                </label>
+                <button class="btn btn-primary" @click="takingPhoto = true">Take photo</button>
                 <label class="btn">
                   From library
                   <input type="file" accept="image/*" hidden @change="pickPhoto($event)">
@@ -2464,6 +2461,29 @@
             </div>
           </template>
         </div>
+
+        <!-- The in-app camera --------------------------------------------------- -->
+        <template x-if="takingPhoto && !photosLocked">
+          <div class="sheet-backdrop" @click.self="closeCamera()">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2>Take photo</h2>
+                <button class="tap" @click="closeCamera()" aria-label="Close">×</button>
+              </div>
+              <video class="camera-view" :class="cameraFacing === 'user' && 'is-mirrored'"
+                     x-ref="camVideo" x-init="startCamera($refs.camVideo)"
+                     autoplay playsinline muted></video>
+              <p class="notice notice-error" x-show="cameraError" x-text="cameraError"></p>
+              <div class="camera-controls">
+                <button class="btn" @click="flipCamera($refs.camVideo)">Flip</button>
+                <button class="shutter" :disabled="!cameraStream" aria-label="Take the photo"
+                        @click="snapPhoto($refs.camVideo)"></button>
+                <button class="btn" @click="closeCamera()">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </template>
 
         <!-- Save a progress photo --------------------------------------------- -->
         <template x-if="addingPhoto">

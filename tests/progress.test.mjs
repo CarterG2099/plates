@@ -71,6 +71,17 @@ test('a non-4-digit entry never advances the flow', async () => {
   assert.ok(step.error);
 });
 
+// The regression: loadMembership selects named columns, and photo_pin_hash was
+// not among them — the hash saved fine and never came back down, so every
+// session asked for a brand-new PIN.
+test('membership loads the PIN hash back down', async () => {
+  const fs = await import('node:fs');
+  const source = fs.readFileSync('docs/js/supabase.js', 'utf8');
+  const select = source.match(/db\('members'\)\.select\('([^']+)'\)/)?.[1] ?? '';
+  assert.ok(select.includes('photo_pin_hash'),
+    `members select must carry photo_pin_hash, got: ${select}`);
+});
+
 // ---- the rows ------------------------------------------------------------------
 
 test('photosFor sorts newest day first and drops tombstones', () => {
