@@ -33,6 +33,34 @@ export async function hashPin(email, pin) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * One submit of the PIN pad, as a pure step so the flow is testable.
+ *
+ * Returns the next state: `{ stage, first?, error?, unlocked?, save? }` —
+ * `save` carries a confirmed new PIN the caller must persist, `unlocked` means
+ * the entered PIN matched the stored hash.
+ *
+ * Confirm is checked before the no-stored-hash case: while a new PIN is being
+ * set there is still no stored hash, so a hash-first check loops back into
+ * "set" forever and the flow can never get past "enter it again to confirm".
+ * That was shipped, once.
+ */
+export async function pinStep({ pin, stage, storedHash, first, email }) {
+  if (!/^\d{4}$/.test(pin)) return { stage, error: 'Four digits.' };
+
+  if (stage === 'confirm') {
+    if (pin !== first) {
+      return { stage: storedHash ? 'enter' : 'set', error: 'Those didn’t match — start over.' };
+    }
+    return { stage: 'enter', save: pin };
+  }
+
+  if (!storedHash || stage === 'set') return { stage: 'confirm', first: pin };
+
+  if (await hashPin(email, pin) === storedHash) return { stage: 'enter', unlocked: true };
+  return { stage, error: 'Wrong PIN.' };
+}
+
 /** Live rows, newest day first. */
 export function photosFor(rows, pose = 'all') {
   return (rows ?? [])

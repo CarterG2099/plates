@@ -3862,30 +3862,20 @@ Alpine.data('statsPage', () => ({
   async submitPin() {
     const pin = this.pinEntry;
     this.pinEntry = '';
-    if (!/^\d{4}$/.test(pin)) { this.pinError = 'Four digits.'; return; }
-    this.pinError = '';
 
-    if (!this.myPinHash || this.pinStage === 'set') {
-      this.pinFirst = pin;
-      this.pinStage = 'confirm';
-      return;
-    }
+    const step = await progress.pinStep({
+      pin,
+      stage: this.pinStage,
+      storedHash: this.myPinHash,
+      first: this.pinFirst,
+      email: this.email,
+    });
 
-    if (this.pinStage === 'confirm') {
-      if (pin !== this.pinFirst) {
-        this.pinStage = this.myPinHash ? 'enter' : 'set';
-        this.pinError = 'Those didn’t match — start over.';
-        return;
-      }
-      await this.savePin(pin);
-      return;
-    }
-
-    if (await progress.hashPin(this.email, pin) === this.myPinHash) {
-      this.photosLocked = false;
-    } else {
-      this.pinError = 'Wrong PIN.';
-    }
+    this.pinStage = step.stage;
+    this.pinError = step.error ?? '';
+    if (step.first) this.pinFirst = step.first;
+    if (step.unlocked) this.photosLocked = false;
+    if (step.save) await this.savePin(step.save);
   },
 
   async savePin(pin) {

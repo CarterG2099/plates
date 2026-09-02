@@ -32,6 +32,45 @@ test('hashPin treats the email case-insensitively, like auth does', async () => 
   );
 });
 
+// ---- the PIN pad's state machine ------------------------------------------------
+
+// The regression: setting a first-ever PIN has no stored hash yet, and the
+// shipped version re-checked "no hash → go confirm" before "am I confirming",
+// so the second entry bounced back to confirm forever.
+test('setting a first PIN: enter, confirm, save — not confirm forever', async () => {
+  const one = await progress.pinStep({ pin: '1234', stage: 'enter', storedHash: null, first: '', email: EMAIL });
+  assert.equal(one.stage, 'confirm');
+  assert.equal(one.first, '1234');
+
+  const two = await progress.pinStep({ pin: '1234', stage: 'confirm', storedHash: null, first: '1234', email: EMAIL });
+  assert.equal(two.save, '1234', 'the confirmed PIN comes back to be persisted');
+  assert.notEqual(two.stage, 'confirm');
+});
+
+test('a mismatched confirmation starts the set flow over with an error', async () => {
+  const step = await progress.pinStep({ pin: '9999', stage: 'confirm', storedHash: null, first: '1234', email: EMAIL });
+  assert.equal(step.stage, 'set');
+  assert.ok(step.error);
+  assert.equal(step.save, undefined);
+});
+
+test('the right PIN unlocks, the wrong one only errors', async () => {
+  const hash = await progress.hashPin(EMAIL, '1234');
+
+  const right = await progress.pinStep({ pin: '1234', stage: 'enter', storedHash: hash, email: EMAIL });
+  assert.equal(right.unlocked, true);
+
+  const wrong = await progress.pinStep({ pin: '4321', stage: 'enter', storedHash: hash, email: EMAIL });
+  assert.equal(wrong.unlocked, undefined);
+  assert.equal(wrong.error, 'Wrong PIN.');
+});
+
+test('a non-4-digit entry never advances the flow', async () => {
+  const step = await progress.pinStep({ pin: '12', stage: 'enter', storedHash: null, first: '', email: EMAIL });
+  assert.equal(step.stage, 'enter');
+  assert.ok(step.error);
+});
+
 // ---- the rows ------------------------------------------------------------------
 
 test('photosFor sorts newest day first and drops tombstones', () => {
