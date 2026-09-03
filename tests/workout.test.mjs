@@ -1452,6 +1452,10 @@ test('equipmentOf trusts the name over the field, because the field lies', () =>
   assert.equal(workout.equipmentOf(ex('Triceps Pushdown', { equipment: 'cable' })), 'cable');
   assert.equal(workout.equipmentOf(ex('X', { equipment: 'body only' })), 'bodyweight');
   assert.equal(workout.equipmentOf(ex('X', { equipment: 'Bodyweight ' })), 'bodyweight');
+  // Real rows again: both EZ Bar exercises are barbell-family, and one of them
+  // ("Biceps Curl (EZ Bar)") was imported with equipment "cable".
+  assert.equal(workout.equipmentOf(ex('Biceps Curl (EZ Bar)', { equipment: 'cable' })), 'barbell');
+  assert.equal(workout.equipmentOf(ex('Reverse Curl (EZ Bar)', { equipment: 'barbell' })), 'barbell');
 });
 
 test('equipmentOf falls back to the trailing parenthetical only', () => {

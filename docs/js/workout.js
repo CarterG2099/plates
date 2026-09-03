@@ -865,7 +865,7 @@ export function groupOf(muscleKey) {
  */
 export function equipmentOf(exercise) {
   const tail = /\(([^)]*)\)\s*$/.exec(exercise?.name ?? '')?.[1]?.toLowerCase() ?? '';
-  if (/barbell|smith/.test(tail)) return 'barbell';
+  if (/barbell|smith|ez bar/.test(tail)) return 'barbell';
   if (/dumbbell/.test(tail)) return 'dumbbell';
   if (/rope|cable/.test(tail)) return 'cable';
   if (/machine|plates/.test(tail)) return 'machine';
