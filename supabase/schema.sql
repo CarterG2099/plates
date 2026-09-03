@@ -552,12 +552,32 @@ values ('plates-progress', 'plates-progress', false, 5242880,
         array['image/jpeg','image/webp','image/png'])
 on conflict (id) do nothing;
 
+-- Objects follow their metadata rows instead of bare membership: readable only
+-- if you can read the photo's row, deletable only by its owner. Insert stays
+-- member-gated because the upload deliberately precedes the row (a row must
+-- never point at nothing). The row lookup ignores deleted_at on purpose: a
+-- tombstoned photo whose best-effort object removal failed can still be
+-- cleaned up by its owner.
 create policy plates_progress_read on storage.objects
   for select to authenticated
-  using (bucket_id = 'plates-progress' and plates.is_member());
+  using (
+    bucket_id = 'plates-progress'
+    and exists (
+      select 1 from plates.progress_photos pp
+      where pp.object_path = storage.objects.name
+        and plates.can_read(pp.owner_email)
+    )
+  );
 create policy plates_progress_insert on storage.objects
   for insert to authenticated
   with check (bucket_id = 'plates-progress' and plates.is_member());
 create policy plates_progress_delete on storage.objects
   for delete to authenticated
-  using (bucket_id = 'plates-progress' and plates.is_member());
+  using (
+    bucket_id = 'plates-progress'
+    and exists (
+      select 1 from plates.progress_photos pp
+      where pp.object_path = storage.objects.name
+        and plates.is_owner(pp.owner_email)
+    )
+  );
