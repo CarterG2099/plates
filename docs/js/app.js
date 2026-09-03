@@ -3864,7 +3864,21 @@ Alpine.data('statsPage', () => ({
       .find((m) => m.email?.toLowerCase() === email)?.photo_pin_hash ?? null;
   },
 
-  get photos() { return progress.photosFor(this.data.progressPhotos, this.poseFilter); },
+  /** 'mine' | 'partner' — two people, two tabs. */
+  ownerFilter: 'mine',
+
+  get partnerName() {
+    const email = this.email.toLowerCase();
+    const other = Alpine.store('auth').members.find((m) => m.email?.toLowerCase() !== email);
+    return other?.display_name || 'Theirs';
+  },
+
+  get photos() {
+    const email = this.email.toLowerCase();
+    const rows = this.data.progressPhotos.filter((p) =>
+      (p.owner_email?.toLowerCase() === email) === (this.ownerFilter === 'mine'));
+    return progress.photosFor(rows, this.poseFilter);
+  },
 
   /** The photo pad opens on "set a PIN" for the first visit ever, "enter" after. */
   get pinPrompt() {

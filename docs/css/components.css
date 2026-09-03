@@ -567,31 +567,38 @@
 .photo-lock {
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
+}
+.photo-lock-prompt {
+  display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4) 0;
+  margin: 0;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
-.photo-lock .icon { width: 28px; height: 28px; }
-.photo-lock-prompt { margin: 0; font-size: var(--text-sm); }
+.photo-lock-prompt .icon { width: 18px; height: 18px; }
 .photo-lock-reset {
+  align-self: flex-start;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
   text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
-
-.photo-add-row {
-  display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-.photo-add-row .btn { flex: 1; text-align: center; }
 
 .pin-row { display: flex; gap: var(--space-2); }
 /* Outside a .field, so it dresses itself — a bare input renders as the
    browser's white box on this dark surface. */
 .pin-row input {
-  flex: 1.2;
+  flex: 1;
   min-width: 0;
   text-align: center;
   font-size: var(--text-lg);
@@ -605,6 +612,7 @@
 }
 .pin-row input:focus { border-color: var(--color-primary); }
 .pin-row input::placeholder { color: var(--color-text-dim); letter-spacing: .35ch; }
+.pin-row .btn { flex: none; }
 
 .photo-grid {
   display: grid;
@@ -638,15 +646,6 @@
   color: #fff;
   background: linear-gradient(transparent, rgba(0, 0, 0, .55));
   text-align: left;
-}
-.photo-cell-owner {
-  position: absolute;
-  top: 3px; right: 3px;
-  padding: 1px 6px;
-  font-size: var(--text-xs);
-  color: #fff;
-  background: rgba(0, 0, 0, .5);
-  border-radius: var(--radius-pill);
 }
 
 .photo-full {

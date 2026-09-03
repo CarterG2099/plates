@@ -2401,17 +2401,20 @@
             <button class="btn" x-show="!photosLocked" @click="relockPhotos()">Lock</button>
           </div>
 
-          <!-- Locked: the PIN pad and nothing else. No thumbnails, no counts. -->
+          <!-- Locked: the PIN pad and nothing else. No thumbnails, no counts.
+               Left-aligned like every other card — the centered column read as
+               a broken empty state, and .tap (a 40px circle for × buttons) once
+               wrapped the reset link onto four lines. -->
           <template x-if="photosLocked">
             <div class="photo-lock">
-              <div class="photo-lock-head">
+              <p class="photo-lock-prompt">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                      stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/>
                   <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>
                 </svg>
-                <p class="photo-lock-prompt" x-text="pinPrompt"></p>
-              </div>
+                <span x-text="pinPrompt"></span>
+              </p>
               <form class="pin-row" @submit.prevent="submitPin()">
                 <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
                        x-model="pinEntry" placeholder="••••" autocomplete="off" aria-label="PIN">
@@ -2419,13 +2422,21 @@
                         x-text="pinStage === 'enter' && myPinHash ? 'Unlock' : 'Next'"></button>
               </form>
               <p class="notice notice-error" x-show="pinError" x-text="pinError"></p>
-              <button class="tap photo-lock-reset" x-show="myPinHash && pinStage === 'enter'"
+              <button class="photo-lock-reset" x-show="myPinHash && pinStage === 'enter'"
                       @click="resetPin()">Forgot? Set a new PIN</button>
             </div>
           </template>
 
           <template x-if="!photosLocked">
             <div>
+              <!-- Whose photos, then which pose. Two people, two chips. -->
+              <div class="chips" style="margin-bottom:var(--space-2)">
+                <button class="chip" :class="ownerFilter === 'mine' && 'is-active'"
+                        @click="ownerFilter = 'mine'; compareSel = []">Mine</button>
+                <button class="chip" :class="ownerFilter === 'partner' && 'is-active'"
+                        @click="ownerFilter = 'partner'; compareSel = []"
+                        x-text="partnerName"></button>
+              </div>
               <div class="chips">
                 <button class="chip" :class="poseFilter === 'all' && 'is-active'"
                         @click="poseFilter = 'all'">All</button>
@@ -2448,20 +2459,19 @@
                           @click="tapPhoto(p)">
                     <img x-show="photoUrl(p)" :src="photoUrl(p) || null" alt="" loading="lazy">
                     <span class="photo-cell-date" x-text="photoDate(p.taken_on)"></span>
-                    <span class="photo-cell-owner" x-show="ownedBy(p)" x-text="ownedBy(p)"></span>
                   </button>
                 </template>
               </div>
 
-              <p class="empty" x-show="!photos.length" style="padding:var(--space-3) 0">
-                No photos yet. Same spot, same light, same pose — future you will
-                want the comparison to be fair.
-              </p>
+              <p class="empty" x-show="!photos.length" style="padding:var(--space-3) 0"
+                 x-text="ownerFilter === 'mine'
+                   ? 'No photos yet. Same spot, same light, same pose — future you will want the comparison to be fair.'
+                   : `No photos from ${partnerName} yet.`"></p>
 
               <!-- The real camera app, full native quality. @click arms pickerHeld
                    so the hide caused by the camera itself doesn't relock and
                    destroy the flow. -->
-              <div class="photo-add-row">
+              <div class="photo-add-row" x-show="ownerFilter === 'mine'">
                 <label class="btn btn-primary" for="pp-camera" @click="pickerHeld = true">Take photo</label>
                 <label class="btn" for="pp-library" @click="pickerHeld = true">From library</label>
               </div>
