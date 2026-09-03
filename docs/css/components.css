@@ -614,6 +614,13 @@
 .pin-row input::placeholder { color: var(--color-text-dim); letter-spacing: .35ch; }
 .pin-row .btn { flex: none; }
 
+.photo-add-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.photo-add-row .btn { flex: 1; text-align: center; }
+
 .photo-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
