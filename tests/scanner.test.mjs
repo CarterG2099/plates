@@ -309,3 +309,71 @@ test('a tap still retriggers focus when the camera cannot steer by point', async
     camera.capabilities = real;
   }
 });
+
+// ---- the ZXing path ---------------------------------------------------------
+// What every iPhone runs: iOS has no BarcodeDetector, so the live loop decodes
+// with the CDN ZXing build. The stub below has the same surface as the real
+// 0.21.3 UMD — in particular BrowserMultiFormatReader has NO decodeFromCanvas.
+// The live loop used to call exactly that, and the resulting TypeError was
+// swallowed as "no barcode here", so scanning silently never worked on iOS.
+// These tests run against the ZXing shape, keeping that entry point honest.
+
+const zxing = {
+  decoded: [],                      // every canvas the pipeline tried, in order
+  reads: () => null,                // what a decode of a given canvas finds
+};
+
+window.ZXing = {
+  HTMLCanvasElementLuminanceSource: class { constructor(canvas) { this.canvas = canvas; } },
+  HybridBinarizer: class { constructor(source) { this.canvas = source.canvas; } },
+  BinaryBitmap: class { constructor(binarizer) { this.canvas = binarizer.canvas; } },
+  MultiFormatReader: class {
+    decode(bitmap) {
+      zxing.decoded.push(bitmap.canvas);
+      const value = zxing.reads(bitmap.canvas);
+      if (!value) throw Object.assign(new Error('not found'), { name: 'NotFoundException' });
+      return { getText: () => value };
+    }
+    reset() {}
+  },
+  BrowserMultiFormatReader: class {
+    async decodeFromImageUrl() { throw Object.assign(new Error('not found'), { name: 'NotFoundException' }); }
+  },
+};
+
+test('the live loop decodes through an entry point the pinned build has', async () => {
+  delete window.BarcodeDetector;
+  const result = await scanner.start(video);
+  assert.equal(result.decoder, 'zxing', 'without BarcodeDetector the CPU decoder takes over');
+
+  // The frame is landscape (640×480), like a barcode held the way the reticle
+  // suggests. If the code reaches for a method the build does not export, the
+  // TypeError is swallowed and this comes back null — the shipped bug.
+  zxing.decoded = [];
+  zxing.reads = (canvas) => (canvas.width > canvas.height ? '0894700010045' : null);
+  assert.equal(await scanner.capture(video), '0894700010045');
+});
+
+test('a sideways barcode reads on the rotated retry', async () => {
+  delete window.BarcodeDetector;
+  await scanner.start(video);
+
+  // Only the turned frame (480×640) carries a readable code — a vertical label.
+  zxing.decoded = [];
+  zxing.reads = (canvas) => (canvas.width < canvas.height ? '4006381333931' : null);
+
+  assert.equal(await scanner.capture(video), '4006381333931');
+  assert.equal(zxing.decoded.length, 2, 'the flat frame first, then the 90° retry');
+  assert.ok(zxing.decoded[0].width > zxing.decoded[0].height);
+  assert.ok(zxing.decoded[1].width < zxing.decoded[1].height);
+});
+
+test('a horizontal read never pays for the rotated retry', async () => {
+  delete window.BarcodeDetector;
+  await scanner.start(video);
+
+  zxing.decoded = [];
+  zxing.reads = () => '0044000032029';
+  assert.equal(await scanner.capture(video), '0044000032029');
+  assert.equal(zxing.decoded.length, 1, 'found flat — rotation must not run');
+});

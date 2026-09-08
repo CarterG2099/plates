@@ -91,7 +91,7 @@ export function installBrowser() {
     createElement: () => ({
       width: 0,
       height: 0,
-      getContext: () => ({ drawImage() {} }),
+      getContext: () => ({ drawImage() {}, save() {}, restore() {}, translate() {}, rotate() {} }),
       toDataURL: () => 'data:image/jpeg;base64,AAAA',
     }),
     querySelectorAll: () => [],

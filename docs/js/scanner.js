@@ -343,6 +343,7 @@ export async function decodeImageFile(file) {
 }
 
 async function prepareDecoder() {
+  detector = null;   // never let a stale detector shadow the ZXing path
   if (typeof window.BarcodeDetector !== 'undefined') {
     try {
       const supported = await window.BarcodeDetector.getSupportedFormats();
@@ -464,26 +465,60 @@ export function stopDecoding() {
   scanTimer = null;
 }
 
+// Reused for the same reason frameCanvas is: this runs on the decode tick.
+let rotatedCanvas = null;
+
+/** The same frame turned 90°, for barcodes printed sideways on the packet. */
+function rotated(canvas) {
+  rotatedCanvas ??= document.createElement('canvas');
+  rotatedCanvas.width = canvas.height;
+  rotatedCanvas.height = canvas.width;
+
+  const ctx = rotatedCanvas.getContext('2d');
+  ctx.save();
+  ctx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+  ctx.restore();
+  return rotatedCanvas;
+}
+
 async function decodeWithZxing(canvas, { allowSlowFallback = true } = {}) {
   const ZXing = await loadZXing();
-  zxingReader ??= new ZXing.BrowserMultiFormatReader();
+  zxingReader ??= new ZXing.MultiFormatReader();
 
-  // The decode entry point has moved between releases, so try what exists
-  // rather than pinning to one name that may not be there. The data-URL route
-  // re-encodes the whole frame as PNG — fine once for a photo, far too slow to
-  // run every tick, so the loop opts out of it.
-  const attempts = [() => zxingReader.decodeFromCanvas(canvas)];
-  if (allowSlowFallback) {
-    attempts.push(() => zxingReader.decodeFromImageUrl(canvas.toDataURL('image/png')));
-  }
-
-  for (const attempt of attempts) {
+  // The obvious entry point, BrowserMultiFormatReader.decodeFromCanvas, is not
+  // in this build — it lives in the separate @zxing/browser package. Calling it
+  // threw a TypeError on every tick, which the catch below read as "no barcode
+  // in this frame", so the live loop could never decode anything anywhere the
+  // native detector is missing — which is every iPhone. Hence the low-level
+  // pipeline, which is the same one that call would have run.
+  const read = (c) => {
     try {
-      const result = await attempt();
-      if (result) return result.getText();
+      const luminance = new ZXing.HTMLCanvasElementLuminanceSource(c);
+      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
+      return zxingReader.decode(bitmap).getText();
     } catch {
-      // NotFoundException simply means this frame had no barcode.
+      return null;   // NotFoundException: this frame had no barcode
     }
+  };
+
+  // ZXing only scans horizontal lines — a barcode printed sideways on the
+  // packet never reads, however steady the hand, and TRY_HARDER does not add
+  // rotation (measured on iOS 26). A missed frame is retried turned 90°, so
+  // the reticle's orientation is a suggestion rather than a requirement.
+  const found = read(canvas) ?? read(rotated(canvas));
+  if (found) return found;
+  if (!allowSlowFallback) return null;
+
+  // The data-URL route re-encodes the whole frame as PNG — fine once for a
+  // photo, far too slow to run every tick, so the loop opts out of it.
+  try {
+    const result = await new ZXing.BrowserMultiFormatReader()
+      .decodeFromImageUrl(canvas.toDataURL('image/png'));
+    if (result) return result.getText();
+  } catch {
+    // Nothing in the photo either.
   }
   return null;
 }
