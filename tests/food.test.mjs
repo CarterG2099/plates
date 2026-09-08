@@ -960,3 +960,33 @@ test('dayLabel of an empty day has nothing to print', () => {
   assert.equal(label.hasAny, false);
   assert.equal(label.partial, false);
 });
+
+// ---- who contributed to a label line --------------------------------------------
+
+test('nutrientContributions lists shares largest first', () => {
+  const { items, unreported } = food.nutrientContributions([
+    { id: 'a', description: 'Chicken', sodium_mg: 640 },
+    { id: 'b', description: 'Shake', sodium_mg: 200 },
+    { id: 'c', description: 'Rice', sodium_mg: 950 },
+  ], 'sodium_mg');
+  assert.deepEqual(items.map((i) => i.description), ['Rice', 'Chicken', 'Shake']);
+  assert.equal(unreported, 0);
+});
+
+test('a reported zero is a share; an unreported line is a count', () => {
+  // Zero answered the question; silence did not. The sheet lists the first and
+  // counts the second, because "contributed nothing" and "contributed an
+  // unknown amount" are different claims.
+  const { items, unreported } = food.nutrientContributions([
+    { id: 'a', description: 'Water', sodium_mg: 0 },
+    { id: 'b', description: 'Mystery', sodium_mg: null },
+    { id: 'c', description: 'Homemade', sodium_mg: undefined },
+  ], 'sodium_mg');
+  assert.deepEqual(items.map((i) => i.description), ['Water']);
+  assert.equal(unreported, 2);
+});
+
+test('nutrientContributions of an empty day is empty, not an error', () => {
+  assert.deepEqual(food.nutrientContributions([], 'sodium_mg'), { items: [], unreported: 0 });
+  assert.deepEqual(food.nutrientContributions(undefined, 'sodium_mg'), { items: [], unreported: 0 });
+});

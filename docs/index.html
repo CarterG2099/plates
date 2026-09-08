@@ -178,32 +178,36 @@
               <span x-text="`1 day · ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`"></span>
             </div>
 
-            <div class="nf-calories">
+            <!-- Every line is a button: tap it and a sheet names the foods
+                 that put the number there. -->
+            <button class="nf-calories nf-tap"
+                    @click="openNutrient({ key: 'calories', name: 'Calories', unit: ' kcal' })">
               <span>Calories</span><b x-text="dayNutrition.calories ?? '—'"></b>
-            </div>
+            </button>
 
             <div class="nf-dv">% Daily Value*</div>
 
             <template x-for="r in dayNutrition.printedRows" :key="r.key">
-              <div class="nf-row" :class="[`nf-in-${r.indent}`, r.bold && 'is-major']">
+              <button class="nf-row nf-tap" :class="[`nf-in-${r.indent}`, r.bold && 'is-major']"
+                      @click="openNutrient(r)">
                 <span class="nf-name">
                   <span x-text="r.name"></span>
                   <span class="nf-amount" x-text="r.amount ?? '—'"></span>
                 </span>
                 <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
-              </div>
+              </button>
             </template>
 
             <div class="nf-rule" x-show="dayNutrition.printedMicros.length"></div>
 
             <template x-for="r in dayNutrition.printedMicros" :key="r.key">
-              <div class="nf-row">
+              <button class="nf-row nf-tap" @click="openNutrient(r)">
                 <span class="nf-name">
                   <span x-text="r.name"></span>
                   <span class="nf-amount" x-text="r.amount ?? '—'"></span>
                 </span>
                 <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
-              </div>
+              </button>
             </template>
 
             <p class="nf-note">
@@ -427,6 +431,43 @@
                 </template>
               </div>
               <button class="btn btn-ghost btn-block" @click="closePrep()">Cancel</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Who contributed to a tapped label line ---------------------------- -->
+        <template x-if="nutrientDetail">
+          <div class="sheet-backdrop" @click.self="nutrientDetail = null">
+            <div class="sheet" x-init="$swipe($el, () => { nutrientDetail = null })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2 x-text="nutrientDetail.name"></h2>
+                <button class="tap" @click="nutrientDetail = null" aria-label="Close">×</button>
+              </div>
+
+              <div class="rows">
+                <template x-for="item in nutrientItems.items" :key="item.id">
+                  <div class="row">
+                    <div class="row-text">
+                      <b x-text="item.description"></b>
+                      <small x-text="amountLabel(item.quantity, item.unit)"></small>
+                    </div>
+                    <span class="row-num" x-text="nutrientAmount(item.value)"></span>
+                  </div>
+                </template>
+              </div>
+
+              <p class="empty" x-show="!nutrientItems.items.length">
+                Nothing you logged reported this line.
+              </p>
+
+              <!-- The undercount, named. A food that never published this line
+                   contributed an unknown amount, not zero. -->
+              <p class="nf-note" x-show="nutrientItems.unreported">
+                <span x-text="nutrientItems.unreported"></span>
+                <span x-text="nutrientItems.unreported === 1 ? 'food didn’t report this line,' : 'foods didn’t report this line,'"></span>
+                so the day's total can undercount.
+              </p>
             </div>
           </div>
         </template>

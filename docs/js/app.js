@@ -778,6 +778,19 @@ Alpine.data('todayPage', () => ({
   labelOpen: false,
   get dayNutrition() { return food.dayNutritionLabel(this.entries); },
 
+  /** The tapped label row — opens the who-contributed sheet. */
+  nutrientDetail: null,
+  openNutrient(row) { this.nutrientDetail = { key: row.key, name: row.name, unit: row.unit }; },
+  get nutrientItems() {
+    return this.nutrientDetail
+      ? food.nutrientContributions(this.entries, this.nutrientDetail.key)
+      : { items: [], unreported: 0 };
+  },
+  nutrientAmount(value) {
+    const rounded = Math.round(Number(value) * 10) / 10;
+    return `${rounded.toLocaleString()}${this.nutrientDetail?.unit ?? ''}`;
+  },
+
   get calorieTarget() { return Number(this.goal?.calorie_target) || null; },
 
   get remaining() {

@@ -594,6 +594,21 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   font-weight: 700;
 }
 
+/* A label line that opens the who-contributed sheet. The reset keeps the row's
+   own layout in charge; the class only exists on the day label, where every
+   line answers a tap — a food's own label stays inert. */
+button.nf-tap {
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+button.nf-tap:active { background: var(--color-hover); }
+
 /* The heavy rule between the macros and the micronutrients. */
 .nf-rule {
   height: 8px;

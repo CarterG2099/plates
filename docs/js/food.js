@@ -232,6 +232,33 @@ export function dayNutritionLabel(entries) {
   return { ...nutritionLabel(sums), partial };
 }
 
+/**
+ * Who put the number there: every entry's share of one label line, largest
+ * first, for the sheet behind a tapped row on the day's label.
+ *
+ * Zero is a share — a food that reported 0 mg sodium answered the question —
+ * while an entry that never reported the line is counted, not listed: the sheet
+ * says "3 foods didn't report this" instead of pretending they contributed
+ * nothing.
+ */
+export function nutrientContributions(entries, key) {
+  const items = [];
+  let unreported = 0;
+
+  for (const e of entries ?? []) {
+    const raw = e[key];
+    const value = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+    if (value === null || !Number.isFinite(value)) {
+      unreported += 1;
+      continue;
+    }
+    items.push({ id: e.id, description: e.description, quantity: e.quantity, unit: e.unit, value });
+  }
+
+  items.sort((a, b) => b.value - a.value);
+  return { items, unreported };
+}
+
 /** Entries for one day, oldest first, grouped ready for the Today screen. */
 export function entriesForDay(log, ownerEmail, date = new Date()) {
   return log
