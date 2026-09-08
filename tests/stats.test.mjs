@@ -1055,3 +1055,38 @@ test('finishNote survives being handed nothing', () => {
   assert.ok(note.headline);
   assert.ok(note.note);
 });
+
+// ---- fixing a reading -----------------------------------------------------------
+
+test('updateWeight corrects the stored reading and moves updated_at', async () => {
+  const local = await import('../docs/js/local.js');
+  const row = await stats.logWeight(1726, 'c@x.com');   // the missed-decimal typo
+
+  const saved = await stats.updateWeight(row.id, 172.6);
+  assert.equal(saved.weight_lb, 172.6);
+
+  const stored = await local.get('weight_log', row.id);
+  assert.equal(stored.weight_lb, 172.6);
+  assert.equal(stored.measured_at, row.measured_at, 'fixing the number must not move the day');
+});
+
+test('updateWeight of a missing row is a no-op, not a crash', async () => {
+  assert.equal(await stats.updateWeight('no-such-id', 180), null);
+});
+
+test('removeWeight tombstones rather than deletes', async () => {
+  const local = await import('../docs/js/local.js');
+  const row = await stats.logWeight(180, 'c@x.com');
+
+  await stats.removeWeight(row.id);
+  const stored = await local.get('weight_log', row.id);
+  assert.ok(stored.deleted_at, 'a hard delete cannot propagate to the other device');
+});
+
+test('the weight series carries row ids so a reading can be edited', () => {
+  const series = stats.weightSeries(
+    [{ id: 'w1', owner_email: 'c@x.com', measured_at: new Date().toISOString(), weight_lb: 180 }],
+    'c@x.com',
+  );
+  assert.equal(series[0].id, 'w1');
+});

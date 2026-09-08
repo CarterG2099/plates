@@ -237,7 +237,65 @@
               <span class="row-num" x-text="round(entry.calories)"></span>
               <button class="tap" @click="removeEntry(entry.id)" :aria-label="`Remove ${entry.description}`">×</button>
             </div>
+
           </template>
+        </div>
+
+        <!-- The average logged day, as a label ------------------------------- -->
+        <div class="card" x-show="weekLabel.loggedDays">
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Average day</div>
+              <div class="stat-sub">
+                last 7 · averaged across
+                <span x-text="weekLabel.loggedDays"></span>
+                logged <span x-text="weekLabel.loggedDays === 1 ? 'day' : 'days'"></span>
+              </div>
+            </div>
+            <button class="btn" @click="weekLabelOpen = !weekLabelOpen"
+                    x-text="weekLabelOpen ? 'Hide' : 'Show'"></button>
+          </div>
+
+          <div class="nutrition" x-show="weekLabelOpen && weekLabel.hasAny" x-cloak>
+            <div class="nf-title">Nutrition Facts</div>
+            <div class="nf-serving">
+              <span>Serving size</span><span>1 average day</span>
+            </div>
+
+            <div class="nf-calories">
+              <span>Calories</span><b x-text="weekLabel.calories ?? '—'"></b>
+            </div>
+
+            <div class="nf-dv">% Daily Value*</div>
+
+            <template x-for="r in weekLabel.printedRows" :key="r.key">
+              <div class="nf-row" :class="[`nf-in-${r.indent}`, r.bold && 'is-major']">
+                <span class="nf-name">
+                  <span x-text="r.name"></span>
+                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
+                </span>
+                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
+              </div>
+            </template>
+
+            <div class="nf-rule" x-show="weekLabel.printedMicros.length"></div>
+
+            <template x-for="r in weekLabel.printedMicros" :key="r.key">
+              <div class="nf-row">
+                <span class="nf-name">
+                  <span x-text="r.name"></span>
+                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
+                </span>
+                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
+              </div>
+            </template>
+
+            <p class="nf-note">
+              * Percent Daily Values are based on a 2,000 calorie diet.
+              <span x-show="weekLabel.partial">Not every food reported every
+              line, so lines below the macros can undercount.</span>
+            </p>
+          </div>
         </div>
 
         <!-- Edit a logged amount ---------------------------------------------- -->
@@ -1934,63 +1992,6 @@
           </p>
         </div>
 
-        <!-- The average logged day, as a label ------------------------------- -->
-        <div class="card" x-show="weekLabel.loggedDays">
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Average day</div>
-              <div class="stat-sub">
-                last 7 · averaged across
-                <span x-text="weekLabel.loggedDays"></span>
-                logged <span x-text="weekLabel.loggedDays === 1 ? 'day' : 'days'"></span>
-              </div>
-            </div>
-            <button class="btn" @click="weekLabelOpen = !weekLabelOpen"
-                    x-text="weekLabelOpen ? 'Hide' : 'Show'"></button>
-          </div>
-
-          <div class="nutrition" x-show="weekLabelOpen && weekLabel.hasAny" x-cloak>
-            <div class="nf-title">Nutrition Facts</div>
-            <div class="nf-serving">
-              <span>Serving size</span><span>1 average day</span>
-            </div>
-
-            <div class="nf-calories">
-              <span>Calories</span><b x-text="weekLabel.calories ?? '—'"></b>
-            </div>
-
-            <div class="nf-dv">% Daily Value*</div>
-
-            <template x-for="r in weekLabel.printedRows" :key="r.key">
-              <div class="nf-row" :class="[`nf-in-${r.indent}`, r.bold && 'is-major']">
-                <span class="nf-name">
-                  <span x-text="r.name"></span>
-                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
-                </span>
-                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
-              </div>
-            </template>
-
-            <div class="nf-rule" x-show="weekLabel.printedMicros.length"></div>
-
-            <template x-for="r in weekLabel.printedMicros" :key="r.key">
-              <div class="nf-row">
-                <span class="nf-name">
-                  <span x-text="r.name"></span>
-                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
-                </span>
-                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
-              </div>
-            </template>
-
-            <p class="nf-note">
-              * Percent Daily Values are based on a 2,000 calorie diet.
-              <span x-show="weekLabel.partial">Not every food reported every
-              line, so lines below the macros can undercount.</span>
-            </p>
-          </div>
-        </div>
-
         <!-- Body weight ------------------------------------------------------ -->
         <div class="card">
           <div class="readout-head">
@@ -2004,7 +2005,7 @@
                 <span x-text="weightSummary && weightSummary.toGo > 0 ? 'to go' : 'past target'"></span>
               </div>
             </div>
-            <button class="btn" @click="weighing = true">Log</button>
+            <button class="btn" @click="openWeighing()">Log</button>
           </div>
 
           <!-- One series, so the heading names it and no legend is needed.
@@ -2096,7 +2097,7 @@
                every plotted value is readable without hovering anything. -->
           <div class="rows" x-show="weightOpen" x-cloak>
             <template x-for="r in weightReadings" :key="r.at">
-              <div class="row">
+              <button class="row" @click="openWeightEdit(r)">
                 <div class="row-text">
                   <b x-text="weightDate(r.at, { long: true })"></b>
                   <small x-text="gapLabel(r.daysSincePrevious)"></small>
@@ -2105,7 +2106,7 @@
                 <span class="delta"
                       :class="{ 'is-down': r.delta < 0, 'is-up': r.delta > 0 }"
                       x-text="signed(r.delta)"></span>
-              </div>
+              </button>
             </template>
           </div>
 
@@ -2740,7 +2741,36 @@
                 <input id="w-lb" type="number" inputmode="decimal" step="0.1"
                        x-model="newWeight" placeholder="184.2" autocomplete="off">
               </div>
+              <!-- Opens on the last reading; the scroller nudges from there.
+                   ±15 lb spans any honest day-to-day move, and the box above
+                   still takes anything the slider can't reach. -->
+              <input class="qty-slider" type="range" step="0.1"
+                     :min="(weighBase - 15).toFixed(1)" :max="(Number(weighBase) + 15).toFixed(1)"
+                     x-model="newWeight" aria-label="Adjust weight">
               <button class="btn btn-primary btn-block" :disabled="!newWeight" @click="saveWeight()">Save</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Fix a reading ------------------------------------------------------ -->
+        <template x-if="editingWeight">
+          <div class="sheet-backdrop" @click.self="editingWeight = null">
+            <div class="sheet" x-init="$swipe($el, () => { editingWeight = null })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2 x-text="weightDate(editingWeight.at, { long: true })"></h2>
+                <button class="tap" @click="editingWeight = null" aria-label="Close">×</button>
+              </div>
+              <div class="field">
+                <label for="we-lb">Pounds</label>
+                <input id="we-lb" type="number" inputmode="decimal" step="0.1"
+                       x-model="editingWeight.lb" autocomplete="off">
+              </div>
+              <input class="qty-slider" type="range" step="0.1"
+                     :min="(editingWeight.base - 15).toFixed(1)" :max="(Number(editingWeight.base) + 15).toFixed(1)"
+                     x-model="editingWeight.lb" aria-label="Adjust weight">
+              <button class="btn btn-primary btn-block" :disabled="!editingWeight.lb" @click="saveWeightEdit()">Save</button>
+              <button class="btn btn-danger btn-block" @click="deleteWeightEdit()">Delete this weigh-in</button>
             </div>
           </div>
         </template>

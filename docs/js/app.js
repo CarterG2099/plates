@@ -774,6 +774,10 @@ Alpine.data('todayPage', () => ({
 
   get totals() { return food.sumTotals(this.entries); },
 
+  /** The average logged day, printed through the same label the sheets use. */
+  weekLabelOpen: false,
+  get weekLabel() { return food.weeklyNutritionLabel(this.data.log, this.email); },
+
   /** The whole label for the day, behind its toggle. */
   labelOpen: false,
   get dayNutrition() { return food.dayNutritionLabel(this.entries); },
@@ -3382,6 +3386,45 @@ const tracksPointer = (event) =>
 Alpine.data('statsPage', () => ({
   weighing: false,
   newWeight: '',
+  /**
+   * The slider's centre, frozen when the sheet opens. Bounds derived live from
+   * the value would slide under the thumb as it moves.
+   */
+  weighBase: null,
+
+  openWeighing() {
+    const latest = this.weightSummary?.latest ?? null;
+    this.newWeight = latest ?? '';
+    this.weighBase = latest ?? 170;
+    this.weighing = true;
+  },
+
+  // ---- fixing a reading ------------------------------------------------------
+
+  editingWeight: null,   // { id, at, lb, base }
+
+  openWeightEdit(reading) {
+    if (!reading.id) return;
+    this.editingWeight = { id: reading.id, at: reading.at, lb: reading.lb, base: reading.lb };
+  },
+
+  async saveWeightEdit() {
+    const lb = Number(this.editingWeight?.lb);
+    if (!Number.isFinite(lb) || lb <= 0) return;
+
+    await stats.updateWeight(this.editingWeight.id, lb);
+    this.editingWeight = null;
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(`Corrected to ${lb} lb`);
+  },
+
+  async deleteWeightEdit() {
+    if (!confirm('Delete this weigh-in?')) return;
+    await stats.removeWeight(this.editingWeight.id);
+    this.editingWeight = null;
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash('Weigh-in deleted');
+  },
 
   get email() { return Alpine.store('auth').email; },
   get data() { return snapshotAll(); },
@@ -3389,10 +3432,6 @@ Alpine.data('statsPage', () => ({
   // ---- body weight ---------------------------------------------------------
 
   get goal() { return food.currentGoal(this.data.goals, this.email); },
-
-  /** The average logged day, printed through the same label the sheets use. */
-  weekLabelOpen: false,
-  get weekLabel() { return food.weeklyNutritionLabel(this.data.log, this.email); },
 
   /**
    * The progress photo nearest the selected weight reading — the picture of

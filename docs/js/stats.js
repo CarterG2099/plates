@@ -22,7 +22,7 @@ export function weightSeries(weightLog, ownerEmail, days = 90) {
   return weightLog
     .filter((w) => w.owner_email === ownerEmail && !w.deleted_at)
     .filter((w) => new Date(w.measured_at).getTime() >= cutoff)
-    .map((w) => ({ at: w.measured_at, lb: Number(w.weight_lb) }))
+    .map((w) => ({ id: w.id, at: w.measured_at, lb: Number(w.weight_lb) }))
     .filter((w) => Number.isFinite(w.lb))
     .sort((a, b) => (a.at < b.at ? -1 : 1));
 }
@@ -48,6 +48,22 @@ export async function logWeight(lb, ownerEmail, at = new Date()) {
     measured_at: at.toISOString(),
     weight_lb: Number(lb),
   }, ownerEmail);
+  sync.nudge();
+  return row;
+}
+
+/** Fix a reading after the fact — a missed decimal shouldn't be forever. */
+export async function updateWeight(id, lb) {
+  const row = await local.get('weight_log', id);
+  if (!row) return null;
+
+  const saved = await local.save('weight_log', { ...row, weight_lb: Number(lb) }, row.owner_email);
+  sync.nudge();
+  return saved;
+}
+
+export async function removeWeight(id) {
+  const row = await local.remove('weight_log', id);
   sync.nudge();
   return row;
 }
@@ -303,6 +319,7 @@ export function weightReadings(series) {
     .map((point, i) => {
       const previous = i > 0 ? series[i - 1] : null;
       return {
+        id: point.id,
         at: point.at,
         lb: point.lb,
         delta: previous ? round1(point.lb - previous.lb) : null,
