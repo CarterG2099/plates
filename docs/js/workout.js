@@ -472,6 +472,23 @@ export function personalBests(history) {
 
 // ---- numbers ---------------------------------------------------------------
 
+/**
+ * Done vs planned across the whole session, for the header's progress bar.
+ * Warm-ups count: they are rows you still have to do before the workout is over,
+ * which is the question a progress bar answers — unlike volume, which they
+ * rightly sit out of.
+ */
+export function setProgress(sets) {
+  let done = 0;
+  let total = 0;
+  for (const s of sets ?? []) {
+    if (s.deleted_at) continue;
+    total += 1;
+    if (s.completed_at) done += 1;
+  }
+  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+
 /** Total load moved. Warm-ups excluded — they aren't working volume. */
 export function volume(sets) {
   return sets

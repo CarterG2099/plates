@@ -1322,6 +1322,14 @@
               </div>
             </div>
 
+            <!-- Sets done vs planned. One thin line, no numbers — the cards
+                 below already carry every number this could repeat. -->
+            <div class="session-progress" x-show="progress.total" role="progressbar"
+                 :aria-valuenow="progress.done" :aria-valuemax="progress.total"
+                 :aria-label="`${progress.done} of ${progress.total} sets done`">
+              <div class="session-progress-fill" :style="`width:${progress.pct}%`"></div>
+            </div>
+
             <!-- data-card: what $dragCard measures and moves. -->
             <div class="cardstack" x-ref="cardstack">
             <template x-for="group in groups" :key="group.key">

@@ -327,6 +327,31 @@
    something to replace it with. */
 .figure-pair.has-art svg { display: none; }
 
+/* The second position sits exactly over the first and the two swap on a slow
+   loop: a second and a half on each, with a short fade between. Absolute rather
+   than a shared grid cell so it takes no space before it loads — an exercise
+   with one drawing lays out precisely as it did. Centred with inset + auto
+   margins, which lands on the same spot as the grid centres the first. */
+.figure-pair { position: relative; }
+.figure-pair .art-2 {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+}
+.figure-pair.has-art.has-art-2 .art-2 { animation: art-swap 3s infinite; }
+
+@keyframes art-swap {
+  0%, 40%  { opacity: 0; }
+  50%, 90% { opacity: 1; }
+  100%     { opacity: 0; }
+}
+
+/* Under reduced motion the first drawing stands alone, as it always has. */
+@media (prefers-reduced-motion: reduce) {
+  .figure-pair.has-art.has-art-2 .art-2 { animation: none; }
+}
+
 /* ---- sheet furniture ------------------------------------------------------- */
 /* A title row with a close control, so sheets stop ending in a stack of
    full-width buttons where only one is the actual action. */
@@ -686,3 +711,19 @@
 }
 .compare-pane figcaption b { color: var(--color-text); }
 
+
+/* ---- the workout's progress bar --------------------------------------------
+   Deliberately mute: a 4px track between the timer and the cards. No numbers,
+   no animation — it fills as sets are checked and that is the whole story. */
+
+.session-progress {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  overflow: hidden;
+}
+.session-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+}

@@ -2411,6 +2411,8 @@ Alpine.data('trainPage', () => ({
 
   get volume() { return Math.round(workout.volume(this.sets)); },
 
+  get progress() { return workout.setProgress(this.sets); },
+
   // ---- session lifecycle ---------------------------------------------------
 
   async startEmpty() {

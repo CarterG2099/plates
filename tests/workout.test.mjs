@@ -1594,3 +1594,20 @@ test('a blank note clears rather than storing whitespace', async () => {
   const saved = await workout.setExerciseNotes(shared, '   ', ME);
   assert.equal(saved.notes, null);
 });
+
+// ---- the header's progress bar ----------------------------------------------
+
+test('setProgress counts checked sets against every live set', () => {
+  const sets = [
+    { completed_at: 'x' },
+    { completed_at: 'x', is_warmup: true },   // still a row you had to do
+    { completed_at: null },
+    { completed_at: 'x', deleted_at: 'x' },   // removed rows are not progress
+  ];
+  assert.deepEqual(workout.setProgress(sets), { done: 2, total: 3, pct: 67 });
+});
+
+test('setProgress of an empty session is zeros, not NaN', () => {
+  assert.deepEqual(workout.setProgress([]), { done: 0, total: 0, pct: 0 });
+  assert.deepEqual(workout.setProgress(undefined), { done: 0, total: 0, pct: 0 });
+});
