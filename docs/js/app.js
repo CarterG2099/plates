@@ -3394,6 +3394,16 @@ Alpine.data('statsPage', () => ({
   weekLabelOpen: false,
   get weekLabel() { return food.weeklyNutritionLabel(this.data.log, this.email); },
 
+  /**
+   * The progress photo nearest the selected weight reading — the picture of
+   * the number. Null while the photo section is locked: the chart must not
+   * leak what the PIN is guarding.
+   */
+  get focusPhoto() {
+    if (this.photosLocked || !this.weightFocus) return null;
+    return progress.photoNear(this.data.progressPhotos, this.email, this.weightFocus.at);
+  },
+
   get weight() { return stats.weightSeries(this.data.weightLog, this.email); },
   get weightSummary() { return stats.weightSummary(this.weight, this.goal); },
 

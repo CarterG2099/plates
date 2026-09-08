@@ -2043,10 +2043,18 @@
                 <g x-html="weightDots"></g>
               </svg>
 
-              <!-- Values lead, the date follows. -->
+              <!-- Values lead, the date follows. The thumbnail is the progress
+                   photo taken within three days of the reading — the picture of
+                   the number — and only exists while the photo section is
+                   unlocked, so the chart can't leak what the PIN guards. -->
               <div class="plot-readout" x-show="weightFocus" x-cloak>
                 <b x-text="weightFocus && `${weightFocus.lb} lb`"></b>
                 <span x-text="weightFocus && weightDate(weightFocus.at, { long: true })"></span>
+                <button class="plot-photo" x-show="focusPhoto"
+                        @click="viewingPhoto = focusPhoto"
+                        aria-label="Progress photo from around this reading">
+                  <img :src="focusPhoto ? (photoUrl(focusPhoto) || null) : null" alt="">
+                </button>
               </div>
             </div>
           </template>

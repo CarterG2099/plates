@@ -90,6 +90,28 @@ export function nearestWeight(weightLog, ownerEmail, takenOn, windowDays = 7) {
   return best ? best.lb : null;
 }
 
+/**
+ * The photo taken nearest a moment, for the weight chart's readout.
+ *
+ * Three days either side: a weigh-in and a photo from the same stretch of the
+ * same week are the same body, further apart they are just two dates. Owner is
+ * filtered here because the chart is one person's series and the photos array
+ * carries both members'.
+ */
+export function photoNear(photos, ownerEmail, atIso, windowDays = 3) {
+  const at = new Date(atIso).getTime();
+  const window = windowDays * 86_400_000;
+  const email = String(ownerEmail ?? '').toLowerCase();
+
+  let best = null;
+  for (const p of photos ?? []) {
+    if (p.deleted_at || p.owner_email?.toLowerCase() !== email) continue;
+    const gap = Math.abs(new Date(`${p.taken_on}T12:00:00`).getTime() - at);
+    if (gap <= window && (!best || gap < best.gap)) best = { photo: p, gap };
+  }
+  return best?.photo ?? null;
+}
+
 /** Downscale + upload + row. Split from addPhoto so the row logic is testable. */
 export async function savePhoto({ blob, takenOn, pose, note, ownerEmail }) {
   const objectPath = `${crypto.randomUUID()}.jpg`;

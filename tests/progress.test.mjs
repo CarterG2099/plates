@@ -175,3 +175,24 @@ test('nearestWeight only reads the photo owner\'s weigh-ins', () => {
   ];
   assert.equal(progress.nearestWeight(log, EMAIL, '2026-09-02'), 186);
 });
+
+// ---- the photo behind a weight reading ------------------------------------------
+
+test('photoNear picks the closest photo inside three days', () => {
+  const photos = [
+    { taken_on: '2026-09-01', owner_email: EMAIL },
+    { taken_on: '2026-09-06', owner_email: EMAIL },
+    { taken_on: '2026-09-09', owner_email: EMAIL },
+  ];
+  const hit = progress.photoNear(photos, EMAIL, '2026-09-07T08:00:00Z');
+  assert.equal(hit.taken_on, '2026-09-06');
+});
+
+test('photoNear returns null rather than a photo of a different body or month', () => {
+  const photos = [
+    { taken_on: '2026-08-01', owner_email: EMAIL },                       // too far
+    { taken_on: '2026-09-07', owner_email: 'aana@example.com' },          // not this series
+    { taken_on: '2026-09-07', owner_email: EMAIL, deleted_at: 'x' },      // deleted
+  ];
+  assert.equal(progress.photoNear(photos, EMAIL, '2026-09-07T08:00:00Z'), null);
+});
