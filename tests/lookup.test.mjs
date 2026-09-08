@@ -322,3 +322,52 @@ test('a per-serving figure that disagrees with per-100g is trusted', () => {
   });
   assert.equal(Math.round(draft.calories), 163, 'the published serving wins');
 });
+
+// ---- contradictory label lines -----------------------------------------------
+
+// The Chobani shake that shipped this: OFF's record claimed 78.4 g added sugars
+// against 11 g total sugars in a 170 kcal bottle. Sub-lines are subsets of their
+// parents, so the child is the figure that has to go.
+test('added sugars beyond total sugars are dropped, not logged', async () => {
+  const result = await scan({
+    product_name: 'Mixed Berry Vanilla Protein Shake',
+    brands: 'Chobani',
+    serving_size: '296 ml',
+    serving_quantity: 296,
+    nutriments: {
+      'energy-kcal_serving': 170, proteins_serving: 30, carbohydrates_serving: 13,
+      fat_serving: 3, sugars_serving: 11, 'added-sugars_serving': 78.4,
+    },
+  });
+  assert.equal(result.draft.added_sugars_g, null, 'a contradiction is not data');
+  assert.equal(result.draft.sugars_g, 11, 'the corroborated parent line survives');
+});
+
+test('sub-lines within rounding of their parent survive', async () => {
+  const result = await scan({
+    product_name: 'Granola',
+    serving_size: '55 g',
+    serving_quantity: 55,
+    nutriments: {
+      'energy-kcal_serving': 220, carbohydrates_serving: 37,
+      sugars_serving: 12, 'added-sugars_serving': 12.8,   // both rounded, believable
+      fat_serving: 6, 'saturated-fat_serving': 1,
+    },
+  });
+  assert.equal(result.draft.added_sugars_g, 12.8);
+  assert.equal(result.draft.saturated_fat_g, 1);
+});
+
+test('a dropped parent still vets its children on the published figure', async () => {
+  const result = await scan({
+    product_name: 'Nonsense Bar',
+    serving_size: '40 g',
+    serving_quantity: 40,
+    nutriments: {
+      'energy-kcal_serving': 150, carbohydrates_serving: 20,
+      sugars_serving: 90, 'added-sugars_serving': 95,   // both impossible
+    },
+  });
+  assert.equal(result.draft.sugars_g, null);
+  assert.equal(result.draft.added_sugars_g, null);
+});

@@ -119,7 +119,7 @@ function toDraft(product, code) {
   const size = parseServing(product);
   const basis = servingBasis(n, size);
 
-  return {
+  return dropContradictions({
     barcode: code,
     name: (product.product_name || product.generic_name || '').trim() || `Barcode ${code}`,
     brand: firstBrand(product.brands),
@@ -164,7 +164,38 @@ function toDraft(product, code) {
       + ` · unit: ${JSON.stringify(product.serving_quantity_unit ?? null)}`
       + ` · kcal_serving: ${JSON.stringify(n['energy-kcal_serving'] ?? null)}`,
     source: 'off',
-  };
+  });
+}
+
+/**
+ * Drop label lines that contradict their parent line.
+ *
+ * A label's sub-lines are subsets: saturated and trans fat are part of total
+ * fat, fiber and sugars part of total carbohydrate, added sugars part of total
+ * sugars. OFF is crowd-entered and ships contradictions — a Chobani shake
+ * arrived claiming 78 g added sugars on 11 g total sugars, in a 170 kcal
+ * bottle. The parent figure is the one the calorie count corroborates, so the
+ * child is the figure dropped. One gram of headroom, because both lines were
+ * independently rounded.
+ */
+const SUBSET_LINES = [
+  ['saturated_fat_g', 'fat_g'],
+  ['trans_fat_g', 'fat_g'],
+  ['fiber_g', 'carbs_g'],
+  ['sugars_g', 'carbs_g'],
+  ['added_sugars_g', 'sugars_g'],
+];
+
+function dropContradictions(draft) {
+  // Parents as published: a parent that gets dropped for its own contradiction
+  // still vets its children on the figures it arrived with.
+  const original = { ...draft };
+  for (const [child, parent] of SUBSET_LINES) {
+    const c = draft[child];
+    const p = original[parent];
+    if (c != null && p != null && Number(c) > Number(p) + 1) draft[child] = null;
+  }
+  return draft;
 }
 
 /**
