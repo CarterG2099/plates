@@ -990,3 +990,37 @@ test('nutrientContributions of an empty day is empty, not an error', () => {
   assert.deepEqual(food.nutrientContributions([], 'sodium_mg'), { items: [], unreported: 0 });
   assert.deepEqual(food.nutrientContributions(undefined, 'sodium_mg'), { items: [], unreported: 0 });
 });
+
+// ---- the week's average day -----------------------------------------------------
+
+test('weeklyNutritionLabel averages across logged days only', () => {
+  const now = new Date(2026, 8, 8, 12);
+  const log = [
+    { owner_email: 'c@x.com', logged_at: new Date(2026, 8, 8, 9).toISOString(), calories: 2000, protein_g: 150 },
+    { owner_email: 'c@x.com', logged_at: new Date(2026, 8, 7, 9).toISOString(), calories: 1000, protein_g: 50 },
+    { owner_email: 'c@x.com', logged_at: new Date(2026, 8, 7, 13).toISOString(), calories: 800, protein_g: 70 },
+    // Three unlogged days in between must not dilute the average.
+  ];
+  const label = food.weeklyNutritionLabel(log, 'c@x.com', { end: now });
+  assert.equal(label.loggedDays, 2);
+  assert.equal(label.calories, Math.round((2000 + 1800) / 2));
+  assert.equal(label.rows.find((r) => r.key === 'protein_g').value, (150 + 120) / 2);
+});
+
+test('weeklyNutritionLabel ignores entries outside the window and other owners', () => {
+  const now = new Date(2026, 8, 8, 12);
+  const log = [
+    { owner_email: 'c@x.com', logged_at: new Date(2026, 8, 8, 9).toISOString(), calories: 2000 },
+    { owner_email: 'c@x.com', logged_at: new Date(2026, 7, 20, 9).toISOString(), calories: 9000 },
+    { owner_email: 'a@x.com', logged_at: new Date(2026, 8, 8, 9).toISOString(), calories: 9000 },
+  ];
+  const label = food.weeklyNutritionLabel(log, 'c@x.com', { end: now });
+  assert.equal(label.loggedDays, 1);
+  assert.equal(label.calories, 2000);
+});
+
+test('an empty week has no label and says zero logged days', () => {
+  const label = food.weeklyNutritionLabel([], 'c@x.com');
+  assert.equal(label.loggedDays, 0);
+  assert.equal(label.hasAny, false);
+});

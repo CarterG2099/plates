@@ -206,7 +206,7 @@ export function sumTotals(entries) {
  * prints — an undercount beats a blank — and `partial` is true so the label
  * can say so instead of passing an undercount off as a total.
  */
-export function dayNutritionLabel(entries) {
+function sumLabelLines(entries) {
   const sums = {};
   let partial = false;
 
@@ -229,7 +229,41 @@ export function dayNutritionLabel(entries) {
   // real-looking "Calories 0". Undefined keeps unknown meaning unknown.
   if (sums.calories === null) sums.calories = undefined;
 
+  return { sums, partial };
+}
+
+export function dayNutritionLabel(entries) {
+  const { sums, partial } = sumLabelLines(entries);
   return { ...nutritionLabel(sums), partial };
+}
+
+/**
+ * The average logged day over a window, as a label.
+ *
+ * Averaged across the days that have entries, not the calendar window — three
+ * unlogged days would otherwise quietly dilute everything by 40%, turning a
+ * gap in the log into a claim about eating less. `loggedDays` is returned so
+ * the card can say what the average is actually over.
+ */
+export function weeklyNutritionLabel(log, ownerEmail, { end = new Date(), days = 7 } = {}) {
+  const entries = [];
+  let loggedDays = 0;
+
+  for (let i = 0; i < days; i++) {
+    const dayEntries = entriesForDay(log, ownerEmail, addDays(end, -i));
+    if (!dayEntries.length) continue;
+    loggedDays += 1;
+    entries.push(...dayEntries);
+  }
+
+  const { sums, partial } = sumLabelLines(entries);
+  if (loggedDays > 1) {
+    for (const key of Object.keys(sums)) {
+      if (sums[key] != null) sums[key] /= loggedDays;
+    }
+  }
+
+  return { ...nutritionLabel(sums), partial, loggedDays };
 }
 
 /**

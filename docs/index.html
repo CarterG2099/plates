@@ -1934,6 +1934,63 @@
           </p>
         </div>
 
+        <!-- The average logged day, as a label ------------------------------- -->
+        <div class="card" x-show="weekLabel.loggedDays">
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Average day</div>
+              <div class="stat-sub">
+                last 7 · averaged across
+                <span x-text="weekLabel.loggedDays"></span>
+                logged <span x-text="weekLabel.loggedDays === 1 ? 'day' : 'days'"></span>
+              </div>
+            </div>
+            <button class="btn" @click="weekLabelOpen = !weekLabelOpen"
+                    x-text="weekLabelOpen ? 'Hide' : 'Show'"></button>
+          </div>
+
+          <div class="nutrition" x-show="weekLabelOpen && weekLabel.hasAny" x-cloak>
+            <div class="nf-title">Nutrition Facts</div>
+            <div class="nf-serving">
+              <span>Serving size</span><span>1 average day</span>
+            </div>
+
+            <div class="nf-calories">
+              <span>Calories</span><b x-text="weekLabel.calories ?? '—'"></b>
+            </div>
+
+            <div class="nf-dv">% Daily Value*</div>
+
+            <template x-for="r in weekLabel.printedRows" :key="r.key">
+              <div class="nf-row" :class="[`nf-in-${r.indent}`, r.bold && 'is-major']">
+                <span class="nf-name">
+                  <span x-text="r.name"></span>
+                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
+                </span>
+                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
+              </div>
+            </template>
+
+            <div class="nf-rule" x-show="weekLabel.printedMicros.length"></div>
+
+            <template x-for="r in weekLabel.printedMicros" :key="r.key">
+              <div class="nf-row">
+                <span class="nf-name">
+                  <span x-text="r.name"></span>
+                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
+                </span>
+                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
+              </div>
+            </template>
+
+            <p class="nf-note">
+              * Percent Daily Values are based on a 2,000 calorie diet.
+              <span x-show="weekLabel.partial">Not every food reported every
+              line, so lines below the macros can undercount.</span>
+            </p>
+          </div>
+        </div>
+
         <!-- Body weight ------------------------------------------------------ -->
         <div class="card">
           <div class="readout-head">

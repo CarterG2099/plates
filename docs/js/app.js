@@ -3390,6 +3390,10 @@ Alpine.data('statsPage', () => ({
 
   get goal() { return food.currentGoal(this.data.goals, this.email); },
 
+  /** The average logged day, printed through the same label the sheets use. */
+  weekLabelOpen: false,
+  get weekLabel() { return food.weeklyNutritionLabel(this.data.log, this.email); },
+
   get weight() { return stats.weightSeries(this.data.weightLog, this.email); },
   get weightSummary() { return stats.weightSummary(this.weight, this.goal); },
 
