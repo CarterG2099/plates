@@ -713,14 +713,20 @@
 
 
 /* ---- the workout's progress bar --------------------------------------------
-   Deliberately mute: a 4px track between the timer and the cards. No numbers,
-   no animation — it fills as sets are checked and that is the whole story. */
+   Deliberately mute: a 4px track pinned to the top of the screen for the whole
+   workout. No numbers, no animation — it fills as sets are checked and that is
+   the whole story. The box-shadow is a page-coloured halo so the cards
+   scrolling underneath vanish behind it instead of grazing it. */
 
 .session-progress {
+  position: sticky;
+  top: var(--inset-top);
+  z-index: 4;   /* over the cards; a dragged card (z 5) still passes above */
   height: 4px;
   border-radius: var(--radius-pill);
   background: var(--color-border);
   overflow: hidden;
+  box-shadow: 0 0 0 6px var(--color-ink);
 }
 .session-progress-fill {
   height: 100%;
