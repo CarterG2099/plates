@@ -146,19 +146,21 @@
           </div>
 
           <div class="macros">
+            <!-- Buttons: each opens the same who-contributed sheet the label
+                 lines use, keyed to that macro. -->
             <template x-for="m in [
               { key: 'protein_g', name: 'Protein', color: 'var(--color-protein)' },
               { key: 'carbs_g',   name: 'Carbs',   color: 'var(--color-carbs)' },
               { key: 'fat_g',     name: 'Fat',     color: 'var(--color-fat)' }
             ]" :key="m.key">
-              <div class="macro">
+              <button class="macro" @click="openNutrient({ key: m.key, name: m.name, unit: 'g' })">
                 <span class="dot" :style="`background: ${m.color}`"></span>
                 <span class="macro-name" x-text="m.name"></span>
                 <span class="macro-bar"><i :style="`background: ${m.color}; width: ${percent(m.key)}%`"></i></span>
                 <span class="macro-val">
                   <span x-text="round(totals[m.key])"></span><s x-show="target(m.key)">/<span x-text="target(m.key)"></span></s>
                 </span>
-              </div>
+              </button>
             </template>
           </div>
 
