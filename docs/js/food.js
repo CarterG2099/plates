@@ -197,6 +197,41 @@ export function sumTotals(entries) {
   return totals;
 }
 
+/**
+ * The whole nutrition label for a day of eating, summed across every entry.
+ *
+ * Null-preserving, unlike sumTotals: a nutrient no food reported stays null and
+ * its line is omitted, because a day of foods that never mentioned potassium
+ * has an unknown potassium, not zero. A line only some foods reported still
+ * prints — an undercount beats a blank — and `partial` is true so the label
+ * can say so instead of passing an undercount off as a total.
+ */
+export function dayNutritionLabel(entries) {
+  const sums = {};
+  let partial = false;
+
+  for (const key of MACROS) {
+    let sum = null;
+    let reported = 0;
+    for (const e of entries ?? []) {
+      const value = e[key];
+      if (value === null || value === undefined || value === '') continue;
+      const n = Number(value);
+      if (!Number.isFinite(n)) continue;
+      sum = (sum ?? 0) + n;
+      reported += 1;
+    }
+    sums[key] = sum;
+    if (sum !== null && reported < (entries?.length ?? 0)) partial = true;
+  }
+
+  // Number(null) is 0, so a day with nothing logged would otherwise print a
+  // real-looking "Calories 0". Undefined keeps unknown meaning unknown.
+  if (sums.calories === null) sums.calories = undefined;
+
+  return { ...nutritionLabel(sums), partial };
+}
+
 /** Entries for one day, oldest first, grouped ready for the Today screen. */
 export function entriesForDay(log, ownerEmail, date = new Date()) {
   return log

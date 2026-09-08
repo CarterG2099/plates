@@ -161,6 +161,57 @@
               </div>
             </template>
           </div>
+
+          <!-- The rest of the panel — sodium, sugars, the micros — summed
+               across everything eaten, on request. The macro rows above stay
+               the headline; this answers the longer questions. -->
+          <div class="chips" x-show="entries.length && dayNutrition.hasDetail">
+            <button class="chip" :class="labelOpen && 'is-active'"
+                    @click="labelOpen = !labelOpen"
+                    x-text="labelOpen ? 'Hide full label' : 'Full label'"></button>
+          </div>
+
+          <div class="nutrition" x-show="labelOpen && dayNutrition.hasAny" x-cloak>
+            <div class="nf-title">Nutrition Facts</div>
+            <div class="nf-serving">
+              <span>Serving size</span>
+              <span x-text="`1 day · ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`"></span>
+            </div>
+
+            <div class="nf-calories">
+              <span>Calories</span><b x-text="dayNutrition.calories ?? '—'"></b>
+            </div>
+
+            <div class="nf-dv">% Daily Value*</div>
+
+            <template x-for="r in dayNutrition.printedRows" :key="r.key">
+              <div class="nf-row" :class="[`nf-in-${r.indent}`, r.bold && 'is-major']">
+                <span class="nf-name">
+                  <span x-text="r.name"></span>
+                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
+                </span>
+                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
+              </div>
+            </template>
+
+            <div class="nf-rule" x-show="dayNutrition.printedMicros.length"></div>
+
+            <template x-for="r in dayNutrition.printedMicros" :key="r.key">
+              <div class="nf-row">
+                <span class="nf-name">
+                  <span x-text="r.name"></span>
+                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
+                </span>
+                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
+              </div>
+            </template>
+
+            <p class="nf-note">
+              * Percent Daily Values are based on a 2,000 calorie diet.
+              <span x-show="dayNutrition.partial">Not every food reported every
+              line, so lines below the macros can undercount.</span>
+            </p>
+          </div>
         </div>
 
         <template x-if="!entries.length">

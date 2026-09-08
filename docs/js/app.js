@@ -774,6 +774,9 @@ Alpine.data('todayPage', () => ({
 
   get totals() { return food.sumTotals(this.entries); },
 
+  /** The whole label for the day, behind its toggle. */
+  labelOpen: false,
+  get dayNutrition() { return food.dayNutritionLabel(this.entries); },
 
   get calorieTarget() { return Number(this.goal?.calorie_target) || null; },
 

@@ -921,3 +921,42 @@ test('the draft save enumerates nothing — it spreads food.MACROS', async () =>
   assert.doesNotMatch(src, /fiber_g: numeric\(d\.fiber_g\)/,
     'the enumerated list should be gone, not merely supplemented');
 });
+
+// ---- the day's full label -----------------------------------------------------
+
+test('dayLabel sums every line across the day', () => {
+  const label = food.dayNutritionLabel([
+    { calories: 500, fat_g: 10, sodium_mg: 300, potassium_mg: 400 },
+    { calories: 300, fat_g: 5, sodium_mg: 200, potassium_mg: 100 },
+  ]);
+  assert.equal(label.calories, 800);
+  assert.equal(label.rows.find((r) => r.key === 'fat_g').value, 15);
+  assert.equal(label.micros.find((r) => r.key === 'potassium_mg').value, 500);
+  assert.equal(label.partial, false);
+});
+
+test('a nutrient nobody reported stays off the label instead of printing as zero', () => {
+  // Unknown and zero are different statements; sumTotals coerces to 0 for the
+  // macro bars, but the label must not claim 0mg of a thing nobody measured.
+  const label = food.dayNutritionLabel([
+    { calories: 500, fat_g: 10 },
+    { calories: 300, fat_g: 5 },
+  ]);
+  assert.equal(label.printedMicros.length, 0);
+  assert.equal(label.micros.find((r) => r.key === 'potassium_mg').value, null);
+});
+
+test('a line only some foods reported still prints, and the label says partial', () => {
+  const label = food.dayNutritionLabel([
+    { calories: 500, fat_g: 10, potassium_mg: 400 },
+    { calories: 300, fat_g: 5 },
+  ]);
+  assert.equal(label.micros.find((r) => r.key === 'potassium_mg').value, 400);
+  assert.equal(label.partial, true, 'an undercount must announce itself');
+});
+
+test('dayLabel of an empty day has nothing to print', () => {
+  const label = food.dayNutritionLabel([]);
+  assert.equal(label.hasAny, false);
+  assert.equal(label.partial, false);
+});
