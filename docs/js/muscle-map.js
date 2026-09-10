@@ -323,9 +323,18 @@ export function exerciseArtPair(exercise, name = '') {
   // Full size here — the detail sheet renders it at ~150px — but not lazy:
   // the sheet is already on screen when this renders, so deferring only delays
   // the swap from figures to drawing.
+  //
+  // The other end of the movement, when it has been drawn. CSS alternates the
+  // two, so a start frame and an end frame read as the exercise being done —
+  // which one frame at the recognisable position never quite did. Same
+  // load-or-vanish contract as the first: no file, no class, and the sheet
+  // looks exactly as it did with one drawing.
   return `${figure}<img class="art" alt="" decoding="async"`
     + ` src="/img/exercises/${slug}.png"`
-    + ` onload="this.parentElement.classList.add('has-art')" onerror="this.remove()">`;
+    + ` onload="this.parentElement.classList.add('has-art')" onerror="this.remove()">`
+    + `<img class="art art-2" alt="" decoding="async"`
+    + ` src="/img/exercises/${slug}-2.png"`
+    + ` onload="this.parentElement.classList.add('has-art-2')" onerror="this.remove()">`;
 }
 
 export function muscleMap(exercise, name = '', { both: pair = false } = {}) {

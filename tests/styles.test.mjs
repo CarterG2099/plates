@@ -128,3 +128,15 @@ test('things floating above the tab bar track its height rather than the raw ins
       `${o.px}px offset must use --tabbar-extra, not the raw inset`);
   }
 });
+
+test('the second drawing only moves once both have loaded, and never under reduced motion', () => {
+  // Both classes are set by the images' own onload. Animating on has-art-2 alone
+  // would fade a second position in and out over the grey figure pair if the
+  // first drawing failed, which is the one combination that must look untouched.
+  assert.match(components, /\.figure-pair\.has-art\.has-art-2 \.art-2 \{ animation: art-swap/);
+  assert.match(components, /\.figure-pair \.art-2 \{[^}]*opacity: 0;/,
+    'invisible until its own onload says it exists');
+
+  const reduced = components.slice(components.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.match(reduced, /\.figure-pair\.has-art\.has-art-2 \.art-2 \{ animation: none; \}/);
+});

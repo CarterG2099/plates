@@ -137,12 +137,15 @@ test('exerciseArt renders the figure and layers the image over it', () => {
 test('every full-size drawing has its 128px thumbnail and a manifest entry', async () => {
   const fs = await import('node:fs');
   // Sorted as slugs, not filenames — "-" and "." order differently, and the
-  // manifest holds slugs.
+  // manifest holds slugs. Second positions (<slug>-2.png) are left out: they
+  // show only in the sheet, so they have no thumbnail and no manifest entry.
   const slugsIn = (dir) => fs.readdirSync(dir)
-    .filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4)).sort();
+    .filter((f) => f.endsWith('.png') && !f.endsWith('-2.png')).map((f) => f.slice(0, -4)).sort();
   const full = slugsIn('docs/img/exercises');
   const thumbs = slugsIn('docs/img/exercises/t');
   assert.deepEqual(thumbs, full, 'run `node tools/art.mjs thumbs` to backfill');
+  assert.ok(!fs.readdirSync('docs/img/exercises/t').some((f) => f.endsWith('-2.png')),
+    'lists never animate, so a second-position thumbnail would be warmed by the service worker and shown nowhere');
 
   const manifest = JSON.parse(fs.readFileSync('docs/img/exercises/t/manifest.json', 'utf8'));
   assert.deepEqual(manifest, full,
@@ -174,6 +177,20 @@ test('exerciseArtPair hides the pair only once the drawing has loaded', () => {
   const html = mm.exerciseArtPair(null, 'Bench Press (Barbell)');
   assert.match(html, /onload="this\.parentElement\.classList\.add\('has-art'\)"/);
   assert.match(html, /onerror="this\.remove\(\)"/);
+});
+
+// The sheet asks for the other end of the movement as well. It has to fail as
+// quietly as the first image — most exercises will only ever have one drawing —
+// and it must stay out of the lists, which re-render constantly and never
+// animate.
+test('exerciseArtPair asks for the second position, and only in the sheet', () => {
+  const html = mm.exerciseArtPair(null, 'Bench Press (Barbell)');
+  assert.match(html, /class="art art-2"[^>]*src="\/img\/exercises\/bench-press-barbell-2\.png"/);
+  assert.match(html, /onload="this\.parentElement\.classList\.add\('has-art-2'\)"/);
+  assert.equal((html.match(/onerror="this\.remove\(\)"/g) || []).length, 2,
+    'each image removes itself on its own 404');
+  assert.equal(mm.exerciseArt(null, 'Bench Press (Barbell)').includes('-2.png'), false,
+    'lists stay one static thumbnail');
 });
 
 test('exerciseArtPair falls back to the pair alone when there is no name', () => {

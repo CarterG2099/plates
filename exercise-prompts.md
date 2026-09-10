@@ -113,3 +113,255 @@ difference because it is the only thing telling the two drawings apart.
 | `hammer-curl` / `hammer-curl-machine` | `hammer-curl-rope` |
 | `wrist-curl-barbell` | `reverse-wrist-curl-barbell` |
 | `hip-adduction-cable` | `hip-abduction-cable` |
+
+---
+
+## Second positions — the other end of the movement
+
+Each drawing shows one end of the rep. A second drawing at the other end, shown
+alternating with the first in the exercise sheet, is how the movement gets
+across — the way Hevy and ExRx do it. A video model was tried first (see
+`exercise-videos.md`); it put the bar through the figure's neck.
+
+**The 46 exercises in the current routines**, listed below with what the
+existing drawing shows and what the second one must. The rest of the library
+can follow the same way.
+
+The second drawing is filed beside the first as `<slug>-2.png`, and the app
+picks it up the moment the file exists, exactly like the first. The slicer has a
+command for it — full size only, no thumbnail, because lists never animate:
+
+```
+node tools/art.mjs second <image.png> <slug>
+```
+
+### Paste this once, at the start of the conversation
+
+The existing drawing goes in as an attachment every time, so the style is
+carried by the image rather than by the description. What the primer has to fix
+is everything *except* the pose, because the two drawings are shown one over the
+other and any drift between them — camera, framing, equipment — shows as a jump.
+
+> I am going to send you drawings from a set, one at a time, and ask for each one
+> redrawn with the figure at the other end of the movement — the position I
+> describe with it.
+>
+> Everything else must be identical to the drawing I attach: the same camera
+> angle and distance, the same framing, the same figure, the same equipment in
+> the same place, the same lighting, the same red-orange highlight on the same
+> muscle, the same solid black background. Only the body's position changes, and
+> only as much as the movement requires. The two images will be shown alternating
+> in the same spot, so anything that moves besides the body will visibly jump.
+>
+> Return one square image. No text, labels, arrows or watermarks.
+>
+> Reply "ready" and I will send the first one.
+
+### Then send each one like this
+
+> **Same image, other end of the movement:** arms locked out straight, the bar held high above the chest.
+
+with the drawing attached. Check the framing matches before slicing — hold the
+two side by side. A figure that has shifted or a bench that has grown is a redo,
+and "again, but keep the camera exactly where it is" is usually enough.
+
+### The list
+
+**Chest and shoulders**
+
+**`bench-press-barbell`** — drawn at the bottom, bar on the chest.
+
+> Same image, other end of the movement: arms locked out straight, the bar held high above the chest.
+
+**`incline-bench-press-dumbbell`** — drawn at the top, arms straight.
+
+> Same image, other end of the movement: dumbbells lowered to shoulder level, elbows bent out wide.
+
+**`rear-delt-reverse-fly-machine`** — drawn with the arms swept wide.
+
+> Same image, other end of the movement: arms forward, the handles together in front of the chest.
+
+**`chest-fly-machine`** — drawn with the arms open wide.
+
+> Same image, other end of the movement: the handles brought together in front of the chest, arms nearly touching.
+
+**`shoulder-press-machine-plates`** — drawn with the handles at shoulder height.
+
+> Same image, other end of the movement: arms locked out straight overhead, handles and plates raised.
+
+**`seated-lateral-raise`** — drawn with the arms at shoulder height.
+
+> Same image, other end of the movement: dumbbells hanging at the sides beside the thighs.
+
+**`incline-bench-press-barbell`** — drawn at the top, arms locked out.
+
+> Same image, other end of the movement: the bar lowered to the upper chest just below the collarbone, elbows bent.
+
+**`iso-lateral-chest-press-machine`** — drawn with the handles at the chest.
+
+> Same image, other end of the movement: handles pushed forward to straight arms, the machine arms swung forward with them.
+
+**`lateral-raise`** — drawn with the arms at shoulder height.
+
+> Same image, other end of the movement: dumbbells hanging at the sides.
+
+
+**Back**
+
+**`pull-up`** — drawn at a dead hang.
+
+> Same image, other end of the movement: chin above the bar, elbows bent and pulled down.
+
+**`bent-over-row-barbell`** — drawn with the bar hanging at arm's length.
+
+> Same image, other end of the movement: the bar pulled up to the lower ribs, elbows driven back; the torso keeps exactly its lean.
+
+**`lat-pulldown`** — drawn with the bar overhead, arms straight.
+
+> Same image, other end of the movement: the bar pulled down to the upper chest, elbows down and back.
+
+**`seated-cable-row-v-grip-cable`** — drawn with the handle pulled in to the stomach.
+
+> Same image, other end of the movement: arms extended straight forward toward the pulley, torso still upright.
+
+**`single-arm-lat-pulldown`** — drawn with the handle overhead, arm straight.
+
+> Same image, other end of the movement: the handle pulled down beside the shoulder, elbow toward the hip.
+
+**`back-extension`** — drawn at the top, body in one straight line.
+
+> Same image, other end of the movement: torso hinged down toward the floor at the hips, legs unchanged on the pads.
+
+**`iso-lateral-row-machine`** — drawn with the arms extended forward.
+
+> Same image, other end of the movement: handles pulled back to the ribs, elbows behind the body, the machine arms swung back.
+
+**`seated-row-bar-wide-grip-cable`** — drawn with the arms extended forward.
+
+> Same image, other end of the movement: the bar pulled in to the lower chest, elbows flared wide.
+
+**`straight-arm-lat-pulldown-cable`** — drawn with the bar at the thighs.
+
+> Same image, other end of the movement: arms still locked straight but raised in front to shoulder height, the bar at head height.
+
+**`shrug`** — drawn with the shoulders lifted.
+
+> Same image, other end of the movement: shoulders relaxed and dropped, arms hanging long.
+
+**`reverse-curl-ez-bar`** — drawn with the bar hanging at arm's length.
+
+> Same image, other end of the movement: the bar curled up to the shoulders, palms still facing down, elbows at the sides.
+
+**`cycling`** — drawn with one foot at the bottom of the pedal stroke.
+
+> Same image, other end of the movement: the pedals half a turn on, the other foot at the bottom. No red on either.
+
+
+**Legs**
+
+**`squat-barbell`** — drawn at the bottom of the squat.
+
+> Same image, other end of the movement: standing tall, hips and knees straight, the bar on the upper back.
+
+**`romanian-deadlift`** — drawn hinged over, bar below the knees.
+
+> Same image, other end of the movement: standing tall, the bar resting against the thighs, arms straight.
+
+**`leg-extension`** — drawn with the legs straight out.
+
+> Same image, other end of the movement: knees bent to ninety degrees, the ankle pad down by the seat.
+
+**`leg-press`** — drawn with the legs nearly straight.
+
+> Same image, other end of the movement: knees bent deep, the sled lowered toward the chest.
+
+**`standing-calf-raise`** — drawn up on the toes.
+
+> Same image, other end of the movement: heels dropped below the edge of the platform.
+
+**`single-leg-standing-calf-raise-dumbbell`** — drawn up on the toes.
+
+> Same image, other end of the movement: the heel dropped below the edge of the step, the other leg still lifted.
+
+
+**Arms and abs**
+
+**`curl-cable`** — drawn with the bar at the waist, arms straight.
+
+> Same image, other end of the movement: the bar curled to the shoulders, elbows at the sides.
+
+**`triceps-pushdown-rope`** — drawn with the rope at chest height, elbows bent.
+
+> Same image, other end of the movement: arms straight down, the two rope ends spread apart at the thighs.
+
+**`leg-raise-parallel-bars-weighted`** — drawn with the legs raised level.
+
+> Same image, other end of the movement: legs hanging straight down, the plate still between the feet.
+
+**`seated-incline-curl-dumbbell`** — drawn with the arm hanging straight.
+
+> Same image, other end of the movement: the dumbbell curled up to the shoulder, upper arm still hanging back.
+
+**`skullcrusher`** — drawn with the bar above the face, arms straight.
+
+> Same image, other end of the movement: elbows bent, the bar lowered behind the top of the head; upper arms still vertical.
+
+**`crunch-cable`** — drawn crunched down.
+
+> Same image, other end of the movement: kneeling upright with a straight spine, hands still holding the rope beside the head.
+
+**`hammer-curl`** — drawn with both dumbbells curled up.
+
+> Same image, other end of the movement: dumbbells hanging at the sides, palms facing in.
+
+**`triceps-dip-weighted`** — drawn at the top, arms straight.
+
+> Same image, other end of the movement: elbows bent to ninety degrees, the body lowered between the bars.
+
+**`bicep-curl-dumbbell`** — drawn with one arm curled and one hanging.
+
+> Same image, other end of the movement: the same, swapped — the other arm curled, this one hanging.
+
+**`triceps-extension-dumbbell`** — drawn with the dumbbell behind the head.
+
+> Same image, other end of the movement: arms locked straight overhead, the dumbbell high above the head.
+
+**`hanging-leg-raise`** — drawn with the knees raised.
+
+> Same image, other end of the movement: legs hanging straight down.
+
+**`behind-the-back-curl-cable`** — drawn curled up.
+
+> Same image, other end of the movement: the arm hanging straight down and slightly behind the body, the cable taut to the low pulley.
+
+**`triceps-pushdown`** — drawn with the arms straight, bar at the thighs.
+
+> Same image, other end of the movement: elbows bent to ninety degrees, the bar at chest height.
+
+**`decline-sit-up`** — drawn sat up.
+
+> Same image, other end of the movement: lying back flat on the bench, hands still behind the head.
+
+**`hammer-curl-machine`** — drawn curled up.
+
+> Same image, other end of the movement: arms extended down the pad, the handles low.
+
+**`seated-dip-machine`** — drawn with the arms straight, pressed down.
+
+> Same image, other end of the movement: elbows bent to ninety degrees, the handles up beside the ribs.
+
+
+**Morning workout**
+
+**`stair-machine-steps`** — drawn mid-stride, one leg stepping up.
+
+> Same image, other end of the movement: the same stride with the legs swapped. No red on either.
+
+**`glute-kickback-machine`** — drawn with the leg kicked back.
+
+> Same image, other end of the movement: the working knee forward under the hip, foot low on the pad.
+
+**`pull-through-cable`** — drawn hinged over, rope back between the legs.
+
+> Same image, other end of the movement: standing tall with the hips forward, the rope pulled through to the front of the thighs.
+

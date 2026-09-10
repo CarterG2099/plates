@@ -15,6 +15,7 @@
 //   node tools/art.mjs sheet <image> --cols 3 <left> <middle> <right>
 //   node tools/art.mjs single <image> <slug>
 //   node tools/art.mjs region <image> <slug> <x> <y> <w> <h>
+//   node tools/art.mjs second <image> <slug>    the other end of the movement
 //   node tools/art.mjs thumbs                   regenerate every 128px thumbnail
 //
 // `region` is the escape hatch for a sheet that came back malformed — Gemini
@@ -106,6 +107,7 @@ function writeManifest() {
 
 function write(image, slug) {
   if (!/^[a-z0-9-]+$/.test(slug)) die(`"${slug}" is not a slug — lowercase, digits and hyphens only.`);
+  if (slug.endsWith('-2')) die(`"${slug}" is a second position — use: art.mjs second <image> ${slug.slice(0, -2)}`);
   const square = padToSquare(image);
 
   const file = path.join(OUT_DIR, `${slug}.png`);
@@ -121,14 +123,32 @@ function write(image, slug) {
   console.log(`${path.relative(ROOT, file)}  ${(fs.statSync(file).size / 1024).toFixed(0)}kB (+thumb)`);
 }
 
+/**
+ * The other end of the movement, filed beside the first drawing as <slug>-2.png.
+ *
+ * Full size only. Lists never animate, so a thumbnail here would be pre-warmed
+ * by the service worker on every install and shown nowhere.
+ */
+function writeSecond(image, slug) {
+  if (!/^[a-z0-9-]+$/.test(slug)) die(`"${slug}" is not a slug — lowercase, digits and hyphens only.`);
+  if (!fs.existsSync(path.join(OUT_DIR, `${slug}.png`))) {
+    die(`no first drawing for "${slug}" — a second position needs one to alternate with`);
+  }
+  const file = path.join(OUT_DIR, `${slug}-2.png`);
+  fs.writeFileSync(file, encode(resize(padToSquare(image), SIZE)));
+  console.log(`${path.relative(ROOT, file)}  ${(fs.statSync(file).size / 1024).toFixed(0)}kB`);
+}
+
 const [command, file, ...rest] = process.argv.slice(2);
-if (!command) die('usage: art.mjs sheet|single|region <image> ... | thumbs');
+if (!command) die('usage: art.mjs sheet|single|region|second <image> ... | thumbs');
 
 if (command === 'thumbs') {
-  // Backfill: regenerate every thumbnail from the full-size drawings.
+  // Backfill: regenerate every thumbnail from the full-size drawings. Second
+  // positions are skipped for the reason writeSecond gives.
   fs.mkdirSync(THUMB_DIR, { recursive: true });
   let total = 0;
-  for (const f of fs.readdirSync(OUT_DIR).filter((f) => f.endsWith('.png')).sort()) {
+  const isFirst = (f) => f.endsWith('.png') && !f.endsWith('-2.png');
+  for (const f of fs.readdirSync(OUT_DIR).filter(isFirst).sort()) {
     const img = decode(fs.readFileSync(path.join(OUT_DIR, f)));
     const out = encode(resize(img, THUMB_SIZE));
     fs.writeFileSync(path.join(THUMB_DIR, f), out);
@@ -139,7 +159,7 @@ if (command === 'thumbs') {
   process.exit(0);
 }
 
-if (!file) die('usage: art.mjs sheet|single|region <image> ...');
+if (!file) die('usage: art.mjs sheet|single|region|second <image> ...');
 if (!fs.existsSync(file)) die(`no such file: ${file}`);
 
 const source = decode(fs.readFileSync(file));
@@ -148,6 +168,10 @@ if (command === 'single') {
   const [slug] = rest;
   if (!slug || rest.length > 1) die('single takes exactly one slug');
   write(source, slug);
+} else if (command === 'second') {
+  const [slug] = rest;
+  if (!slug || rest.length > 1) die('second takes exactly one slug — the first drawing\'s, without -2');
+  writeSecond(source, slug);
 } else if (command === 'sheet') {
   let cols = 2;
   const args = [...rest];
@@ -194,5 +218,5 @@ if (command === 'single') {
   }
   write(crop(source, x, y, w, h), slug);
 } else {
-  die(`unknown command "${command}" — expected sheet, single or region`);
+  die(`unknown command "${command}" — expected sheet, single, region or second`);
 }
