@@ -828,13 +828,122 @@ export function libraryFor(exercises, ownerEmail) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// How well one typed word lands. Same idea as food.js's WEIGHT: the whole name
+// beats the start of the name, beats a word in it, beats a fragment inside it,
+// beats the muscle or the kit, beats a typo. Ordered so the sort is meaningful.
+const SEARCH_WEIGHT = { exact: 100, prefix: 60, word: 40, inside: 25, muscle: 15, fuzzy: 10 };
+
+/**
+ * Shorthand people type at the gym, tried only when the word itself lands
+ * nowhere. "db curl" and "rdl" are how the exercises get said out loud.
+ */
+const SHORTHAND = {
+  db: 'dumbbell', bb: 'barbell', kb: 'kettlebell', ez: 'ez bar', bw: 'bodyweight',
+  rdl: 'romanian deadlift', ohp: 'overhead press', bp: 'bench press', dl: 'deadlift',
+  tri: 'triceps', tris: 'triceps', bi: 'biceps', bis: 'biceps',
+  abs: 'core', ab: 'core', delt: 'shoulders', delts: 'shoulders', pec: 'chest', pecs: 'chest',
+  quad: 'quads', ham: 'hamstrings', hams: 'hamstrings', glute: 'glutes',
+};
+
+/** Two words one typo apart: a letter added, dropped, changed or swapped with its neighbour. */
+function oneEditApart(a, b) {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (a.length === b.length) {
+    return a.slice(i + 1) === b.slice(i + 1)
+      || (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2));
+  }
+  const [long, short] = a.length > b.length ? [a, b] : [b, a];
+  return long.slice(i + 1) === short.slice(i);
+}
+
+/** Everything about an exercise a search could land on, split once per search. */
+function haystack(exercise) {
+  const name = exercise.name.toLowerCase();
+  const tokens = name.split(/[^a-z0-9]+/).filter(Boolean);
+  const key = muscleKeyOf(exercise);
+  const extra = [
+    exercise.primary_muscle, ...(exercise.secondary_muscles ?? []), equipmentOf(exercise),
+    key?.replace(/([A-Z])/g, ' $1'), groupOf(key),
+  ].join(' ').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return { name, tokens, joined: tokens.join(''), extra };
+}
+
+/** One typed word against one exercise. Zero means it landed nowhere. */
+function wordWeight(hay, word) {
+  // "curls" and "flies" should find curl and fly; the stem is tried alongside.
+  const stems = [word];
+  if (word.length > 3 && word.endsWith('ies')) stems.push(`${word.slice(0, -3)}y`);
+  else if (word.length > 3 && word.endsWith('s')) stems.push(word.slice(0, -1));
+
+  for (const w of stems) {
+    if (hay.tokens.some((t) => t.startsWith(w))) return SEARCH_WEIGHT.word;
+  }
+  // "ups" is too short to stem loosely — "ab" is inside "cable" — but as a
+  // whole word it is exactly what "pull ups" means.
+  if (word.length === 3 && word.endsWith('s') && hay.tokens.includes(word.slice(0, -1))) return SEARCH_WEIGHT.word;
+  // Inside the name with its spaces and hyphens removed: "crusher" finds
+  // Skullcrusher, "pushups" finds Push-Up, "down" finds Pulldown.
+  if (stems.some((w) => hay.joined.includes(w))) return SEARCH_WEIGHT.inside;
+  if (hay.extra.some((t) => t.startsWith(word))) return SEARCH_WEIGHT.muscle;
+  // A typo, but only in words long enough that one edit can't mean something else.
+  if (word.length >= 5 && hay.tokens.some((t) => oneEditApart(t, word))) return SEARCH_WEIGHT.fuzzy;
+  return 0;
+}
+
+/**
+ * A word, or what it is short for, whichever lands better. Both are tried so
+ * "abs" reaches Ab Crunch by its name and everything else by the core muscle.
+ */
+function termWeight(hay, word) {
+  const direct = wordWeight(hay, word);
+  if (!SHORTHAND[word]) return direct;
+  const weights = SHORTHAND[word].split(' ').map((w) => wordWeight(hay, w));
+  const expanded = weights.includes(0) ? 0 : Math.min(...weights);
+  return Math.max(direct, expanded);
+}
+
+/**
+ * How well an exercise answers what you typed.
+ *
+ * The whole query used to be one substring against the name, so "dumbbell curl"
+ * could not find "Bicep Curl (Dumbbell)", "skull crusher" could not find
+ * "Skullcrusher", and "rdl" found nothing at all. Now every word has to land
+ * somewhere — start of a word, inside the name, the muscle or the kit, one typo
+ * off, or spelled out from shorthand — and the score is the average of how well
+ * each landed. Typing the whole name still wins outright.
+ */
+function exerciseWeight(hay, q) {
+  if (hay.name === q) return SEARCH_WEIGHT.exact;
+  if (hay.name.startsWith(q)) return SEARCH_WEIGHT.prefix;
+
+  const words = q.split(/[^a-z0-9]+/).filter(Boolean);
+  let total = 0;
+  for (const word of words) {
+    const weight = termWeight(hay, word);
+    if (!weight) return 0;
+    total += weight;
+  }
+  return words.length ? total / words.length : 0;
+}
+
+/**
+ * Search the library, best match first.
+ *
+ * Ordered by fit rather than alphabetically once you have typed something, so
+ * "curl" puts Curl (Barbell) above Hammer Curl above the exercises that merely
+ * use a curl machine. Ties keep alphabetical order.
+ */
 export function searchExercises(library, term) {
   const q = term.trim().toLowerCase();
   if (!q) return library;
-  return library.filter((e) =>
-    e.name.toLowerCase().includes(q)
-    || (e.primary_muscle ?? '').toLowerCase().includes(q)
-    || (e.equipment ?? '').toLowerCase().includes(q));
+  return library
+    .map((e) => ({ e, weight: exerciseWeight(haystack(e), q) }))
+    .filter((m) => m.weight > 0)
+    .sort((a, b) => (b.weight - a.weight) || a.e.name.localeCompare(b.e.name))
+    .map((m) => m.e);
 }
 
 /**

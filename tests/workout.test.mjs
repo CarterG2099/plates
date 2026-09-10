@@ -1611,3 +1611,81 @@ test('setProgress of an empty session is zeros, not NaN', () => {
   assert.deepEqual(workout.setProgress([]), { done: 0, total: 0, pct: 0 });
   assert.deepEqual(workout.setProgress(undefined), { done: 0, total: 0, pct: 0 });
 });
+
+// ---- exercise search ---------------------------------------------------------
+//
+// The picker's search used to be one substring against the name, which meant
+// typing the exercise the way it is said — "dumbbell curl", "skull crusher",
+// "rdl" — found nothing. These pin the ways it now forgives you.
+
+const LIBRARY = [
+  ex('Ab Wheel Rollout', { primary_muscle: 'core', equipment: 'bodyweight' }),
+  ex('Bench Press (Barbell)', { primary_muscle: 'chest', equipment: 'barbell' }),
+  ex('Bench Press (Dumbbell)', { primary_muscle: 'chest', equipment: 'dumbbell' }),
+  ex('Bicep Curl (Dumbbell)', { primary_muscle: 'biceps', equipment: 'dumbbell' }),
+  ex('Curl (Barbell)', { primary_muscle: 'biceps', equipment: 'barbell' }),
+  ex('Hammer Curl', { primary_muscle: 'biceps', equipment: 'dumbbell' }),
+  ex('Hammer Curl (Machine)', { primary_muscle: 'biceps', equipment: 'machine' }),
+  ex('Hip Abduction (Machine)', { primary_muscle: 'gluteus medius', equipment: 'machine' }),
+  ex('Lat Pulldown', { primary_muscle: 'back', equipment: 'cable' }),
+  ex('Push-Up', { primary_muscle: 'chest', equipment: 'bodyweight' }),
+  ex('Romanian Deadlift', { primary_muscle: 'hamstrings', equipment: 'barbell' }),
+  ex('Skullcrusher', { primary_muscle: 'triceps', equipment: 'barbell' }),
+  ex('Squat (Barbell)'),
+  ex('Triceps Pushdown (Rope)', { primary_muscle: 'triceps', equipment: 'cable' }),
+];
+const found = (term) => workout.searchExercises(LIBRARY, term).map((e) => e.name);
+
+test('search words can come in any order', () => {
+  assert.deepEqual(found('dumbbell curl').slice(0, 1), ['Bicep Curl (Dumbbell)']);
+  assert.ok(found('curl dumbbell').includes('Bicep Curl (Dumbbell)'));
+});
+
+test('search finds a word inside a run-together or hyphenated name', () => {
+  assert.deepEqual(found('skull crusher'), ['Skullcrusher']);
+  assert.deepEqual(found('pushup'), ['Push-Up']);
+  assert.deepEqual(found('pull down'), ['Lat Pulldown']);
+});
+
+test('search understands gym shorthand, alongside the word itself', () => {
+  assert.deepEqual(found('rdl'), ['Romanian Deadlift']);
+  assert.deepEqual(found('db bench'), ['Bench Press (Dumbbell)']);
+  assert.ok(found('tri').includes('Triceps Pushdown (Rope)'));
+  assert.ok(found('tri').includes('Skullcrusher'), 'tri means triceps, so the muscle counts too');
+});
+
+test('search forgives one typo in a word long enough to carry one', () => {
+  assert.ok(found('dumbell curl').includes('Bicep Curl (Dumbbell)'));
+  assert.ok(found('tricpes').includes('Triceps Pushdown (Rope)'), 'a swapped pair is one edit');
+  assert.deepEqual(found('cral'), [], 'short words are not fuzzed — one edit from "cral" is too many things');
+});
+
+test('search treats plurals as the singular', () => {
+  assert.ok(found('curls').includes('Curl (Barbell)'));
+  assert.deepEqual(found('pushups'), ['Push-Up'], 'the stem is tried inside run-together names too');
+  assert.deepEqual(found('push ups'), ['Push-Up'], '"ups" is short, and still a plural');
+  assert.deepEqual(found('push-ups'), ['Push-Up']);
+  assert.deepEqual(found('abs'), ['Ab Wheel Rollout'],
+    'a three-letter plural only counts as a whole word — "ab" must not reach Abduction or "cable"');
+  assert.ok(found('benches').length === 0, 'stemming strips one s, not a whole suffix');
+});
+
+test('search reaches the muscle, the kit and the muscle group', () => {
+  assert.ok(found('chest').includes('Bench Press (Barbell)'));
+  assert.ok(found('cable').includes('Lat Pulldown'));
+  assert.ok(found('legs').includes('Squat (Barbell)'),
+    'the group comes from the name when the row carries no muscle');
+});
+
+test('search ranks by fit: whole name, then start of name, then a word, then the kit', () => {
+  const got = found('curl');
+  assert.equal(got[0], 'Curl (Barbell)', 'the name that starts with the query comes first');
+  assert.ok(got.indexOf('Hammer Curl') < got.indexOf('Hammer Curl (Machine)'),
+    'equal fit keeps alphabetical order');
+  assert.equal(found('bench press (barbell)')[0], 'Bench Press (Barbell)', 'the whole name wins outright');
+});
+
+test('every search word has to land, and an empty search leaves the library alone', () => {
+  assert.deepEqual(found('curl banana'), []);
+  assert.deepEqual(workout.searchExercises(LIBRARY, '  '), LIBRARY);
+});
