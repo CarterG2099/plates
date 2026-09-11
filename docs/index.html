@@ -696,6 +696,18 @@
             </div>
 
             <div class="notice notice-error" x-show="online.error" x-text="online.error"></div>
+
+            <!-- The dead end becomes a detour. A missed barcode is exactly when
+                 the label camera is the answer: store-exclusive brands are what
+                 the databases lack, and the label in hand is the ground truth. -->
+            <label class="btn btn-block" x-show="online.error && looksLikeBarcode"
+                   :class="photoBusy === 'label' && 'is-busy'">
+              <span x-show="photoBusy !== 'label'">Scan the label instead</span>
+              <span x-show="photoBusy === 'label'">Reading…</span>
+              <input type="file" accept="image/*" capture="environment"
+                     @change="readLabel($event)" hidden>
+            </label>
+
             <p class="prefill" x-show="onlineUnmatched.length"
                x-text="`Nothing matched “${onlineUnmatched.join('”, “')}” — check the spelling.`"></p>
 

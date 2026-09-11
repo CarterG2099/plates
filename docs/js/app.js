@@ -1283,6 +1283,22 @@ Alpine.data('logPage', () => ({
     // The ingredient picker searches the internet too. An ingredient you have
     // never logged is exactly as likely as a food you have never logged.
     this.$watch('mealTerm', () => this.queueSearch('mealOnline', this.mealTerm));
+
+    // A pasted screenshot of a label reads like a photographed one. Desktop has
+    // no camera worth pointing at a box; it has a clipboard. Pasting text is
+    // untouched — only an image on the clipboard is claimed.
+    this.onLabelPaste = (event) => {
+      if (!Alpine.store('ui').logOpen || this.photoBusy) return;
+      const file = [...(event.clipboardData?.files ?? [])].find((f) => f.type?.startsWith('image/'));
+      if (!file) return;
+      event.preventDefault();
+      this.readLabelFile(file);
+    };
+    document.addEventListener('paste', this.onLabelPaste);
+  },
+
+  destroy() {
+    document.removeEventListener('paste', this.onLabelPaste);
   },
 
   get email() { return Alpine.store('auth').email; },
@@ -1576,6 +1592,11 @@ Alpine.data('logPage', () => ({
   async readLabel(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
+    return this.readLabelFile(file);
+  },
+
+  /** The same read for a file that didn't come through an input — a paste. */
+  async readLabelFile(file) {
     if (!file) return;
 
     this.photoBusy = 'label';
