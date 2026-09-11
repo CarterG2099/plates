@@ -733,3 +733,9 @@
   border-radius: inherit;
   background: var(--color-primary);
 }
+
+.notice-busy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

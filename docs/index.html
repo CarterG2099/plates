@@ -572,6 +572,16 @@
         <!-- Only where there's a mouse: on a phone the camera is the way in. -->
         <p class="paste-hint">Paste a screenshot of a nutrition label — Ctrl+V, anywhere in the app.</p>
 
+        <!-- Alive for the whole read, not a two-second toast: a label takes
+             Gemini several seconds, and both ways in (paste, and the camera —
+             whose menu closes at capture) otherwise show nothing meanwhile. -->
+        <div class="notice notice-busy" x-show="photoBusy === 'label'" x-cloak>
+          <span class="spinner"></span>
+          <span>Reading the label…</span>
+        </div>
+        <div class="notice notice-error" x-show="photoError && !photoBusy" x-cloak
+             x-text="photoError"></div>
+
         <div class="chips">
           <button class="chip" :class="filter === 'recent' && 'is-active'"
                   @click="filter = filter === 'recent' ? '' : 'recent'">Recent</button>
