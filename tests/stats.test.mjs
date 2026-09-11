@@ -62,6 +62,30 @@ test('a single weighing has zero change rather than NaN', async () => {
   });
 });
 
+test('wheelStops spans ±15 lb in tenths around the last reading', () => {
+  const wheel = stats.wheelStops(184.2);
+  assert.equal(wheel.count, 301);
+  assert.equal(wheel.label(0), '169.2');
+  assert.equal(wheel.label(150), '184.2');
+  assert.equal(wheel.label(300), '199.2');
+});
+
+test('wheelStops round-trips every stop without float drift', () => {
+  // 184.2 - 15 is 169.20000000000002 in floats; built on that, the wheel's
+  // labels and its indexOf disagree within a few dozen stops.
+  const wheel = stats.wheelStops(184.2);
+  for (let i = 0; i < wheel.count; i++) {
+    assert.equal(wheel.indexOf(wheel.label(i)), i, `stop ${i} must be its own index`);
+  }
+});
+
+test('wheelStops parks an out-of-reach value at the nearest end', () => {
+  const wheel = stats.wheelStops(170);
+  assert.equal(wheel.indexOf(500), wheel.count - 1);
+  assert.equal(wheel.indexOf(20), 0);
+  assert.equal(wheel.indexOf('184.2'), wheel.indexOf(184.2), 'the input hands over strings');
+});
+
 // ---- nutrition -------------------------------------------------------------
 
 const goals = [{ owner_email: ME, starts_on: '2020-01-01', ends_on: null, calorie_target: 2100 }];

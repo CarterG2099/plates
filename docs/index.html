@@ -2739,14 +2739,15 @@
               <div class="field">
                 <label for="w-lb">Pounds</label>
                 <input id="w-lb" type="number" inputmode="decimal" step="0.1"
-                       x-model="newWeight" placeholder="184.2" autocomplete="off">
+                       x-model="newWeight" placeholder="184.2" autocomplete="off"
+                       @input="$refs.weighWheel && $refs.weighWheel._sync($event.target.value)">
               </div>
-              <!-- Opens on the last reading; the scroller nudges from there.
+              <!-- Opens on the last reading; the wheel spins from there.
                    ±15 lb spans any honest day-to-day move, and the box above
-                   still takes anything the slider can't reach. -->
-              <input class="qty-slider" type="range" step="0.1"
-                     :min="(weighBase - 15).toFixed(1)" :max="(Number(weighBase) + 15).toFixed(1)"
-                     x-model="newWeight" aria-label="Adjust weight">
+                   still takes anything the wheel can't reach. The box is the
+                   accessible control; the wheel is a faster hand for it. -->
+              <div class="wheel" x-ref="weighWheel" aria-hidden="true"
+                   x-init="$wheel($el, { base: weighBase, value: newWeight, set: (v) => newWeight = v })"></div>
               <button class="btn btn-primary btn-block" :disabled="!newWeight" @click="saveWeight()">Save</button>
             </div>
           </div>
@@ -2764,11 +2765,11 @@
               <div class="field">
                 <label for="we-lb">Pounds</label>
                 <input id="we-lb" type="number" inputmode="decimal" step="0.1"
-                       x-model="editingWeight.lb" autocomplete="off">
+                       x-model="editingWeight.lb" autocomplete="off"
+                       @input="$refs.editWheel && $refs.editWheel._sync($event.target.value)">
               </div>
-              <input class="qty-slider" type="range" step="0.1"
-                     :min="(editingWeight.base - 15).toFixed(1)" :max="(Number(editingWeight.base) + 15).toFixed(1)"
-                     x-model="editingWeight.lb" aria-label="Adjust weight">
+              <div class="wheel" x-ref="editWheel" aria-hidden="true"
+                   x-init="$wheel($el, { base: editingWeight.base, value: editingWeight.lb, set: (v) => editingWeight.lb = v })"></div>
               <button class="btn btn-primary btn-block" :disabled="!editingWeight.lb" @click="saveWeightEdit()">Save</button>
               <button class="btn btn-danger btn-block" @click="deleteWeightEdit()">Delete this weigh-in</button>
             </div>

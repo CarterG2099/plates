@@ -68,6 +68,28 @@ export async function removeWeight(id) {
   return row;
 }
 
+/**
+ * The stops the weigh-in wheel offers: ±span around the last reading, stepped.
+ *
+ * Everything is computed in integer tenths because the floats lie — 184.2 - 15
+ * is 169.20000000000002, and a wheel built on raw floats drifts off its own
+ * labels within a few dozen stops. `indexOf` clamps, so a value typed beyond
+ * the wheel's reach parks it at the nearest end without rewriting the value.
+ */
+export function wheelStops(base, { span = 15, step = 0.1 } = {}) {
+  const scale = Math.round(1 / step);
+  const decimals = Math.max(0, String(step).length - 2);   // '0.1' → 1, '1' → 0
+  const minT = Math.round((Number(base) - span) * scale);
+  const count = 2 * span * scale + 1;
+
+  return {
+    count,
+    label: (i) => ((minT + i) / scale).toFixed(decimals),
+    indexOf: (value) =>
+      Math.min(count - 1, Math.max(0, Math.round(Number(value) * scale) - minT)),
+  };
+}
+
 // ---- training --------------------------------------------------------------
 
 /** Monday-anchored week start, so weeks line up with how people plan them. */

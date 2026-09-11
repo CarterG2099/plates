@@ -504,6 +504,62 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 
 .qty-slider:active::-webkit-slider-thumb { cursor: grabbing; }
 
+/* ---- weigh-in wheel --------------------------------------------------------
+ *
+ * The numbers are the control: they spin past a fixed centre line, native
+ * picker style. Scroll snap does the physics; the mask fades the ends so the
+ * column reads as a drum rather than a list. */
+
+.wheel {
+  position: relative;
+  height: 210px;
+}
+
+.wheel-scroll {
+  height: 100%;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior: contain;   /* a hard flick must not scroll the sheet */
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent);
+  mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent);
+}
+
+.wheel-scroll::-webkit-scrollbar { display: none; }
+
+/* Lets the first and last number reach the centre line. */
+.wheel-pad { height: calc((210px - 42px) / 2); }
+
+.wheel-item {
+  height: 42px;
+  line-height: 42px;
+  text-align: center;
+  scroll-snap-align: center;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  opacity: .55;
+  transition: color 120ms, opacity 120ms, transform 120ms;
+  cursor: pointer;
+}
+
+.wheel-item.is-centred {
+  color: var(--color-text);
+  opacity: 1;
+  font-weight: 650;
+  transform: scale(1.12);
+}
+
+.wheel-centre {
+  position: absolute;
+  inset: 50% 18% auto;
+  height: 42px;
+  transform: translateY(-50%);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  pointer-events: none;
+}
+
 /* ---- nutrition label ------------------------------------------------------ */
 
 /* Deliberately the FDA panel's typography rather than this app's: the rules,

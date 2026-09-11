@@ -280,6 +280,96 @@ Alpine.magic('dragCard', () => (handle, cards, onDrop) => {
   });
 });
 
+/**
+ * A picker wheel: the numbers themselves spin past a fixed centre line, the
+ * way a native time picker works — not a thumb on a track.
+ *
+ * Built on scroll snap, so flicks, momentum and settling are the platform's.
+ * The wheel writes into the model through `set` on every scroll; the paired
+ * text input pushes the other way through `el._sync`, which repositions the
+ * wheel without writing back — so typing 220 into the box parks the wheel at
+ * its end without the wheel "correcting" the box to 199.
+ *
+ * @param {HTMLElement} el  empty container; the wheel is built inside it
+ * @param {{ base: number, value: any, set: (label: string) => void }} opts
+ */
+Alpine.magic('wheel', () => (el, { base, value, set }) => {
+  if (!el || el.dataset.wheel) return;
+  el.dataset.wheel = '1';
+
+  const stops = stats.wheelStops(base);
+
+  const scroll = document.createElement('div');
+  scroll.className = 'wheel-scroll';
+  const pad = () => Object.assign(document.createElement('div'), { className: 'wheel-pad' });
+  const items = [];
+  scroll.appendChild(pad());
+  for (let i = 0; i < stops.count; i++) {
+    const row = document.createElement('div');
+    row.className = 'wheel-item';
+    row.textContent = stops.label(i);
+    items.push(row);
+    scroll.appendChild(row);
+  }
+  scroll.appendChild(pad());
+
+  const centre = document.createElement('div');
+  centre.className = 'wheel-centre';
+  el.append(scroll, centre);
+
+  // The sheet reads a downward touch drag as "dismiss". Spinning the wheel is
+  // not that, so its touches never reach the sheet's listeners.
+  for (const type of ['touchstart', 'touchmove']) {
+    scroll.addEventListener(type, (e) => e.stopPropagation(), { passive: true });
+  }
+
+  let itemH = 42;      // measured on mount; this is only the fallback
+  let current = -1;
+  let muted = 0;       // scrolls we caused ourselves must not write the model
+
+  const centreOn = (i, behavior) => {
+    muted = Date.now() + 250;
+    scroll.scrollTo({ top: i * itemH, behavior });
+  };
+
+  const settle = (i) => {
+    if (i === current) return;
+    items[current]?.classList.remove('is-centred');
+    items[i]?.classList.add('is-centred');
+    current = i;
+    if (Date.now() >= muted) set(stops.label(i));
+  };
+
+  let raf = null;
+  scroll.addEventListener('scroll', () => {
+    raf ??= requestAnimationFrame(() => {
+      raf = null;
+      settle(Math.min(stops.count - 1, Math.max(0, Math.round(scroll.scrollTop / itemH))));
+    });
+  }, { passive: true });
+
+  // Tapping a visible number beats dragging it to the line.
+  scroll.addEventListener('click', (e) => {
+    const i = items.indexOf(e.target);
+    if (i < 0) return;
+    set(stops.label(i));
+    centreOn(i, 'smooth');
+  });
+
+  el._sync = (v) => {
+    if (v === '' || !Number.isFinite(Number(v))) return;
+    centreOn(stops.indexOf(v), 'auto');
+  };
+
+  requestAnimationFrame(() => {
+    itemH = items[0]?.offsetHeight || itemH;
+    const opening = value === '' || !Number.isFinite(Number(value)) ? base : value;
+    const i = stops.indexOf(opening);
+    centreOn(i, 'auto');
+    settle(i);   // paint the highlight; muted keeps an empty box empty
+  });
+});
+
 // ---- auth ------------------------------------------------------------------
 
 /**
