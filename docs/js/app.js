@@ -1285,14 +1285,22 @@ Alpine.data('logPage', () => ({
     this.$watch('mealTerm', () => this.queueSearch('mealOnline', this.mealTerm));
 
     // A pasted screenshot of a label reads like a photographed one. Desktop has
-    // no camera worth pointing at a box; it has a clipboard. Pasting text is
+    // no camera worth pointing at a box; it has a clipboard. Anywhere in the
+    // app, on any page: requiring the log panel to already be open was tried
+    // first and just meant "paste did nothing" — the panel is opened for you,
+    // and the toast says the read has started, because a paste with no visible
+    // reaction is indistinguishable from a broken one. Pasting text is
     // untouched — only an image on the clipboard is claimed.
     this.onLabelPaste = (event) => {
-      if (!Alpine.store('ui').logOpen || this.photoBusy) return;
       const file = [...(event.clipboardData?.files ?? [])].find((f) => f.type?.startsWith('image/'));
-      if (!file) return;
+      if (!file || this.photoBusy) return;
       event.preventDefault();
-      this.readLabelFile(file);
+
+      Alpine.store('ui').openLog();
+      Alpine.store('ui').flash('Reading the label…');
+      this.readLabelFile(file).then(() => {
+        if (this.photoError) Alpine.store('ui').flash(this.photoError);
+      });
     };
     document.addEventListener('paste', this.onLabelPaste);
   },

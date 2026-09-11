@@ -2053,3 +2053,18 @@ button.nf-tap:active { background: var(--color-hover); }
   object-fit: cover;
   display: block;
 }
+
+/* The paste hint exists only where a clipboard is likelier than a camera —
+   `pointer: fine` is a mouse or trackpad, which is the desktop the feature
+   was built for. Phones never see it. */
+.paste-hint { display: none; }
+@media (pointer: fine) {
+  .paste-hint {
+    display: block;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: .04em;
+    color: var(--color-text-dim);
+  }
+}

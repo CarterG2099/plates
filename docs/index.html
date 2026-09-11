@@ -569,6 +569,9 @@
           </button>
         </div>
 
+        <!-- Only where there's a mouse: on a phone the camera is the way in. -->
+        <p class="paste-hint">Paste a screenshot of a nutrition label — Ctrl+V, anywhere in the app.</p>
+
         <div class="chips">
           <button class="chip" :class="filter === 'recent' && 'is-active'"
                   @click="filter = filter === 'recent' ? '' : 'recent'">Recent</button>
