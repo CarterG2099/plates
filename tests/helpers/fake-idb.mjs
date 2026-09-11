@@ -74,7 +74,14 @@ class StoreHandle {
     return new FakeRequest(copy[this.store.keyPath]);
   }
 
-  get(key) { return new FakeRequest(structuredClone(this.store.rows.get(key))); }
+  get(key) {
+    const request = new FakeRequest(structuredClone(this.store.rows.get(key)));
+    // Real IndexedDB delivers get results asynchronously inside the transaction;
+    // the read-then-conditionally-put pattern in putManyLocalIfNewer depends on
+    // that callback actually firing.
+    queueMicrotask(() => request.onsuccess?.());
+    return request;
+  }
 
   getAll() { return new FakeRequest([...this.store.rows.values()].map((r) => structuredClone(r))); }
 

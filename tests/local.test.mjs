@@ -116,3 +116,38 @@ test('wipe clears rows, outbox and meta together', async () => {
   assert.equal(await local.pendingCount(), 0);
   assert.equal(await local.getMeta('cursor:foods', 'gone'), 'gone');
 });
+
+// ---- pulled rows vs in-flight edits ----------------------------------------------
+
+// The reps-overwritten bug: sync's pull checks its stamps against a snapshot
+// taken before its network wait, so an edit made during the wait is invisible
+// to it — and putManyLocal then put the server's older row straight over the
+// typed value. The IfNewer variant re-checks inside the write transaction.
+test('putManyLocalIfNewer never regresses a newer local row', async () => {
+  await local.putLocal('session_sets', { id: 'race', reps: 12, updated_at: '2026-09-11T10:00:05Z' });
+
+  // The pull arrives carrying the pre-edit server copy.
+  await local.putManyLocalIfNewer('session_sets', [
+    { id: 'race', reps: null, updated_at: '2026-09-11T10:00:00Z' },
+  ]);
+
+  const stored = await local.get('session_sets', 'race');
+  assert.equal(stored.reps, 12, 'the typed reps must survive the pull');
+});
+
+test('putManyLocalIfNewer applies newer rows, ties, and rows it has never seen', async () => {
+  await local.putLocal('session_sets', { id: 'old', reps: 5, updated_at: '2026-09-11T10:00:00Z' });
+  await local.putManyLocalIfNewer('session_sets', [
+    { id: 'old', reps: 8, updated_at: '2026-09-11T10:00:30Z' },   // newer remote wins
+    { id: 'new', reps: 3, updated_at: '2026-09-11T10:00:00Z' },   // never seen: applied
+  ]);
+
+  assert.equal((await local.get('session_sets', 'old')).reps, 8);
+  assert.equal((await local.get('session_sets', 'new')).reps, 3);
+
+  // A tie is the row we pushed coming back — remote wins, and it is identical.
+  await local.putManyLocalIfNewer('session_sets', [
+    { id: 'old', reps: 8, updated_at: '2026-09-11T10:00:30Z', echoed: true },
+  ]);
+  assert.equal((await local.get('session_sets', 'old')).echoed, true);
+});

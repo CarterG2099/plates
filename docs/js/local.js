@@ -118,6 +118,31 @@ export async function putManyLocal(table, rows) {
   await run(table, 'readwrite', (s) => { for (const row of rows) s.put(row); });
 }
 
+/**
+ * Apply pulled rows, except where a strictly newer local write already exists.
+ *
+ * The compare happens inside the same transaction as the put, which is the
+ * point: sync's pull checks its stamps against a snapshot taken before its
+ * network wait, and an edit made *during* that wait is invisible to it. A set's
+ * typed reps were overwritten exactly that way — the pull put the server's
+ * older copy back, the screen refreshed to the placeholder, and checking the
+ * set then made the placeholder permanent. Ties go to the remote row, matching
+ * last-write-wins everywhere else; re-applying identical content is harmless.
+ */
+export async function putManyLocalIfNewer(table, rows) {
+  if (!rows.length) return;
+  await run(table, 'readwrite', (s) => {
+    for (const row of rows) {
+      const read = s.get(row.id);
+      read.onsuccess = () => {
+        const existing = read.result;
+        if (existing?.updated_at && existing.updated_at > row.updated_at) return;
+        s.put(row);
+      };
+    }
+  });
+}
+
 // ---- outbox ----------------------------------------------------------------
 
 export function enqueue(table, row) {

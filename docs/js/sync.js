@@ -164,7 +164,12 @@ async function pullTable(table) {
       localStamps.set(remote.id, remote.updated_at);
       if (remote.updated_at > newest) newest = remote.updated_at;
     }
-    await local.putManyLocal(table, winners);
+    // The stamps above are a snapshot from before this page's network wait, so
+    // an edit made while the response was in flight is invisible to them — and
+    // putManyLocal would put the server's older row straight over it. The
+    // IfNewer variant re-checks inside the write transaction, which closes the
+    // window; the stamp pass stays as the cheap first filter.
+    await local.putManyLocalIfNewer(table, winners);
     applied += winners.length;
 
     if (data.length < PAGE_SIZE) break;
