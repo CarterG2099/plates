@@ -92,3 +92,19 @@ test('index.html binds no camelCased attributes', () => {
     `these bindings are silently dropped; use x-effect + $el.setAttribute:\n${
       hits.map((h) => `  index.html:${h.line}  :${h.attr}`).join('\n')}`);
 });
+
+// The two-rows bug: :value rewrites the DOM box on every re-render, and the
+// refresh after each background sync landed mid-typing — editing two rows and
+// checking one reset the other. While focused, the binding must hand back the
+// box's own text.
+test('set-cell value bindings never overwrite a focused input', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../docs/index.html', import.meta.url), 'utf8');
+
+  const cells = [...html.matchAll(/class="cell num"[^>]*:value="([^"]*)"/gs)].map((m) => m[1]);
+  assert.ok(cells.length >= 4, `expected the four set cells, found ${cells.length}`);
+  for (const binding of cells) {
+    assert.match(binding, /\$el === document\.activeElement/,
+      `a set cell binding lacks the focused guard: ${binding}`);
+  }
+});

@@ -1609,17 +1609,22 @@
                                 : previousLabel(group, i)"></span>
                         <!-- value, not placeholder, once you have typed something:
                              an empty box with a grey suggestion is a box you can
-                             tap and type into without clearing anything first. -->
+                             tap and type into without clearing anything first.
+                             While the box is FOCUSED the binding hands back the
+                             box's own text: any re-render — another row's change,
+                             a sync refresh — used to write the stored value over
+                             what was being typed, which is how editing two rows
+                             and saving one reset the other. -->
                         <template x-if="!isCardioGroup(group)">
                           <input class="cell num" type="number" inputmode="decimal" step="any"
-                                 :value="currentSet(set).weight_lb ?? ''"
+                                 :value="$el === document.activeElement ? $el.value : (currentSet(set).weight_lb ?? '')"
                                  :placeholder="placeholderWeight(group, i)"
                                  @change="edit(set, 'weight_lb', $event.target.value)"
                                  aria-label="Weight in pounds">
                         </template>
                         <template x-if="!isCardioGroup(group)">
                           <input class="cell num" type="number" inputmode="numeric"
-                                 :value="currentSet(set).reps ?? ''"
+                                 :value="$el === document.activeElement ? $el.value : (currentSet(set).reps ?? '')"
                                  :placeholder="placeholderReps(group, i)"
                                  @change="edit(set, 'reps', $event.target.value)"
                                  aria-label="Reps">
@@ -1629,13 +1634,13 @@
                              division and no stored distance is ambiguous. -->
                         <template x-if="isCardioGroup(group)">
                           <input class="cell num" type="number" inputmode="decimal" step="any"
-                                 :value="cardioValue(set, 'mi')"
+                                 :value="$el === document.activeElement ? $el.value : cardioValue(set, 'mi')"
                                  @change="editCardio(set, 'mi', $event.target.value)"
                                  aria-label="Distance in miles">
                         </template>
                         <template x-if="isCardioGroup(group)">
                           <input class="cell num" type="number" inputmode="decimal" step="any"
-                                 :value="cardioValue(set, 'min')"
+                                 :value="$el === document.activeElement ? $el.value : cardioValue(set, 'min')"
                                  @change="editCardio(set, 'min', $event.target.value)"
                                  aria-label="Duration in minutes">
                         </template>

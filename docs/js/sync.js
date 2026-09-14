@@ -161,6 +161,11 @@ async function pullTable(table) {
       const localStamp = localStamps.get(remote.id);
       if (localStamp && localStamp > remote.updated_at) continue;
       winners.push(remote);
+      // Only a row that is actually news counts toward `changed`. The cursor is
+      // gte-inclusive, so every pull re-downloads the rows this device just
+      // pushed — counting those echoes meant a full store refresh after every
+      // set edit, and that refresh is what kept repainting inputs mid-workout.
+      if (!localStamp || remote.updated_at > localStamp) applied += 1;
       localStamps.set(remote.id, remote.updated_at);
       if (remote.updated_at > newest) newest = remote.updated_at;
     }
@@ -170,7 +175,6 @@ async function pullTable(table) {
     // IfNewer variant re-checks inside the write transaction, which closes the
     // window; the stamp pass stays as the cheap first filter.
     await local.putManyLocalIfNewer(table, winners);
-    applied += winners.length;
 
     if (data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
