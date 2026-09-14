@@ -864,6 +864,56 @@ Alpine.data('todayPage', () => ({
 
   get totals() { return food.sumTotals(this.entries); },
 
+  // ---- the plan --------------------------------------------------------------
+  //
+  // Planned entries stack against the targets without claiming they were eaten:
+  // the headline numbers stay what actually happened, and the plan appears as a
+  // projection — ghost segments on the bars, and a second "left" figure.
+
+  get plannedEntries() {
+    return food.plannedForDay(this.data.log, this.email, this.date);
+  },
+
+  get plannedTotals() { return food.sumTotals(this.plannedEntries); },
+
+  /** What would be left if every planned entry gets eaten. */
+  get afterPlan() {
+    if (!this.calorieTarget) return null;
+    return Math.round(this.calorieTarget - this.totals.calories - this.plannedTotals.calories);
+  },
+
+  /** The ghost segment: the plan's share of the target, in whatever room is left. */
+  plannedPercent(macro) {
+    const t = this.target(macro);
+    if (!t) return 0;
+    const room = 100 - this.percent(macro);
+    return Math.min(room, (this.plannedTotals[macro] / t) * 100);
+  },
+
+  async confirmPlanned(entry) {
+    await food.confirmPlanned(entry);
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash('Logged');
+  },
+
+  /** Ghost plates load beyond the collar: what the bar would hold. */
+  get plannedPlates() {
+    if (!this.calorieTarget || !this.plannedEntries.length) return [];
+    let room = Math.max(0, 100 - this.plates.reduce((sum, p) => sum + p.width, 0));
+    return [
+      { key: 'protein_g', colour: 'var(--color-protein)', per: 4 },
+      { key: 'carbs_g',   colour: 'var(--color-carbs)',   per: 4 },
+      { key: 'fat_g',     colour: 'var(--color-fat)',     per: 9 },
+    ]
+      .map((m) => ({ ...m, raw: (this.plannedTotals[m.key] * m.per / this.calorieTarget) * 100 }))
+      .map((m) => {
+        const width = Math.min(m.raw, room);
+        room -= width;
+        return { ...m, width };
+      })
+      .filter((m) => m.width > 0.5);
+  },
+
   /** The average logged day, printed through the same label the sheets use. */
   weekLabelOpen: false,
   get weekLabel() { return food.weeklyNutritionLabel(this.data.log, this.email); },
@@ -1512,7 +1562,8 @@ Alpine.data('logPage', () => ({
     return food.scaleMacros(this.sheet.food, this.sheetQuantity);
   },
 
-  async confirmSheet() {
+  /** @param planned  true adds it to the day's plan instead of the day. */
+  async confirmSheet(planned = false) {
     const { pending, unit } = this.sheet;
     const quantity = this.sheetQuantity;
 
@@ -1520,11 +1571,11 @@ Alpine.data('logPage', () => ({
     // than in a step of its own beforehand.
     const item = pending ? await this.persistDraft(pending) : this.sheet.food;
 
-    await food.logFood({ food: item, quantity, unit, ownerEmail: this.email, date: this.date });
+    await food.logFood({ food: item, quantity, unit, ownerEmail: this.email, date: this.date, planned });
     this.closeSheet();
     if (pending) { this.draft = null; this.term = ''; }
     await Alpine.store('data').refresh();
-    Alpine.store('ui').flash('Logged');
+    Alpine.store('ui').flash(planned ? 'Planned' : 'Logged');
   },
 
   /**

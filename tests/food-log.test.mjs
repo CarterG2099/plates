@@ -168,6 +168,63 @@ test('a food with no brand still gets a description', async () => {
   assert.equal(entry.description, 'Oats');
 });
 
+// ---- planning -----------------------------------------------------------------
+// A planned entry stacks against the day's targets without claiming it was
+// eaten. The one rule that matters: nothing that reports what actually happened
+// may count it, which is why entriesForDay — the funnel those surfaces share —
+// excludes it.
+
+test('a planned entry is not in the day, and the plan is not in the log', async () => {
+  const day = new Date();
+  await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: day });
+  const planned = await food.logFood({ food: OATS, quantity: 2, ownerEmail: ME, date: day, planned: true });
+
+  assert.equal(planned.is_planned, true);
+  const log = await local.all('food_log');
+  assert.deepEqual(food.entriesForDay(log, ME, day).map((e) => e.quantity), [1],
+    'the eaten list must not inflate');
+  assert.deepEqual(food.plannedForDay(log, ME, day).map((e) => e.quantity), [2]);
+});
+
+test('logging without asking stays concrete', async () => {
+  const entry = await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: new Date() });
+  assert.equal(entry.is_planned, false);
+});
+
+test('eating a planned entry flips the flag and moves nothing else', async () => {
+  const day = new Date();
+  const planned = await food.logFood({ food: OATS, quantity: 2, ownerEmail: ME, date: day, planned: true });
+  const eaten = await food.confirmPlanned(planned);
+
+  assert.equal(eaten.id, planned.id, 'the same row, not a copy');
+  assert.equal(eaten.is_planned, false);
+  assert.equal(eaten.calories, 300, 'macros stay as snapshotted at plan time');
+  assert.equal(eaten.logged_at, planned.logged_at, 'confirming at dinner must not re-date a planned lunch');
+
+  const log = await local.all('food_log');
+  assert.equal(food.entriesForDay(log, ME, day).length, 1);
+  assert.equal(food.plannedForDay(log, ME, day).length, 0);
+});
+
+test('editing a planned amount keeps it planned', async () => {
+  const planned = await food.logFood({ food: OATS, quantity: 2, ownerEmail: ME, date: new Date(), planned: true });
+  const edited = await food.updateEntry({ entry: planned, quantity: 3, food: OATS });
+  assert.equal(edited.is_planned, true);
+});
+
+test('copying a day carries what was eaten, never the plan', async () => {
+  const from = new Date(Date.now() - 86_400_000);
+  await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: from });
+  await food.logFood({ food: OATS, quantity: 5, ownerEmail: ME, date: from, planned: true });
+
+  const to = new Date();
+  await food.copyDay({ log: await local.all('food_log'), ownerEmail: ME, from, targets: [to] });
+
+  const copied = food.entriesForDay(await local.all('food_log'), ME, to);
+  assert.deepEqual(copied.map((e) => e.quantity), [1]);
+  assert.equal(food.plannedForDay(await local.all('food_log'), ME, to).length, 0);
+});
+
 test('editing an amount updates the row in place and keeps its unit', async () => {
   const entry = await food.logFood({ food: OATS, quantity: 1, ownerEmail: ME, date: new Date() });
   const edited = await food.updateEntry({ entry, quantity: 1.18 });

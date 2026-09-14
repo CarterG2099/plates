@@ -293,10 +293,26 @@ export function nutrientContributions(entries, key) {
   return { items, unreported };
 }
 
-/** Entries for one day, oldest first, grouped ready for the Today screen. */
+/**
+ * Entries for one day, oldest first, grouped ready for the Today screen.
+ *
+ * Eaten only. Planned entries are excluded HERE, at the funnel every actual
+ * surface drinks from — the day's label, the weekly average, the calorie
+ * chart, day copies, the logged-today count — so a plan can never inflate a
+ * number that claims to describe what was eaten.
+ */
 export function entriesForDay(log, ownerEmail, date = new Date()) {
   return log
-    .filter((e) => e.owner_email === ownerEmail && !e.deleted_at && isSameDay(e.logged_at, date))
+    .filter((e) => e.owner_email === ownerEmail && !e.deleted_at && !e.is_planned
+      && isSameDay(e.logged_at, date))
+    .sort((a, b) => (a.logged_at < b.logged_at ? -1 : 1));
+}
+
+/** The day's plan: entries added to see how they stack, not yet eaten. */
+export function plannedForDay(log, ownerEmail, date = new Date()) {
+  return log
+    .filter((e) => e.owner_email === ownerEmail && !e.deleted_at && e.is_planned
+      && isSameDay(e.logged_at, date))
     .sort((a, b) => (a.logged_at < b.logged_at ? -1 : 1));
 }
 
@@ -827,9 +843,12 @@ export function isCreated(food) {
  * Log a food. Macros are snapshotted onto the entry rather than referenced, so
  * editing or deleting the food later cannot rewrite what you already ate.
  */
-export async function logFood({ food, quantity, unit, ownerEmail, date }) {
+export async function logFood({ food, quantity, unit, ownerEmail, date, planned = false }) {
   const entry = await local.save('food_log', {
     logged_at: timestampFor(date ?? new Date()).toISOString(),
+    // Planned means "show me how this stacks" — everything else on the entry
+    // is identical, so eating it later is a one-bit change.
+    is_planned: Boolean(planned),
     // Left null rather than guessed. The column and everything already in it
     // stay put, so this is reversible; what stops is inventing a meal from the
     // clock and being wrong about it every time you log to another day.
@@ -1044,6 +1063,17 @@ export async function deleteFood(id) {
 
 export async function deleteEntry(id) {
   const row = await local.remove('food_log', id);
+  sync.nudge();
+  return row;
+}
+
+/**
+ * A planned entry was actually eaten. The flag flips and nothing else moves:
+ * the macros were snapshotted when the plan was made, and `logged_at` keeps
+ * the day the plan was for — flipping at 7pm must not re-date a lunch.
+ */
+export async function confirmPlanned(entry) {
+  const row = await local.save('food_log', { ...entry, is_planned: false });
   sync.nudge();
   return row;
 }

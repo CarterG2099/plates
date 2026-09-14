@@ -138,14 +138,28 @@
             ≈ <span x-text="remainingInFood"></span>
           </p>
 
+          <!-- The projection: where the day lands if the plan gets eaten. -->
+          <p class="plan-line" x-show="plannedEntries.length" x-cloak
+             :class="afterPlan !== null && afterPlan < 0 && 'is-over'">
+            +<span x-text="round(plannedTotals.calories).toLocaleString()"></span> kcal planned
+            <span x-show="afterPlan !== null">
+              · <span x-text="Math.abs(afterPlan ?? 0).toLocaleString()"></span>
+              <span x-text="(afterPlan ?? 0) < 0 ? 'over after it' : 'left after it'"></span>
+            </span>
+          </p>
+
           <!-- The calorie readout as a loaded barbell. Width is each macro's
                share of the target; heights are equal, because a taller plate
-               would read as a heavier one. -->
+               would read as a heavier one. Planned plates sit beyond the
+               collar, waiting to be loaded. -->
           <div class="rack" x-show="calorieTarget">
             <template x-for="p in plates" :key="p.key">
               <i :style="`background: ${p.colour}; width: ${p.width}%`"></i>
             </template>
             <i class="collar" x-show="plates.length"></i>
+            <template x-for="p in plannedPlates" :key="`plan-${p.key}`">
+              <i class="is-planned" :style="`background: ${p.colour}; width: ${p.width}%`"></i>
+            </template>
           </div>
 
           <div class="macros">
@@ -159,7 +173,8 @@
               <button class="macro" @click="openNutrient({ key: m.key, name: m.name, unit: 'g' })">
                 <span class="dot" :style="`background: ${m.color}`"></span>
                 <span class="macro-name" x-text="m.name"></span>
-                <span class="macro-bar"><i :style="`background: ${m.color}; width: ${percent(m.key)}%`"></i></span>
+                <span class="macro-bar"><i :style="`background: ${m.color}; width: ${percent(m.key)}%`"></i><i
+                  class="is-planned" :style="`background: ${m.color}; width: ${plannedPercent(m.key)}%`"></i></span>
                 <span class="macro-val">
                   <span x-text="round(totals[m.key])"></span><s x-show="target(m.key)">/<span x-text="target(m.key)"></span></s>
                 </span>
@@ -223,7 +238,7 @@
           </div>
         </div>
 
-        <template x-if="!entries.length">
+        <template x-if="!entries.length && !plannedEntries.length">
           <p class="empty">Nothing logged yet today.</p>
         </template>
 
@@ -243,6 +258,31 @@
 
           </template>
         </div>
+
+        <!-- The plan: same rows, ghosted, each one a ✓ away from being real. -->
+        <template x-if="plannedEntries.length">
+          <div class="stack">
+            <div class="section-head">
+              <span>Planned</span>
+              <span x-text="`${round(plannedTotals.calories)} kcal`"></span>
+            </div>
+            <div class="rows">
+              <template x-for="entry in plannedEntries" :key="entry.id">
+                <div class="row is-planned">
+                  <button class="row-text" @click="openEdit(entry)">
+                    <b x-text="entry.description"></b>
+                    <small x-text="amountLabel(entry.quantity, entry.unit)"></small>
+                  </button>
+                  <span class="row-num" x-text="round(entry.calories)"></span>
+                  <button class="tap tap-primary" @click="confirmPlanned(entry)"
+                          :aria-label="`Ate ${entry.description}`">✓</button>
+                  <button class="tap" @click="removeEntry(entry.id)"
+                          :aria-label="`Remove ${entry.description}`">×</button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
 
         <!-- The average logged day, as a label ------------------------------- -->
         <div class="card" x-show="weekLabel.loggedDays">
@@ -1100,6 +1140,11 @@
 
               <button class="btn btn-primary btn-block" @click="confirmSheet()">
                 Log <span x-text="Math.round(sheetMacros.calories ?? 0)"></span> kcal
+              </button>
+              <!-- The tentative version of Log: stacks against today's targets
+                   on Today without counting as eaten, until its ✓ there. -->
+              <button class="btn btn-block" @click="confirmSheet(true)">
+                Plan it — see how it stacks
               </button>
               <button class="btn btn-ghost btn-block" @click="closeSheet()">Cancel</button>
 

@@ -207,12 +207,33 @@ button.macro {
 
 .macro-bar {
   flex: 1;
+  display: flex;               /* the eaten segment, then the plan's ghost */
   height: 5px;
   background: var(--color-ink);
   border-radius: var(--radius-pill);
   overflow: hidden;
 }
-.macro-bar i { display: block; height: 100%; border-radius: var(--radius-pill); }
+.macro-bar i { display: block; flex: none; height: 100%; border-radius: var(--radius-pill); }
+
+/* The plan, wherever it stacks: same hue, clearly not yet real. */
+.macro-bar i.is-planned,
+.rack i.is-planned { opacity: .35; }
+
+.plan-line {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .04em;
+  color: var(--color-text-muted);
+}
+.plan-line.is-over { color: var(--color-danger); }
+
+.row.is-planned { opacity: .7; }
+.row.is-planned .row-text b::after {
+  content: " · planned";
+  font-weight: 400;
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+}
 
 .macro-val {
   font-family: var(--font-mono);
