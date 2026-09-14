@@ -140,3 +140,25 @@ test('the second drawing only moves once both have loaded, and never under reduc
   const reduced = components.slice(components.indexOf('@media (prefers-reduced-motion: reduce)'));
   assert.match(reduced, /\.figure-pair\.has-art\.has-art-2 \.art-2 \{ animation: none; \}/);
 });
+
+// ---- the iOS input-zoom floor -----------------------------------------------------
+
+// iOS Safari zooms the viewport when focusing any input rendered under 16px,
+// and a standalone PWA often never zooms back out — the "app is randomly
+// zoomed in and off center" bug, tracked to the set-row cells at
+// --text-base (15.2px). Every rule that styles an input's font must stay at
+// the floor. The tokens under 1rem are --text-xs/sm/base; anything larger
+// clears 16px at the default root size.
+test('no input rule sets a font size under the 16px iOS zoom threshold', async () => {
+  for (const file of ['docs/css/base.css', 'docs/css/pages.css', 'docs/css/components.css']) {
+    const raw = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
+    // Comments talk about inputs; only selectors select them.
+    const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const block of css.split('}')) {
+      const [selector] = block.split('{');
+      if (!/(?:^|[\s,])(?:input|textarea|select)\b|\.cell\b/.test(selector ?? '')) continue;
+      assert.doesNotMatch(block, /font-size:\s*var\(--text-(?:xs|sm|base)\)/,
+        `${file}: "${selector?.trim().slice(0, 60)}" styles an input below 16px`);
+    }
+  }
+});
