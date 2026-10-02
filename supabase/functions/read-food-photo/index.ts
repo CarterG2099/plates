@@ -9,7 +9,9 @@
 //   meal  — a plate of food. This is estimation, and it is guessing: portion
 //           size cannot be read off a photo, only inferred. Every field it
 //           returns is an opinion, the response says so, and the UI has to keep
-//           saying so. See the note on `confidence` below.
+//           saying so. See the note on `confidence` in meal-prompt.ts. An
+//           optional `note` from the eater ("made with Greek yogurt", "from
+//           Cafe Rio") carries what the photo can't show.
 //
 // It never writes to the database; the human reviews and saves, the same
 // convention as import-photo in the recipes app, whose model-fallback logic this
@@ -18,6 +20,7 @@
 // Members only: we check plates.is_member() with the caller's JWT. The Gemini
 // key lives in the GEMINI_API_KEY function secret and never reaches the browser.
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { cleanNote, mealPrompt } from "./meal-prompt.ts";
 
 const MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
 
@@ -50,29 +53,6 @@ const LABEL_PROMPT =
   "serving_text is the serving size exactly as printed, e.g. \"2/3 cup (55g)\".\n" +
   "Use null for any value not printed on the panel. Set unreadable to true if " +
   "this is not a nutrition label or it cannot be read.";
-
-const MEAL_PROMPT =
-  "You are estimating the nutrition of a meal from a photograph. This is an " +
-  "estimate and you should treat it as one.\n\n" +
-  "Identify each distinct food you can see and estimate its portion. Judge " +
-  "portion size against whatever is in frame for scale — a fork, a standard " +
-  "dinner plate is about 27cm, a can is 355ml. Say what you assumed.\n\n" +
-  "Be honest about uncertainty rather than splitting the difference. Hidden " +
-  "oil, butter, dressings and sauces matter a lot and are usually invisible; " +
-  "if a dish looks cooked in fat, say so in the note.\n\n" +
-  "Do not imply precision you do not have. Round calories to the nearest 5 and " +
-  "macros to the nearest gram.\n\n" +
-  "Return ONLY a JSON object with exactly these keys:\n" +
-  '{"items": [{"name": string, "portion": string, "calories": number, ' +
-  '"protein_g": number, "carbs_g": number, "fat_g": number}], ' +
-  '"confidence": "low"|"medium"|"high", "note": string|null, ' +
-  '"unreadable": boolean}\n' +
-  "portion is your assumed serving in plain words, e.g. \"about 150g, palm-sized\".\n" +
-  'confidence is "high" only for simple, clearly visible, unmixed food; ' +
-  '"low" whenever portion size is genuinely ambiguous or the dish could hide ' +
-  "significant fat. Most mixed dishes are \"low\" or \"medium\".\n" +
-  "note is one short sentence naming the biggest thing that could make this " +
-  "wrong, or null. Set unreadable to true if there is no food in the picture.";
 
 function stripFences(s: string): string {
   return s.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
@@ -189,9 +169,11 @@ Deno.serve(async (req) => {
 
   let mode = "label";
   let images: { imageBase64: string; mimeType: string }[] = [];
+  let note: string | null = null;
   try {
     const body = await req.json();
     mode = body?.mode === "meal" ? "meal" : "label";
+    note = cleanNote(body?.note);
     if (Array.isArray(body?.images)) {
       images = body.images
         .filter((i: { imageBase64?: string }) => i?.imageBase64)
@@ -207,7 +189,7 @@ Deno.serve(async (req) => {
   // 200 with an `error` field, not a 5xx: supabase-js hides the response body on
   // a non-2xx, so a status code here would reach the user as "Edge Function
   // returned a non-2xx status code" and lose the message that explains it.
-  const answer = await askGemini(apiKey, mode === "meal" ? MEAL_PROMPT : LABEL_PROMPT, images);
+  const answer = await askGemini(apiKey, mode === "meal" ? mealPrompt(note) : LABEL_PROMPT, images);
   if ("error" in answer) return json({ error: answer.error });
 
   let parsed: Record<string, unknown>;

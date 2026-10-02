@@ -506,6 +506,16 @@
   margin: 0;
 }
 
+/* Enough to confirm it's the right plate, not so much it pushes Read it off a
+   phone screen once the keyboard is up. */
+.meal-photo-thumb {
+  display: block;
+  width: 100%;
+  max-height: 28vh;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
 .btn.is-busy { opacity: .6; }
 
 /* The generated drawing, laid over the figure it replaces. If the file isn't

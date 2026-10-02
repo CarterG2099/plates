@@ -1328,6 +1328,7 @@ Alpine.data('logPage', () => ({
   photoBusy: '',        // '' | 'label' | 'meal'
   photoError: '',
   estimate: null,       // { items, confidence, note }
+  mealPhoto: null,      // { file, url, target, note, error }, see openMealPhoto()
   meal: null,           // { id, name, items: [{food_id, name, quantity, unit}] }
   mealTerm: '',
   mealOnline: { status: 'idle', results: [], error: '', term: '' },
@@ -1714,37 +1715,72 @@ Alpine.data('logPage', () => ({
    * once is not a food worth keeping, and creating one per item would fill the
    * list you search with guesses.
    */
-  async buildMealFromPhoto(event) {
+  buildMealFromPhoto(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    this.openMealPhoto(file, 'meal');
+  },
+
+  /**
+   * The plate photo, held for a note before it is read.
+   *
+   * The photo can't show the Greek yogurt in the sauce or which restaurant it
+   * came from, and those move the estimate more than anything in frame. The
+   * note is optional; Read it with the box empty is the same read as before.
+   *
+   * `target` is where the result lands: 'estimate' to log it as is, 'meal' to
+   * build a saved meal from it.
+   */
+  openMealPhoto(file, target) {
+    this.closeMealPhoto();
+    this.mealPhoto = { file, url: URL.createObjectURL(file), target, note: '', error: '' };
+  },
+
+  closeMealPhoto() {
+    if (this.mealPhoto) URL.revokeObjectURL(this.mealPhoto.url);
+    this.mealPhoto = null;
+  },
+
+  async readMealPhoto() {
+    const pending = this.mealPhoto;
+    if (!pending || this.photoBusy) return;
 
     this.photoBusy = 'meal';
-    this.photoError = '';
+    pending.error = '';
     try {
-      const result = await photo.estimateMeal(file);
-      this.meal = {
-        id: null,
-        name: '',
-        items: result.items.map((i) => ({
-          food_id: null,
-          name: i.portion ? `${i.name} (${i.portion})` : i.name,
-          quantity: 1,
-          unit: 'serving',
-          calories: i.calories,
-          protein_g: i.protein_g,
-          carbs_g: i.carbs_g,
-          fat_g: i.fat_g,
-          fiber_g: null,
-          sodium_mg: null,
-        })),
-      };
-      this.mealTerm = '';
+      const result = await photo.estimateMeal(pending.file, pending.note);
+      // Closed while reading: that was a cancel, and nothing should open.
+      if (this.mealPhoto !== pending) return;
+      this.closeMealPhoto();
+      if (pending.target === 'meal') this.mealFromEstimate(result);
+      else this.estimate = result;
     } catch (e) {
-      this.photoError = e.message ?? String(e);
+      // The sheet stays up with the photo and the note, so a retry is one tap.
+      pending.error = e.message ?? String(e);
     } finally {
       this.photoBusy = '';
     }
+  },
+
+  mealFromEstimate(result) {
+    this.meal = {
+      id: null,
+      name: '',
+      items: result.items.map((i) => ({
+        food_id: null,
+        name: i.portion ? `${i.name} (${i.portion})` : i.name,
+        quantity: 1,
+        unit: 'serving',
+        calories: i.calories,
+        protein_g: i.protein_g,
+        carbs_g: i.carbs_g,
+        fat_g: i.fat_g,
+        fiber_g: null,
+        sodium_mg: null,
+      })),
+    };
+    this.mealTerm = '';
   },
 
   removeEstimateItem(index) {
@@ -2256,16 +2292,9 @@ Alpine.data('logPage', () => ({
       return;
     }
 
-    this.scan = { ...(this.scan ?? {}), status: 'reading', message: 'No barcode — reading the food…' };
-
-    try {
-      const result = await photo.estimateMeal(file);
-      this.closeScanner();
-      this.estimate = result;
-    } catch (e) {
-      this.scan = { ...(this.scan ?? {}), status: 'ready', message: e.message ?? String(e) };
-      this.resumeDecoding();
-    }
+    // No barcode, so it's a plate: off to the note sheet, which reads it.
+    this.closeScanner();
+    this.openMealPhoto(file, 'estimate');
   },
 
   /**

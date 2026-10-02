@@ -31,20 +31,25 @@ export async function readLabel(file) {
   return send('label', file, LABEL_EDGE);
 }
 
-/** @returns {Promise<{items: object[], confidence: string, note: string|null}>} */
-export async function estimateMeal(file) {
-  return send('meal', file, MEAL_EDGE);
+/**
+ * `note` is what the photo can't show — "made with Greek yogurt", "from Cafe
+ * Rio" — and goes to the model as fact about the dish.
+ *
+ * @returns {Promise<{items: object[], confidence: string, note: string|null}>}
+ */
+export async function estimateMeal(file, note = '') {
+  return send('meal', file, MEAL_EDGE, note);
 }
 
-async function send(mode, file, maxEdge) {
+async function send(mode, file, maxEdge, note = '') {
   if (!file) throw new Error('No photo selected.');
   if (!navigator.onLine) throw new Error('Reading a photo needs a connection.');
 
   const image = await downscale(file, maxEdge);
+  const body = { mode, images: [image] };
+  if (note.trim()) body.note = note.trim();
 
-  const { data, error } = await supabase.functions.invoke('read-food-photo', {
-    body: { mode, images: [image] },
-  });
+  const { data, error } = await supabase.functions.invoke('read-food-photo', { body });
 
   // A thrown FunctionsHttpError has already lost the response body, so the
   // function returns readable failures as 200 with an `error` field instead.

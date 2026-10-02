@@ -1036,6 +1036,40 @@
           </div>
         </template>
 
+        <!-- Plate photo, before it's read ----------------------------------- -->
+        <!-- The note is what the camera can't see. Optional: Read it with the
+             box empty is the plain photo read. -->
+        <template x-if="mealPhoto">
+          <div class="sheet-backdrop" @click.self="closeMealPhoto()">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeMealPhoto() })">
+              <div class="grabber"></div>
+              <div class="card-label">Read this photo</div>
+
+              <img class="meal-photo-thumb" :src="mealPhoto.url" alt="">
+
+              <div class="field">
+                <label for="meal-photo-note">Anything it can’t see?</label>
+                <input id="meal-photo-note" type="text" x-model="mealPhoto.note"
+                       maxlength="300" enterkeyhint="go" autocomplete="off"
+                       placeholder="made with Greek yogurt, from Cafe Rio…"
+                       @keydown.enter.prevent="readMealPhoto()">
+              </div>
+
+              <div class="notice notice-error" x-show="mealPhoto.error"
+                   x-text="mealPhoto.error"></div>
+
+              <div class="btn-row">
+                <button class="btn btn-ghost" @click="closeMealPhoto()">Cancel</button>
+                <button class="btn btn-primary" :class="photoBusy === 'meal' && 'is-busy'"
+                        :disabled="photoBusy === 'meal'" @click="readMealPhoto()">
+                  <span x-show="photoBusy !== 'meal'">Read it</span>
+                  <span x-show="photoBusy === 'meal'">Reading…</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <!-- Scanner --------------------------------------------------------- -->
         <template x-if="scan">
           <div class="sheet-backdrop" @click.self="closeScanner()">
