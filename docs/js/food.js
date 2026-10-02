@@ -197,6 +197,87 @@ export function sumTotals(entries) {
   return totals;
 }
 
+// ---- complete days -----------------------------------------------------------
+//
+// A day's entries only prove something was logged, not that everything was.
+// Averages built on half-logged days read as eating less than reality, so a day
+// earns its way into the numbers by being marked complete. Both answers are
+// stored: "incomplete" is an answer, and must not be re-asked forever.
+
+/** The live mark for a day, newest wins when two devices marked it offline. */
+export function dayMarkFor(marks, ownerEmail, dayKey) {
+  let found = null;
+  for (const m of marks ?? []) {
+    if (m.deleted_at || m.owner_email !== ownerEmail || m.day !== dayKey) continue;
+    if (!found || m.updated_at > found.updated_at) found = m;
+  }
+  return found;
+}
+
+/** true, false, or null for never-reviewed. */
+export function isComplete(marks, ownerEmail, dayKey) {
+  return dayMarkFor(marks, ownerEmail, dayKey)?.complete ?? null;
+}
+
+export async function setDayMark(marks, ownerEmail, dayKey, complete) {
+  const existing = dayMarkFor(marks, ownerEmail, dayKey);
+  const row = await local.save('day_marks', {
+    id: existing?.id,
+    day: dayKey,
+    complete: Boolean(complete),
+  }, ownerEmail);
+
+  sync.nudge();
+  return row;
+}
+
+/**
+ * The day the logger should ask about: the most recent past day that has
+ * entries but was never reviewed. Only the most recent — the point is a
+ * one-tap question on opening the logger, not a backlog interrogation.
+ */
+export function reviewCandidate(log, marks, ownerEmail, now = new Date()) {
+  const today = toDateOnly(now);
+
+  let latest = null;
+  for (const e of log ?? []) {
+    if (e.owner_email !== ownerEmail || e.deleted_at) continue;
+    const day = toDateOnly(new Date(e.logged_at));
+    if (day >= today) continue;
+    if (!latest || day > latest) latest = day;
+  }
+
+  if (!latest || isComplete(marks, ownerEmail, latest) !== null) return null;
+  return latest;
+}
+
+/** How many days actually made it, and the run you are currently on. */
+export function completeDayStats(marks, ownerEmail, now = new Date()) {
+  const byDay = new Map();
+  for (const m of marks ?? []) {
+    if (m.deleted_at || m.owner_email !== ownerEmail) continue;
+    const seen = byDay.get(m.day);
+    if (!seen || m.updated_at > seen.updated_at) byDay.set(m.day, m);
+  }
+
+  let total = 0;
+  for (const m of byDay.values()) if (m.complete) total += 1;
+
+  // The streak may start today or yesterday — today being unreviewed yet must
+  // not read as the streak having ended.
+  let cursor = byDay.get(toDateOnly(now))?.complete
+    ? fromDateOnly(toDateOnly(now))
+    : addDays(fromDateOnly(toDateOnly(now)), -1);
+
+  let streak = 0;
+  while (byDay.get(toDateOnly(cursor))?.complete) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
+  }
+
+  return { total, streak };
+}
+
 /**
  * The whole nutrition label for a day of eating, summed across every entry.
  *
@@ -245,12 +326,16 @@ export function dayNutritionLabel(entries) {
  * gap in the log into a claim about eating less. `loggedDays` is returned so
  * the card can say what the average is actually over.
  */
-export function weeklyNutritionLabel(log, ownerEmail, { end = new Date(), days = 7 } = {}) {
+export function weeklyNutritionLabel(log, ownerEmail, { end = new Date(), days = 7, marks = null } = {}) {
   const entries = [];
   let loggedDays = 0;
 
   for (let i = 0; i < days; i++) {
-    const dayEntries = entriesForDay(log, ownerEmail, addDays(end, -i));
+    const date = addDays(end, -i);
+    // With marks in hand, only days reviewed as complete may shape the average —
+    // a half-logged day reads as eating less than reality.
+    if (marks && isComplete(marks, ownerEmail, toDateOnly(date)) !== true) continue;
+    const dayEntries = entriesForDay(log, ownerEmail, date);
     if (!dayEntries.length) continue;
     loggedDays += 1;
     entries.push(...dayEntries);

@@ -540,6 +540,34 @@ create policy progress_photos_update on plates.progress_photos
 create policy progress_photos_delete on plates.progress_photos
   for delete using (plates.is_owner(owner_email));
 
+-- One note per person per exercise. Notes used to sit on the shared exercise
+-- row, so a cue one member wrote showed on the other's card too. Same sharing
+-- model as session_sets: members read each other via can_read, only the owner
+-- writes. exercises.notes is no longer read.
+
+create table plates.exercise_notes (
+  id          uuid primary key,
+  owner_email text not null,
+  exercise_id uuid not null references plates.exercises(id) on delete cascade,
+  notes       text,
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+
+create unique index exercise_notes_owner_exercise on plates.exercise_notes (owner_email, exercise_id);
+create index exercise_notes_updated_at on plates.exercise_notes (updated_at);
+
+alter table plates.exercise_notes enable row level security;
+
+create policy exercise_notes_read on plates.exercise_notes
+  for select using (plates.can_read(owner_email));
+create policy exercise_notes_write on plates.exercise_notes
+  for insert with check (plates.is_member() and plates.is_owner(owner_email));
+create policy exercise_notes_update on plates.exercise_notes
+  for update using (plates.is_owner(owner_email)) with check (plates.is_owner(owner_email));
+create policy exercise_notes_delete on plates.exercise_notes
+  for delete using (plates.is_owner(owner_email));
+
 -- The unlock PIN, hashed client-side (sha256 of email:pin). Four digits is
 -- brute-forceable by anyone who can read the hash — it is deliberately a
 -- curtain, not cryptography.
@@ -581,3 +609,30 @@ create policy plates_progress_delete on storage.objects
         and plates.is_owner(pp.owner_email)
     )
   );
+
+-- ---- day marks (added 2026-10-02) ----------------------------------------------
+-- A reviewed logging day: complete days are the only ones averages trust. Both
+-- answers are stored — "incomplete" must not be re-asked forever; no row means
+-- the day was never reviewed. Same sharing model as weight_log.
+
+create table plates.day_marks (
+  id uuid primary key,
+  owner_email text not null,
+  day date not null,
+  complete boolean not null,
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create index day_marks_updated_at on plates.day_marks (updated_at);
+
+alter table plates.day_marks enable row level security;
+
+create policy day_marks_read on plates.day_marks
+  for select using (plates.can_read(owner_email));
+create policy day_marks_write on plates.day_marks
+  for insert with check (plates.is_member() and plates.is_owner(owner_email));
+create policy day_marks_update on plates.day_marks
+  for update using (plates.is_owner(owner_email)) with check (plates.is_owner(owner_email));
+create policy day_marks_delete on plates.day_marks
+  for delete using (plates.is_owner(owner_email));

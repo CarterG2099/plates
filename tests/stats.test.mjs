@@ -111,9 +111,9 @@ test('calorieDays marks days with nothing logged', async () => {
 
 test('calorieSummary averages only days that were logged', async () => {
   const days = [
-    { kcal: 2000, target: 2100, logged: true },
-    { kcal: 0, target: 2100, logged: false },      // must not drag the mean to 1000
-    { kcal: 2200, target: 2100, logged: true },
+    { kcal: 2000, target: 2100, logged: true, complete: true },
+    { kcal: 0, target: 2100, logged: false, complete: null },  // must not drag the mean to 1000
+    { kcal: 2200, target: 2100, logged: true, complete: true },
   ];
   const summary = stats.calorieSummary(days);
   assert.equal(summary.average, 2100);
@@ -641,11 +641,12 @@ test('sessionSummaries keeps a cardio-only session, which has no tonnage', async
 
 // ---- nutrition, in detail --------------------------------------------------
 
-const day = (i, kcal, target, logged = true) => ({
+const day = (i, kcal, target, logged = true, complete = logged) => ({
   date: new Date(Date.parse('2026-08-01T12:00:00.000Z') + i * 86_400_000),
   label: 'W',
   kcal,
   target,
+  complete,
   logged,
 });
 
@@ -1113,4 +1114,14 @@ test('the weight series carries row ids so a reading can be edited', () => {
     'c@x.com',
   );
   assert.equal(series[0].id, 'w1');
+});
+
+test('calorieSummary leaves incomplete and unreviewed days out of the average', () => {
+  const summary = stats.calorieSummary([
+    day(0, 2200, 2100),                        // complete
+    day(1, 600, 2100, true, false),            // logged but marked incomplete
+    day(2, 900, 2100, true, null),             // logged, never reviewed
+  ]);
+  assert.equal(summary.average, 2200, 'half-logged days must not drag the mean');
+  assert.equal(summary.loggedDays, 1);
 });

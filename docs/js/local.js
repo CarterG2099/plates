@@ -12,7 +12,7 @@
 const DB_NAME = 'plates';
 // Bump whenever TABLES changes: onupgradeneeded is the only place object stores
 // get created, and it only runs on a version increase.
-const DB_VERSION = 4;
+const DB_VERSION = 6;
 
 /**
  * Synced tables.
@@ -33,7 +33,9 @@ export const TABLES = [
   'routine_exercises',
   'sessions',
   'session_sets',
+  'exercise_notes',
   'progress_photos',
+  'day_marks',
 ];
 
 /** Pending local writes, drained by sync.push(). */

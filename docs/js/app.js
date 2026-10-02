@@ -556,7 +556,7 @@ Alpine.store('sync', {
  * single reactive integer.
  */
 const raw = {
-  goals: [], foods: [], log: [], combos: [], templates: [], weightLog: [],
+  goals: [], foods: [], log: [], combos: [], templates: [], weightLog: [], dayMarks: [],
   exercises: [], routines: [], routineExercises: [], sessions: [], sessionSets: [],
   progressPhotos: [],
   index: workout.buildIndex([], [], ''),
@@ -610,7 +610,7 @@ Alpine.store('data', {
 
   /** What Today needs: small, and read first so the app paints immediately. */
   async refreshCore() {
-    const [goals, foods, log, combos, templates, weightLog, progressPhotos] = await Promise.all([
+    const [goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks] = await Promise.all([
       local.all('goals'),
       local.all('foods'),
       local.all('food_log'),
@@ -618,9 +618,10 @@ Alpine.store('data', {
       local.all('day_templates'),
       local.all('weight_log'),
       local.all('progress_photos'),
+      local.all('day_marks'),
     ]);
 
-    Object.assign(raw, { goals, foods, log, combos, templates, weightLog, progressPhotos });
+    Object.assign(raw, { goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks });
     this.ready = true;
     this.version++;
   },
@@ -655,15 +656,16 @@ Alpine.store('data', {
    * With two years imported, session_sets alone is thousands of rows.
    */
   async refreshTraining() {
-    const [exercises, routines, routineExercises, sessions, sessionSets] = await Promise.all([
+    const [exercises, routines, routineExercises, sessions, sessionSets, exerciseNotes] = await Promise.all([
       local.all('exercises'),
       local.all('routines'),
       local.all('routine_exercises'),
       local.all('sessions'),
       local.all('session_sets'),
+      local.all('exercise_notes'),
     ]);
 
-    Object.assign(raw, { exercises, routines, routineExercises, sessions, sessionSets });
+    Object.assign(raw, { exercises, routines, routineExercises, sessions, sessionSets, exerciseNotes });
 
     // Indexed once per refresh rather than per render.
     raw.index = workout.buildIndex(sessionSets, sessions, Alpine.store('auth').email);
@@ -916,7 +918,24 @@ Alpine.data('todayPage', () => ({
 
   /** The average logged day, printed through the same label the sheets use. */
   weekLabelOpen: false,
-  get weekLabel() { return food.weeklyNutritionLabel(this.data.log, this.email); },
+  get weekLabel() {
+    return food.weeklyNutritionLabel(this.data.log, this.email, { marks: this.data.dayMarks });
+  },
+
+  // ---- marking a day complete ------------------------------------------------
+
+  /** true | false | null for the day on screen. */
+  get viewMark() {
+    return food.isComplete(this.data.dayMarks, this.email, Alpine.store('ui').viewDate);
+  },
+
+  /** Unreviewed taps to complete; after that it flips between yes and no. */
+  async toggleDayMark() {
+    const next = this.viewMark !== true;
+    await food.setDayMark(this.data.dayMarks, this.email, Alpine.store('ui').viewDate, next);
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash(next ? 'Day marked complete' : 'Day marked incomplete');
+  },
 
   /** The whole label for the day, behind its toggle. */
   labelOpen: false,
@@ -1361,6 +1380,20 @@ Alpine.data('logPage', () => ({
 
   get email() { return Alpine.store('auth').email; },
   get data() { return snapshot(); },
+
+  /** The most recent past day with entries and no verdict, or null. */
+  get reviewDay() {
+    return food.reviewCandidate(this.data.log, this.data.dayMarks, this.email);
+  },
+
+  reviewLabel(dayKey) { return food.dayLabel(food.fromDateOnly(dayKey)); },
+
+  async answerReview(complete) {
+    const day = this.reviewDay;
+    if (!day) return;
+    await food.setDayMark(this.data.dayMarks, this.email, day, complete);
+    await Alpine.store('data').refresh();
+  },
 
   amountLabel(quantity, unit) { return food.amountLabel(quantity, unit); },
 
@@ -2628,12 +2661,12 @@ Alpine.data('trainPage', () => ({
 
       // As many sets as the routine plans. target_sets is recorded when a routine
       // is saved from a session or imported from Hevy; only a hand-built one
-      // leaves it empty, and one set is the right floor for that.
+      // leaves it empty, and that gets the same default as adding from the picker.
       //
       // Deliberately empty. Last time's numbers show as placeholders instead, so
       // tapping a box gives you an empty field rather than a value to clear —
       // and checking the set without typing adopts them. See toggleDone.
-      const planCount = Math.max(1, Number(item.target_sets) || 1);
+      const planCount = Number(item.target_sets) || workout.DEFAULT_SETS;
       for (let n = 0; n < planCount; n++) {
         const { set } = await workout.addSet({
           session,
@@ -3297,20 +3330,26 @@ Alpine.data('trainPage', () => ({
   closeExercise() { this.detail = null; },
 
   /**
-   * The note lives on the exercise row, which is what makes it carry from
-   * workout to workout — and between the two of us, since the library rows are
-   * shared. Saved on change, like every other field in the app.
+   * The note is yours alone — one row per person per exercise — and it carries
+   * from workout to workout because it hangs off the exercise, not the session.
+   * Saved on change, like every other field in the app.
    */
   async saveExerciseNote(text) {
-    const saved = await workout.setExerciseNotes(this.detail.exercise, text, this.email);
-    this.detail.exercise = saved;
+    const saved = await workout.setExerciseNotes(
+      this.detail.exercise, text, this.email, this.data.exerciseNotes,
+    );
     await Alpine.store('data').refreshTraining();
     Alpine.store('ui').flash(saved.notes ? 'Noted' : 'Note cleared');
   },
 
+  /** The open sheet's note, for its textarea. */
+  get detailNote() {
+    return workout.exerciseNoteFor(this.data.exerciseNotes, this.email, this.detail?.exercise?.id);
+  },
+
   /** The note for a workout card's exercise, shown where you need the cue. */
   exerciseNote(group) {
-    return this.exerciseById(group.exerciseId)?.notes ?? null;
+    return workout.exerciseNoteFor(this.data.exerciseNotes, this.email, group.exerciseId);
   },
 
   get detailHistory() {
@@ -3945,7 +3984,9 @@ Alpine.data('statsPage', () => ({
 
   // ---- nutrition -----------------------------------------------------------
 
-  get days() { return stats.calorieDays(this.data.log, this.data.goals, this.email); },
+  get days() { return stats.calorieDays(this.data.log, this.data.goals, this.email, 14, this.data.dayMarks); },
+
+  get completeDays() { return food.completeDayStats(this.data.dayMarks, this.email); },
   get calorieSummary() { return stats.calorieSummary(this.days); },
 
   calorieOpen: false,
@@ -3969,12 +4010,16 @@ Alpine.data('statsPage', () => ({
     return plot.bars.map((bar) => {
       if (!bar.h) return '';
       const lit = bar.i === on || (on == null && bar.i === plot.bars.length - 1);
+      // Incomplete and unreviewed days stay visible but faded: they are real
+      // food, just not numbers the averages trust.
+      const partial = this.days[bar.i]?.complete !== true;
+      const opacity = partial ? 0.18 : lit ? 1 : 0.5;
       const stroke = bar.over
         ? ' stroke="var(--color-carbs)" stroke-width="0.6" vector-effect="non-scaling-stroke"'
         : '';
       return `<rect x="${bar.x.toFixed(2)}" y="${bar.y.toFixed(2)}"`
         + ` width="${bar.w.toFixed(2)}" height="${bar.h.toFixed(2)}" rx="1"`
-        + ` fill="var(--color-carbs)" opacity="${lit ? 1 : 0.5}"${stroke}/>`;
+        + ` fill="var(--color-carbs)" opacity="${opacity}"${stroke}/>`;
     }).join('');
   },
 

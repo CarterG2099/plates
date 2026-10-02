@@ -10,7 +10,7 @@ import * as local from './local.js';
 import * as sync from './sync.js';
 import { estimate1RM, historyOf, volume as volumeOf } from './workout.js';
 import { groupFor, MUSCLE_GROUPS, MUSCLE_GROUP_LABEL } from './muscle-map.js';
-import { dayBounds, addDays, toDateOnly, fromDateOnly, entriesForDay, sumTotals, currentGoal } from './food.js';
+import { dayBounds, addDays, toDateOnly, fromDateOnly, entriesForDay, sumTotals, currentGoal, isComplete } from './food.js';
 
 const DAY = 86_400_000;
 
@@ -294,38 +294,47 @@ export function radarPlot(groups, { size = 100, rings = 3 } = {}) {
 
 // ---- nutrition -------------------------------------------------------------
 
-export function calorieDays(log, goals, ownerEmail, days = 14) {
+export function calorieDays(log, goals, ownerEmail, days = 14, marks = null) {
   const out = [];
 
   for (let i = days - 1; i >= 0; i--) {
     const date = addDays(new Date(), -i);
     const entries = entriesForDay(log, ownerEmail, date);
     const goal = currentGoal(goals, ownerEmail, date);
+    const logged = entries.length > 0;
 
     out.push({
       date,
       label: date.toLocaleDateString(undefined, { weekday: 'narrow' }),
       kcal: Math.round(sumTotals(entries).calories),
       target: Number(goal?.calorie_target) || null,
-      logged: entries.length > 0,
+      logged,
+      // true | false | null (never reviewed). Today counts while unreviewed —
+      // it is still being written and must not read as a partial day.
+      complete: marks
+        ? (isComplete(marks, ownerEmail, toDateOnly(date)) ?? (i === 0 && logged ? true : null))
+        : logged,
     });
   }
   return out;
 }
 
-/** Averages over days that were actually logged — a blank day isn't a zero-calorie day. */
+/**
+ * Averages over days marked complete — a blank day isn't a zero-calorie day,
+ * and a half-logged one reads as eating less than reality.
+ */
 export function calorieSummary(days) {
-  const logged = days.filter((d) => d.logged);
-  if (!logged.length) return null;
+  const complete = days.filter((d) => d.logged && d.complete === true);
+  if (!complete.length) return null;
 
-  const mean = logged.reduce((sum, d) => sum + d.kcal, 0) / logged.length;
-  const target = logged[logged.length - 1].target;
+  const mean = complete.reduce((sum, d) => sum + d.kcal, 0) / complete.length;
+  const target = complete[complete.length - 1].target;
 
   return {
     average: Math.round(mean),
     target,
     delta: target ? Math.round(mean - target) : null,
-    loggedDays: logged.length,
+    loggedDays: complete.length,
     totalDays: days.length,
   };
 }
@@ -722,7 +731,7 @@ export function caloriePlot(days, { width = 100, height = 40, gap = 1.4 } = {}) 
  * "6 over" is not a miss worth colouring.
  */
 export function calorieAdherence(days, { slack = 50 } = {}) {
-  const logged = days.filter((d) => d.logged && d.target);
+  const logged = days.filter((d) => d.logged && d.complete === true && d.target);
   if (!logged.length) return null;
 
   let over = 0;

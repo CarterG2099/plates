@@ -111,6 +111,12 @@
             </small>
           </button>
           <button class="tap" @click="$store.ui.shiftDay(1)" aria-label="Next day">›</button>
+          <!-- The day's verdict: green check = complete, struck = incomplete,
+               dim = never reviewed. The future cannot be complete yet. -->
+          <button class="tap day-mark" x-show="!$store.ui.isFuture"
+                  :class="{ 'is-complete': viewMark === true, 'is-incomplete': viewMark === false }"
+                  @click="toggleDayMark()"
+                  :aria-label="viewMark === true ? 'Mark day incomplete' : 'Mark day complete'">✓</button>
         </div>
 
         <!-- A future day with entries is a plan, not a record. Say so, so the
@@ -594,6 +600,18 @@
             </svg>
           </button>
         </div>
+
+        <!-- The look-back. One question about one day, answered in one tap —
+             a day only enters the averages once somebody vouches for it. -->
+        <template x-if="reviewDay">
+          <div class="review-ask">
+            <span>Was <b x-text="reviewLabel(reviewDay)"></b> a complete log?</span>
+            <div class="review-ask-buttons">
+              <button class="btn" @click="answerReview(true)">Yes</button>
+              <button class="btn btn-ghost" @click="answerReview(false)">No</button>
+            </div>
+          </div>
+        </template>
 
         <div class="search-row">
           <div class="search">
@@ -1837,7 +1855,7 @@
               <div class="field" x-show="detail.exercise.id">
                 <label for="ex-note">Notes</label>
                 <textarea id="ex-note" rows="2" placeholder="Seat height, grip, cues…"
-                          :value="detail.exercise.notes ?? ''"
+                          :value="detailNote ?? ''"
                           @change="saveExerciseNote($event.target.value)"></textarea>
               </div>
 
@@ -2460,7 +2478,8 @@
               <div class="stat-sub" x-show="calorieSummary && calorieSummary.delta !== null">
                 <span x-text="calorieSummary && Math.abs(calorieSummary.delta)"></span>
                 <span x-text="calorieSummary && calorieSummary.delta > 0 ? 'over target' : 'under target'"></span>
-                · <span x-text="calorieSummary && count(calorieSummary.loggedDays, 'day')"></span> logged
+                · <span x-text="calorieSummary && count(calorieSummary.loggedDays, 'complete day')"></span>
+                <span x-show="completeDays.streak > 1" x-text="`· ${completeDays.streak} in a row`"></span>
               </div>
             </div>
           </div>
@@ -2503,9 +2522,9 @@
               <b x-text="adherence && `${adherence.over} · ${adherence.under}`"></b>
             </div>
             <div class="stat-cell">
-              <small>Logged streak</small>
-              <b x-text="streak.current"></b>
-              <span x-text="`best ${streak.best}`"></span>
+              <small>Complete days</small>
+              <b x-text="completeDays.total"></b>
+              <span x-text="`streak ${completeDays.streak}`"></span>
             </div>
             <div class="stat-cell" x-show="adherence && adherence.biggest">
               <small>Biggest miss</small>

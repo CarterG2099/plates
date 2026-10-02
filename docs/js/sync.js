@@ -25,7 +25,9 @@ const PULL_ORDER = [
   'routine_exercises',
   'sessions',
   'session_sets',
+  'exercise_notes',
   'progress_photos',
+  'day_marks',
 ];
 
 const PAGE_SIZE = 1000;

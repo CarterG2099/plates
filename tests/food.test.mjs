@@ -1024,3 +1024,78 @@ test('an empty week has no label and says zero logged days', () => {
   assert.equal(label.loggedDays, 0);
   assert.equal(label.hasAny, false);
 });
+
+// ---- complete days ---------------------------------------------------------------
+
+const MARK_ME = 'c@x.com';
+const mark = (day, complete, updated_at = '2026-10-01T10:00:00Z', extra = {}) =>
+  ({ id: `m-${day}-${updated_at}`, owner_email: MARK_ME, day, complete, updated_at, ...extra });
+
+test('isComplete answers true, false, or never-reviewed', () => {
+  const marks = [mark('2026-09-30', true), mark('2026-09-29', false)];
+  assert.equal(food.isComplete(marks, MARK_ME, '2026-09-30'), true);
+  assert.equal(food.isComplete(marks, MARK_ME, '2026-09-29'), false);
+  assert.equal(food.isComplete(marks, MARK_ME, '2026-09-28'), null);
+  assert.equal(food.isComplete(marks, 'a@x.com', '2026-09-30'), null, 'marks are per person');
+});
+
+test('two devices marking the same day offline: the newer verdict wins', () => {
+  const marks = [
+    mark('2026-09-30', true, '2026-10-01T08:00:00Z'),
+    mark('2026-09-30', false, '2026-10-01T09:00:00Z'),
+  ];
+  assert.equal(food.isComplete(marks, MARK_ME, '2026-09-30'), false);
+});
+
+test('setDayMark updates the existing row rather than growing a second verdict', async () => {
+  const first = await food.setDayMark([], MARK_ME, '2026-09-30', true);
+  const second = await food.setDayMark([first], MARK_ME, '2026-09-30', false);
+  assert.equal(second.id, first.id);
+  assert.equal(second.complete, false);
+});
+
+test('reviewCandidate asks about the most recent past logged day, once', () => {
+  const now = new Date(2026, 9, 2, 12);
+  const log = [
+    { owner_email: MARK_ME, logged_at: new Date(2026, 9, 1, 9).toISOString(), calories: 500 },
+    { owner_email: MARK_ME, logged_at: new Date(2026, 8, 29, 9).toISOString(), calories: 700 },
+    { owner_email: MARK_ME, logged_at: new Date(2026, 9, 2, 9).toISOString(), calories: 300 },  // today: still being written
+  ];
+  assert.equal(food.reviewCandidate(log, [], MARK_ME, now), '2026-10-01');
+
+  // Either answer settles it — "no" must not be re-asked forever.
+  for (const verdict of [true, false]) {
+    assert.equal(food.reviewCandidate(log, [mark('2026-10-01', verdict)], MARK_ME, now), null,
+      'an answered day is settled; older unreviewed days are not interrogated');
+  }
+});
+
+test('reviewCandidate has nothing to ask on an empty log', () => {
+  assert.equal(food.reviewCandidate([], [], MARK_ME), null);
+});
+
+test('completeDayStats counts verdicts and the current run', () => {
+  const now = new Date(2026, 9, 2, 12);
+  const marks = [
+    mark('2026-10-01', true),
+    mark('2026-09-30', true),
+    mark('2026-09-29', false),   // breaks the streak
+    mark('2026-09-27', true),    // counted in total, outside the run
+  ];
+  const stats = food.completeDayStats(marks, MARK_ME, now);
+  assert.equal(stats.total, 3);
+  assert.equal(stats.streak, 2, 'today being unreviewed must not end the streak');
+});
+
+test('the weekly average trusts only days marked complete', () => {
+  const now = new Date(2026, 9, 2, 12);
+  const log = [
+    { owner_email: MARK_ME, logged_at: new Date(2026, 9, 1, 9).toISOString(), calories: 2200 },
+    { owner_email: MARK_ME, logged_at: new Date(2026, 8, 30, 9).toISOString(), calories: 600 },  // half a day
+  ];
+  const marks = [mark('2026-10-01', true), mark('2026-09-30', false)];
+
+  const label = food.weeklyNutritionLabel(log, MARK_ME, { end: now, marks });
+  assert.equal(label.loggedDays, 1);
+  assert.equal(label.calories, 2200, 'the 600 kcal half-day must not drag the average');
+});
