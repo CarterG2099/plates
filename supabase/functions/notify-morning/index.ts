@@ -9,37 +9,21 @@
 // UTC hour drifts by one across daylight saving — 6:30 in Denver is 12:30 UTC in
 // summer and 13:30 in winter. The cron therefore fires at *both*, and this
 // function decides which one is really 6am local. A date stamp in app_config
-// makes the second call a no-op, so exactly one lands per local day.
+// makes the second call a no-op, so exactly one lands per local day. Sundays
+// are skipped for everyone; see QUIET_DAYS in schedule.ts.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 // A copy, not an import. Edge Functions deploy as independent bundles, so a
 // relative path out of this directory does not resolve once uploaded. The two
 // copies are byte-identical and must stay that way; the RFC 8291 encryption in
 // there is not something to let drift.
 import { sendPush } from "./webpush.ts";
-
-/** Where "morning" is. Not a member preference yet — there is one household. */
-const ZONE = "America/Denver";
-
-/** The hour that counts as morning, local. */
-const SEND_HOUR = 6;
+import { localParts, skipReason, ZONE } from "./schedule.ts";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 // deno-lint-ignore no-explicit-any
 type SupabaseLike = any;
-
-/** Local wall-clock parts, without pulling in a date library. */
-function localParts(now: Date, zone: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: zone,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", hour12: false,
-  }).formatToParts(now);
-
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return { date: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) };
-}
 
 /**
  * Day and week streaks from finished sessions, in local dates.
@@ -271,11 +255,12 @@ Deno.serve(async (req) => {
   }
 
   const now = new Date();
-  const { date: today, hour } = localParts(now, ZONE);
+  const local = localParts(now, ZONE);
+  const { date: today, hour } = local;
   const force = new URL(req.url).searchParams.get("force") === "1";
 
-  if (!force && hour !== SEND_HOUR) return json({ skipped: "not the hour", hour, zone: ZONE });
-  if (!force && config.morning_sent_on === today) return json({ skipped: "already sent", today });
+  const skipped = force ? null : skipReason(local, config.morning_sent_on);
+  if (skipped) return json({ skipped, today, hour, weekday: local.weekday, zone: ZONE });
 
   const { data: wanting, error: prefsError } = await db
     .from("notification_prefs")
