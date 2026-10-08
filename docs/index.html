@@ -618,6 +618,8 @@
             <span aria-hidden="true">⌕</span>
             <input type="search" placeholder="Search your foods…" x-model="term"
                    enterkeyhint="search" autocomplete="off">
+            <button class="search-clear" x-show="term" x-cloak
+                   @click="term = ''" aria-label="Clear search">×</button>
           </div>
           <button class="tap tap-primary" x-show="canScan" @click="openScanner()"
                   aria-label="Scan a barcode">
@@ -927,6 +929,8 @@
                 <span aria-hidden="true">⌕</span>
                 <input type="search" placeholder="Add an ingredient…" x-model="mealTerm"
                        autocomplete="off" enterkeyhint="search">
+                <button class="search-clear" x-show="mealTerm" x-cloak
+                   @click="mealTerm = ''" aria-label="Clear search">×</button>
               </div>
 
               <div>
@@ -1767,6 +1771,8 @@
               <div class="search">
                 <span aria-hidden="true">⌕</span>
                 <input type="search" placeholder="Search exercises…" x-model="pickerTerm" autocomplete="off">
+                <button class="search-clear" x-show="pickerTerm" x-cloak
+                   @click="pickerTerm = ''" aria-label="Clear search">×</button>
               </div>
 
               <!-- Muscle family, then that family's specific muscles, then the

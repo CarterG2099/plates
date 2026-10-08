@@ -2114,3 +2114,24 @@ button.nf-tap:active { background: var(--color-hover); }
 .day-mark { color: var(--color-text-dim); }
 .day-mark.is-complete { color: var(--color-success); border-color: var(--color-success); }
 .day-mark.is-incomplete { color: var(--color-danger); text-decoration: line-through; }
+
+/* The clear button lives in the layout, not in focus state: the native
+   search-cancel only appears while the field is focused, which is exactly when
+   you least need a reminder the text is clearable. Hidden natively so there are
+   never two ×s. */
+input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+
+.search-clear {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-right: calc(var(--space-2) * -1);
+  border-radius: var(--radius-pill);
+  background: none;
+  border: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+.search-clear:active { color: var(--color-text); }
