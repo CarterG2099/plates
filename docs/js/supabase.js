@@ -55,7 +55,37 @@ export async function loadMembership() {
   if (error) {
     return { isMember: false, members: [], error };
   }
-  return { isMember: (data?.length ?? 0) > 0, members: data ?? [], error: null };
+
+  // RLS returns only grants this account is party to. A failure here leaves
+  // `sharing` unset, which partnerOf() treats as the old any-other-member rule.
+  const { data: grants, error: grantsError } = await db('share_grants').select('grantor_email, grantee_email');
+  const members = grantsError ? (data ?? []) : markSharing(data ?? [], grants ?? []);
+
+  return { isMember: (data?.length ?? 0) > 0, members, error: null };
+}
+
+/**
+ * Flag the members whose data reaches this account.
+ *
+ * Membership is not the same as being the other half of the household: a test
+ * account is a member with no grants either way, and must not turn up as
+ * anyone's partner. Every grant this account can see names it on one side, so
+ * a member who grants to someone else here is granting to us.
+ */
+export function markSharing(members, grants) {
+  const grantors = new Set(grants.map((g) => g.grantor_email?.toLowerCase()));
+  return members.map((m) => ({ ...m, sharing: grantors.has(m.email?.toLowerCase()) }));
+}
+
+/**
+ * The member whose data this account sees alongside its own, or undefined.
+ *
+ * `sharing !== false` rather than `=== true` so a membership cached before the
+ * flag existed still finds the partner it always did.
+ */
+export function partnerOf(members, email) {
+  const me = email.toLowerCase();
+  return members.find((m) => m.email?.toLowerCase() !== me && m.sharing !== false);
 }
 
 /** Turn a PostgREST failure into something a human can act on. */

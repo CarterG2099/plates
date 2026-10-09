@@ -8,7 +8,7 @@
  */
 
 import Alpine from './vendor/alpine.esm.js';
-import { supabase, signIn, signOut, loadMembership, describeError } from './supabase.js';
+import { supabase, signIn, signOut, loadMembership, describeError, partnerOf } from './supabase.js';
 import * as local from './local.js';
 import * as sync from './sync.js';
 import * as food from './food.js';
@@ -3291,7 +3291,7 @@ Alpine.data('trainPage', () => ({
     return [
       { email: me, name: 'You' },
       ...Alpine.store('auth').members
-        .filter((m) => m.email && m.email.toLowerCase() !== me.toLowerCase())
+        .filter((m) => m.email && m.email.toLowerCase() !== me.toLowerCase() && m.sharing !== false)
         .map((m) => ({ email: m.email, name: label(m) })),
     ];
   },
@@ -4183,9 +4183,7 @@ Alpine.data('statsPage', () => ({
   ownerFilter: 'mine',
 
   get partnerName() {
-    const email = this.email.toLowerCase();
-    const other = Alpine.store('auth').members.find((m) => m.email?.toLowerCase() !== email);
-    return other?.display_name || 'Theirs';
+    return partnerOf(Alpine.store('auth').members, this.email)?.display_name || 'Theirs';
   },
 
   get photos() {
