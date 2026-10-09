@@ -6,7 +6,12 @@
   <!-- maximum-scale suppresses iOS's automatic zoom-to-input (the "app is
        randomly zoomed in" bug) while Safari still honours user pinch gestures
        for accessibility. Belt to the 16px-input braces in the CSS. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+  <!-- interactive-widget: since Chrome 108 the keyboard OVERLAYS the page by
+       default, so fixed sheets kept their full height and the keyboard sat on
+       top of the results. resizes-content shrinks the layout viewport instead —
+       sheets and their scrollers fit above the keyboard with no JS. iOS ignores
+       the flag; trackKeyboardInset() in app.js carries iOS. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Plates</title>
 
   <link rel="icon" href="/icons/icon-192.png">

@@ -4426,6 +4426,16 @@ function trackKeyboardInset() {
   // The browser scrolls the visual viewport to bring a focused field into view;
   // without this the inset is right only while nothing has moved.
   vv.addEventListener('scroll', apply);
+
+  // iOS reports the keyboard through visualViewport late — and sometimes not at
+  // all until the opening animation has settled. Focus changes are the real
+  // signal that a keyboard is coming or going, so re-measure on those, after
+  // the settle. Extra calls are idempotent; this only costs a style write.
+  const settle = () => { apply(); setTimeout(apply, 300); setTimeout(apply, 700); };
+  document.addEventListener('focusin', settle);
+  document.addEventListener('focusout', settle);
+  window.addEventListener('resize', apply);
+
   apply();
 }
 
