@@ -42,8 +42,23 @@ Alpine.magic('swipe', () => (sheet, close) => {
   let delta = 0;
   let dragging = false;
 
+  /**
+   * Whether the finger landed inside anything scrolled away from its top.
+   * The sheet is not always the scroller — a search sheet keeps its own
+   * overflow hidden and scrolls the results list inside it — so the check
+   * walks from the touch up. A gesture that starts mid-list is a scroll for
+   * its whole life: reaching the top must not convert it into a dismiss.
+   * Starting at the top, or anywhere outside the list, drags the sheet.
+   */
+  const inScrolledRegion = (node) => {
+    for (let el = node; el && el !== sheet; el = el.parentElement) {
+      if (el.scrollTop > 0) return true;
+    }
+    return sheet.scrollTop > 0;
+  };
+
   sheet.addEventListener('touchstart', (e) => {
-    if (sheet.scrollTop > 0) return;
+    if (inScrolledRegion(e.target)) return;
     startY = e.touches[0].clientY;
     delta = 0;
     dragging = true;
@@ -53,7 +68,9 @@ Alpine.magic('swipe', () => (sheet, close) => {
   sheet.addEventListener('touchmove', (e) => {
     if (!dragging) return;
     delta = e.touches[0].clientY - startY;
-    // Downward only; an upward drag is a scroll.
+    // Upward means scrolling: disarm for the rest of the gesture, or dragging
+    // back down would move the sheet while the list scrolls under the finger.
+    if (delta < -10) { delta = 0; dragging = false; sheet.style.transform = ''; return; }
     if (delta <= 0) { delta = 0; sheet.style.transform = ''; return; }
     sheet.style.transform = `translateY(${delta}px)`;
   }, { passive: true });
