@@ -318,6 +318,9 @@ button.macro {
 
 .search input {
   flex: 1;
+  /* Or the input's intrinsic ~190px min-width wins on phones and shoves the
+     clear × out past the pill's edge — same flex trap .field input documents. */
+  min-width: 0;
   background: none;
   border: 0;
   outline: none;

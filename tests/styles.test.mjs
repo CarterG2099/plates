@@ -162,3 +162,13 @@ test('no input rule sets a font size under the 16px iOS zoom threshold', async (
     }
   }
 });
+
+// The clear × was pushed out of the pill on phones: a flex child's min-width
+// defaults to the input's intrinsic ~190px, so on narrow screens the input
+// refused to shrink and shoved the button past the border. Same trap .field
+// input already documents.
+test('the search input may shrink, or it evicts the clear button on phones', async () => {
+  const css = await readFile(new URL('../docs/css/pages.css', import.meta.url), 'utf8');
+  const rule = css.slice(css.indexOf('.search input {'));
+  assert.match(rule.slice(0, rule.indexOf('}')), /min-width:\s*0/);
+});
