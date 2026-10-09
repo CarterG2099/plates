@@ -4396,6 +4396,14 @@ document.addEventListener('alpine:initialized', () => {
   setTimeout(() => boot.remove(), 200);
 });
 
+// Browser chrome sliding in and out moves the visual viewport by a few dozen
+// pixels; a phone keyboard is several hundred.
+const KEYBOARD_MIN = 120;
+
+/** A field that brings up a keyboard has focus. */
+const typing = () =>
+  document.activeElement?.matches?.('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]), textarea') ?? false;
+
 /**
  * Publish how much of the screen the on-screen keyboard is covering.
  *
@@ -4416,10 +4424,19 @@ function trackKeyboardInset() {
   const vv = window.visualViewport;
   if (!vv) return;
 
+  const root = document.documentElement;
+  const touch = window.matchMedia?.('(pointer: coarse)');
   const apply = () => {
-    const covered = window.innerHeight - vv.height - vv.offsetTop;
-    document.documentElement.style.setProperty(
-      '--keyboard-inset', `${Math.max(0, Math.round(covered))}px`);
+    const covered = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    root.style.setProperty('--keyboard-inset', `${covered}px`);
+    // iOS pans the visual viewport up to reveal the field; the backdrop pads its
+    // top by the same amount so a full-height sheet starts where the screen does.
+    root.style.setProperty('--viewport-top', `${Math.max(0, Math.round(vv.offsetTop))}px`);
+    // Search sheets give the list every pixel while the keyboard is up; see
+    // .keyboard-up in pages.css. Android with interactive-widget=resizes-content
+    // shrinks the whole page instead, so nothing reads as covered there — a
+    // focused text field on a touch screen is the signal that holds everywhere.
+    root.classList.toggle('keyboard-up', covered > KEYBOARD_MIN || (Boolean(touch?.matches) && typing()));
   };
 
   vv.addEventListener('resize', apply);

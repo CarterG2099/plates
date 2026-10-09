@@ -399,6 +399,7 @@ html:has(.sheet-backdrop) { overflow: hidden; }
      Published by trackKeyboardInset() in app.js; 0 whenever no keyboard is up,
      and on any browser without visualViewport. */
   padding-bottom: var(--keyboard-inset, 0px);
+  padding-top: var(--viewport-top, 0px);
 }
 
 .sheet {
@@ -440,6 +441,31 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+
+/* With the keyboard up, a search sheet is the results.
+ *
+ * Measured on a 390x844 screen with a 336px keyboard: the list got 74px of a
+ * 447px sheet — one row — because everything else stayed full size. Wrapped
+ * filter chips took 168px, Cancel and the home-indicator padding most of the
+ * rest. So while you type: the whole visible height, one sideways-scrolling
+ * line per chip row, no Cancel (swipe down still closes it), and no
+ * home-indicator gap, which the keyboard is covering anyway. All of it comes
+ * back the moment the keyboard goes. */
+.keyboard-up .sheet-backdrop.is-search .sheet {
+  max-height: 100%;
+  padding-bottom: var(--space-4);
+  gap: var(--space-3);
+}
+
+.keyboard-up .sheet-backdrop.is-search .chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.keyboard-up .sheet-backdrop.is-search .chips::-webkit-scrollbar { display: none; }
+.keyboard-up .sheet-backdrop.is-search .chip { flex: none; white-space: nowrap; }
+.keyboard-up .sheet-backdrop.is-search .sheet > .btn-ghost { display: none; }
 
 /* Everything that is not the list keeps its height while the list takes the
    slack. */

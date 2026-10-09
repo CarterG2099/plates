@@ -172,3 +172,52 @@ test('the search input may shrink, or it evicts the clear button on phones', asy
   const rule = css.slice(css.indexOf('.search input {'));
   assert.match(rule.slice(0, rule.indexOf('}')), /min-width:\s*0/);
 });
+
+// ---- the keyboard over a search sheet ------------------------------------------
+
+/** The declarations of the first rule whose selector is exactly `selector`. */
+function ruleBody(source, selector) {
+  const clean = source.replace(/\/\*[\s\S]*?\*\//g, '');
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = clean.match(new RegExp(`(?:^|})\\s*${escaped}\\s*\\{([^}]*)\\}`));
+  return m ? m[1] : null;
+}
+
+// The regression: with the keyboard up the exercise list got 74px of a 447px
+// sheet — one row — because the chips wrapped and Cancel and the home-indicator
+// padding all kept their space. You had to close the keyboard to see a result.
+
+test('with the keyboard up, a search sheet takes the whole visible height', () => {
+  const sheet = ruleBody(pages, '.keyboard-up .sheet-backdrop.is-search .sheet');
+  assert.ok(sheet, 'the keyboard-up sheet rule is missing');
+  assert.match(sheet, /max-height:\s*100%/);
+  assert.doesNotMatch(sheet, /inset-bottom/, 'the keyboard covers the home indicator; no gap for it');
+});
+
+test('with the keyboard up, the chips stay on one sideways-scrolling line', () => {
+  const chips = ruleBody(pages, '.keyboard-up .sheet-backdrop.is-search .chips');
+  assert.ok(chips, 'the keyboard-up chips rule is missing');
+  assert.match(chips, /flex-wrap:\s*nowrap/);
+  assert.match(chips, /overflow-x:\s*auto/);
+  assert.match(ruleBody(pages, '.keyboard-up .sheet-backdrop.is-search .chip') ?? '', /flex:\s*none/);
+});
+
+test('with the keyboard up, Cancel gives its space to the list', () => {
+  assert.match(ruleBody(pages, '.keyboard-up .sheet-backdrop.is-search .sheet > .btn-ghost') ?? '',
+    /display:\s*none/);
+});
+
+test('the backdrop is fitted to the visible area at both ends', () => {
+  const backdrop = ruleBody(pages, '.sheet-backdrop');
+  assert.match(backdrop, /padding-bottom:\s*var\(--keyboard-inset, 0px\)/);
+  assert.match(backdrop, /padding-top:\s*var\(--viewport-top, 0px\)/);
+});
+
+test('app.js publishes keyboard-up and the viewport top that the CSS reads', async () => {
+  const app = await readFile(fileURLToPath(new URL('../docs/js/app.js', import.meta.url)), 'utf8');
+  assert.match(app, /root\.classList\.toggle\('keyboard-up', covered > KEYBOARD_MIN \|\| /);
+  // Android resizes the page rather than covering it, so a covered height alone
+  // never fires there; a focused field on a touch screen has to count too.
+  assert.match(app, /\(Boolean\(touch\?\.matches\) && typing\(\)\)/);
+  assert.match(app, /setProperty\('--viewport-top'/);
+});
