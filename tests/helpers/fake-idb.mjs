@@ -50,6 +50,16 @@ class StoreHandle {
     }
   }
 
+  // Real IndexedDB throws DataError when a keyPath store is handed a row with
+  // no value at the key path. A Map would happily file the row under undefined,
+  // which is how a row whose id was lost to an `id: undefined` spread passed
+  // the suite and threw on every real device.
+  #requireKey(copy) {
+    if (copy[this.store.keyPath] === undefined) {
+      throw new Error(`DataError: no value at keyPath '${this.store.keyPath}' in ${this.store.name}`);
+    }
+  }
+
   // Structured-clone semantics: what goes in is a copy, so a caller mutating
   // its object afterwards cannot reach back into the store. Real IndexedDB
   // behaves this way and code that accidentally relies on shared references
@@ -57,6 +67,7 @@ class StoreHandle {
   put(row) {
     this.#write();
     const copy = structuredClone(row);
+    this.#requireKey(copy);
     this.store.rows.set(copy[this.store.keyPath], copy);
     return new FakeRequest(copy[this.store.keyPath]);
   }
@@ -67,6 +78,7 @@ class StoreHandle {
     if (this.store.autoIncrement && copy[this.store.keyPath] == null) {
       copy[this.store.keyPath] = ++this.store.seq;
     }
+    this.#requireKey(copy);
     if (this.store.rows.has(copy[this.store.keyPath])) {
       throw new Error(`add() on an existing key in ${this.store.name}`);
     }

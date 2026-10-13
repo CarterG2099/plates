@@ -26,6 +26,15 @@ test('a saved row gets a client-generated uuid', async () => {
   assert.match(row.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 });
 
+test('an undefined id still gets a uuid — IndexedDB rejects a row without one', async () => {
+  // The `id: existing?.id` upsert pattern passes undefined for a first-time
+  // row. That must mean "generate one", not a row with no key: the fake store
+  // below throws on a missing key exactly like a real device does.
+  const row = await local.save('foods', { id: undefined, name: 'Oats' }, 'c@x');
+  assert.match(row.id, /^[0-9a-f]{8}-/);
+  assert.equal((await local.get('foods', row.id)).name, 'Oats');
+});
+
 test('an id supplied by the caller is kept, so a save is an upsert', async () => {
   const first = await local.save('foods', { name: 'Oats' }, 'c@x');
   const second = await local.save('foods', { id: first.id, name: 'Rolled Oats' }, 'c@x');

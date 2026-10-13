@@ -234,10 +234,15 @@ export function serialise(key, task) {
  * temporary id to reconcile later.
  */
 export async function save(table, fields, ownerEmail) {
+  // The id comes after the spread: the `id: existing?.id` upsert pattern passes
+  // an explicit undefined for a first-time row, and spread before it would put
+  // that undefined back — JSON drops the key and IndexedDB throws DataError on
+  // the missing keyPath. owner_email stays before the spread on purpose: an
+  // explicit null there (a shared barcode-cache row) must survive the fallback.
   const row = plain({
-    id: fields.id ?? crypto.randomUUID(),
-    owner_email: fields.owner_email ?? ownerEmail,
+    owner_email: ownerEmail,
     ...fields,
+    id: fields.id ?? crypto.randomUUID(),
     updated_at: new Date().toISOString(),
   });
 

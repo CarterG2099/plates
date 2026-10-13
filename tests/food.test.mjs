@@ -1049,6 +1049,9 @@ test('two devices marking the same day offline: the newer verdict wins', () => {
 
 test('setDayMark updates the existing row rather than growing a second verdict', async () => {
   const first = await food.setDayMark([], MARK_ME, '2026-09-30', true);
+  // Without this line the test passed with first.id === second.id === undefined
+  // while every real device threw: a first-time mark must actually get an id.
+  assert.ok(first.id, 'a first-time mark gets an id');
   const second = await food.setDayMark([first], MARK_ME, '2026-09-30', false);
   assert.equal(second.id, first.id);
   assert.equal(second.complete, false);
