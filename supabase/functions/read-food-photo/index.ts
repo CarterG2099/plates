@@ -1,17 +1,22 @@
-// read-food-photo — turns a photo into something you can log.
+// read-food-photo — turns a photo (or a description) into something you can log.
 //
-// Two modes, one function because they share all the plumbing:
+// Three modes, one function because they share all the plumbing:
 //
-//   label — a Nutrition Facts panel. This is transcription. The numbers are
-//           printed on the packet, so the answer is right or it is a misread,
-//           and it goes into the normal review form.
+//   label    — a Nutrition Facts panel. This is transcription. The numbers are
+//              printed on the packet, so the answer is right or it is a misread,
+//              and it goes into the normal review form.
 //
-//   meal  — a plate of food. This is estimation, and it is guessing: portion
-//           size cannot be read off a photo, only inferred. Every field it
-//           returns is an opinion, the response says so, and the UI has to keep
-//           saying so. See the note on `confidence` in meal-prompt.ts. An
-//           optional `note` from the eater ("made with Greek yogurt", "from
-//           Cafe Rio") carries what the photo can't show.
+//   meal     — a plate of food. This is estimation, and it is guessing: portion
+//              size cannot be read off a photo, only inferred. Every field it
+//              returns is an opinion, the response says so, and the UI has to
+//              keep saying so. See the note on `confidence` in meal-prompt.ts.
+//              An optional `note` from the eater ("made with Greek yogurt",
+//              "from Cafe Rio") carries what the photo can't show.
+//
+//   describe — no photo at all, just words, for the meal that is already eaten
+//              and gone. Same estimation, same response shape as meal, one
+//              notch less confident: there was never a frame to judge a
+//              portion against.
 //
 // It never writes to the database; the human reviews and saves, the same
 // convention as import-photo in the recipes app, whose model-fallback logic this
@@ -20,7 +25,7 @@
 // Members only: we check plates.is_member() with the caller's JWT. The Gemini
 // key lives in the GEMINI_API_KEY function secret and never reaches the browser.
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { cleanNote, mealPrompt } from "./meal-prompt.ts";
+import { cleanDescription, cleanNote, describePrompt, mealPrompt } from "./meal-prompt.ts";
 
 const MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
 
@@ -170,10 +175,12 @@ Deno.serve(async (req) => {
   let mode = "label";
   let images: { imageBase64: string; mimeType: string }[] = [];
   let note: string | null = null;
+  let description: string | null = null;
   try {
     const body = await req.json();
-    mode = body?.mode === "meal" ? "meal" : "label";
+    mode = body?.mode === "meal" || body?.mode === "describe" ? body.mode : "label";
     note = cleanNote(body?.note);
+    description = cleanDescription(body?.description);
     if (Array.isArray(body?.images)) {
       images = body.images
         .filter((i: { imageBase64?: string }) => i?.imageBase64)
@@ -184,12 +191,19 @@ Deno.serve(async (req) => {
     }
   } catch (_) { /* falls through to the empty check */ }
 
-  if (!images.length) return json({ error: "No photo provided." }, 400);
+  if (mode === "describe" && !description) return json({ error: "Nothing to estimate — describe what you ate." }, 400);
+  if (mode !== "describe" && !images.length) return json({ error: "No photo provided." }, 400);
+
+  const prompt = mode === "describe"
+    ? describePrompt(description!)
+    : mode === "meal"
+    ? mealPrompt(note)
+    : LABEL_PROMPT;
 
   // 200 with an `error` field, not a 5xx: supabase-js hides the response body on
   // a non-2xx, so a status code here would reach the user as "Edge Function
   // returned a non-2xx status code" and lose the message that explains it.
-  const answer = await askGemini(apiKey, mode === "meal" ? mealPrompt(note) : LABEL_PROMPT, images);
+  const answer = await askGemini(apiKey, prompt, images);
   if ("error" in answer) return json({ error: answer.error });
 
   let parsed: Record<string, unknown>;
@@ -202,7 +216,9 @@ Deno.serve(async (req) => {
 
   if (parsed?.unreadable === true) {
     return json({
-      error: mode === "meal"
+      error: mode === "describe"
+        ? "Couldn't find food in that description."
+        : mode === "meal"
         ? "Couldn't find food in that photo."
         : "Couldn't read a nutrition label in that photo.",
     });
@@ -249,7 +265,11 @@ Deno.serve(async (req) => {
     .filter((i: { name: string; calories: number }) => i.name !== "Unnamed" || i.calories > 0);
 
   if (!items.length) {
-    return json({ error: "Couldn't find food in that photo." });
+    return json({
+      error: mode === "describe"
+        ? "Couldn't find food in that description."
+        : "Couldn't find food in that photo.",
+    });
   }
 
   const confidence = ["low", "medium", "high"].includes(String(parsed.confidence))

@@ -223,7 +223,7 @@ async function save(sub) {
 // preference the server cannot act on.
 
 /** Server defaults, mirrored so the UI has something to draw before the fetch. */
-export const DEFAULT_PREFS = { idle_workouts: true, morning_quotes: false };
+export const DEFAULT_PREFS = { idle_workouts: true, morning_quotes: false, evening_nudge: false };
 
 /**
  * This person's settings, creating the row on first read.
@@ -234,7 +234,7 @@ export const DEFAULT_PREFS = { idle_workouts: true, morning_quotes: false };
 export async function loadPrefs(ownerEmail) {
   const { data, error } = await db('notification_prefs')
     .upsert({ owner_email: ownerEmail, ...DEFAULT_PREFS }, { onConflict: 'owner_email', ignoreDuplicates: true })
-    .select('idle_workouts, morning_quotes')
+    .select('idle_workouts, morning_quotes, evening_nudge')
     .maybeSingle();
 
   if (error) throw error;
@@ -242,7 +242,7 @@ export async function loadPrefs(ownerEmail) {
 
   // ignoreDuplicates returns nothing when the row already existed.
   const { data: existing, error: readError } = await db('notification_prefs')
-    .select('idle_workouts, morning_quotes')
+    .select('idle_workouts, morning_quotes, evening_nudge')
     .eq('owner_email', ownerEmail)
     .maybeSingle();
 
@@ -254,7 +254,7 @@ export async function savePrefs(ownerEmail, changes) {
   const { data, error } = await db('notification_prefs')
     .upsert({ owner_email: ownerEmail, ...changes, updated_at: new Date().toISOString() },
       { onConflict: 'owner_email' })
-    .select('idle_workouts, morning_quotes')
+    .select('idle_workouts, morning_quotes, evening_nudge')
     .maybeSingle();
 
   if (error) throw error;

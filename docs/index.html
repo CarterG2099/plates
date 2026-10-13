@@ -821,6 +821,12 @@
           Add “<span x-text="term"></span>” by hand
         </button>
 
+        <!-- The meal that is already eaten and gone — nothing to scan, nothing
+             to photograph. The failed search term seeds the description. -->
+        <button class="btn btn-block" x-show="term" @click="startDescribe(term)">
+          Describe what you ate
+        </button>
+
         <div class="notice notice-error" x-show="photoError" x-text="photoError"></div>
 
         <template x-if="combos.length && !term && filter !== 'recipes'">
@@ -873,6 +879,11 @@
                          @change="closeMenu(); readLabel($event)" hidden>
                 </label>
               </div>
+
+              <div class="card-label">Already ate it</div>
+              <button class="btn btn-block" @click="fromMenu(() => startDescribe())">
+                Describe what you ate
+              </button>
 
               <button class="btn btn-block" @click="browseMine()">My foods &amp; meals</button>
               <button class="btn btn-block" @click="browseRecipes()">From a recipe</button>
@@ -1073,6 +1084,39 @@
                         :disabled="photoBusy === 'meal'" @click="readMealPhoto()">
                   <span x-show="photoBusy !== 'meal'">Read it</span>
                   <span x-show="photoBusy === 'meal'">Reading…</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Describe a meal, no photo ----------------------------------------- -->
+        <!-- For the meal that is already eaten: words in, the same estimate
+             sheet out as a plate photo. -->
+        <template x-if="describing">
+          <div class="sheet-backdrop" @click.self="closeDescribe()">
+            <div class="sheet" x-init="$swipe($el, () =&gt; { closeDescribe() })">
+              <div class="grabber"></div>
+              <div class="card-label">Describe what you ate</div>
+
+              <div class="field">
+                <label for="describe-meal">What was it?</label>
+                <textarea id="describe-meal" x-model="describing.text" rows="3"
+                          maxlength="500" autocomplete="off"
+                          placeholder="two street tacos al pastor and a handful of chips with queso…"></textarea>
+              </div>
+              <p class="prefill">Amounts help — “two”, “a bowl”, “half the plate”. Name the restaurant if it was one.</p>
+
+              <div class="notice notice-error" x-show="describing.error"
+                   x-text="describing.error"></div>
+
+              <div class="btn-row">
+                <button class="btn btn-ghost" @click="closeDescribe()">Cancel</button>
+                <button class="btn btn-primary" :class="photoBusy === 'describe' && 'is-busy'"
+                        :disabled="photoBusy === 'describe' || !describing.text.trim()"
+                        @click="readDescription()">
+                  <span x-show="photoBusy !== 'describe'">Estimate it</span>
+                  <span x-show="photoBusy === 'describe'">Estimating…</span>
                 </button>
               </div>
             </div>
@@ -3080,6 +3124,24 @@
                                 ($store.ui.notifications !== 'on' && !$store.ui.prefs.morning_quotes)"
                      @change="await $store.ui.toggleMorning();
                               $el.checked = $store.ui.prefs.morning_quotes">
+            </label>
+
+            <label class="setting"
+                   :class="{ 'is-dead': $store.ui.notifications !== 'on' && !$store.ui.prefs.evening_nudge }">
+              <span class="setting-text">
+                <b>Evening check-in</b>
+                <small x-text="$store.ui.notifications === 'on'
+                  ? '8:30pm, only when today’s food log looks unfinished'
+                  : $store.ui.prefs.evening_nudge
+                    ? 'On for your account — this browser is not subscribed'
+                    : 'Turn notifications on first'"></small>
+              </span>
+              <input type="checkbox" role="switch"
+                     :checked="$store.ui.prefs.evening_nudge"
+                     :disabled="$store.ui.prefsBusy ||
+                                ($store.ui.notifications !== 'on' && !$store.ui.prefs.evening_nudge)"
+                     @change="await $store.ui.toggleEvening();
+                              $el.checked = $store.ui.prefs.evening_nudge">
             </label>
 
             <div class="card-label" style="margin-top: var(--space-4)">Account</div>

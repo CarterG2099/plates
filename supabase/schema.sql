@@ -659,3 +659,12 @@ create policy plates_motion_update on storage.objects
 create policy plates_motion_delete on storage.objects
   for delete to authenticated
   using (bucket_id = 'plates-exercise-motion' and plates.is_admin());
+
+-- ---- evening check-in (added 2026-10-13) ----------------------------------------
+-- notify-evening nudges at 8:30pm local, only when the day's food log looks
+-- unfinished. Opt-in per account, like morning_quotes. (notification_prefs
+-- itself was created live before this file tracked it; only the new column is
+-- recorded here.)
+
+alter table plates.notification_prefs
+  add column if not exists evening_nudge boolean not null default false;

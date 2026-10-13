@@ -41,6 +41,27 @@ export async function estimateMeal(file, note = '') {
   return send('meal', file, MEAL_EDGE, note);
 }
 
+/**
+ * No photo at all — the meal already eaten and gone, in words. Same estimate
+ * shape as estimateMeal, so it lands in the same review sheet.
+ *
+ * @returns {Promise<{items: object[], confidence: string, note: string|null}>}
+ */
+export async function describeMeal(description) {
+  const text = (description ?? '').trim();
+  if (!text) throw new Error('Describe what you ate first.');
+  if (!navigator.onLine) throw new Error('Estimating a meal needs a connection.');
+
+  const { data, error } = await supabase.functions.invoke('read-food-photo', {
+    body: { mode: 'describe', description: text },
+  });
+
+  if (error) throw new Error(error.message ?? String(error));
+  if (data?.error) throw new Error(data.error);
+
+  return data;
+}
+
 async function send(mode, file, maxEdge, note = '') {
   if (!file) throw new Error('No photo selected.');
   if (!navigator.onLine) throw new Error('Reading a photo needs a connection.');

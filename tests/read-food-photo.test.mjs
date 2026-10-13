@@ -83,7 +83,7 @@ test('cleanNote caps a long note so it can\'t crowd out the instructions', () =>
 test('the function passes the body\'s note through cleanNote into the meal prompt', async () => {
   const src = await source('../supabase/functions/read-food-photo/index.ts');
   assert.match(src, /note = cleanNote\(body\?\.note\)/);
-  assert.match(src, /mode === "meal" \? mealPrompt\(note\) : LABEL_PROMPT/);
+  assert.match(src, /mealPrompt\(note\)/);
   assert.doesNotMatch(src, /const MEAL_PROMPT/, 'the prompt lives in meal-prompt.ts, not a copy here');
 });
 
@@ -102,6 +102,69 @@ test('a note is quoted after the instructions and outranks the picture', () => {
   assert.match(text, /go with the note/);
   assert.match(text, /restaurant or brand/);
   assert.match(text, /substitute ingredient/);
+});
+
+// ---- a described meal, no photo at all --------------------------------------------
+
+test('a described meal sends the text and no images', async () => {
+  const [call] = await capture(() => photo.describeMeal('  two street tacos \n and chips '));
+  assert.equal(call.name, 'read-food-photo');
+  assert.equal(call.body.mode, 'describe');
+  assert.equal(call.body.description, 'two street tacos \n and chips');
+  assert.equal('images' in call.body, false);
+});
+
+test('an empty description never reaches the network', async () => {
+  const calls = await capture(async () => {
+    await assert.rejects(() => photo.describeMeal(''), /Describe what you ate/);
+    await assert.rejects(() => photo.describeMeal('   '), /Describe what you ate/);
+  });
+  assert.equal(calls.length, 0);
+});
+
+test('cleanDescription gives a description more room than a note, but still a cap', () => {
+  assert.ok(prompt.DESCRIPTION_MAX > prompt.NOTE_MAX);
+  const text = prompt.cleanDescription('tacos '.repeat(200));
+  assert.ok(text.length <= prompt.DESCRIPTION_MAX, `got ${text.length}`);
+  assert.equal(prompt.cleanDescription('   '), null);
+  assert.equal(prompt.cleanDescription(42), null);
+});
+
+test('the describe prompt quotes the description and keeps the meal JSON shape', () => {
+  const text = prompt.describePrompt('two street tacos al pastor');
+  assert.ok(text.startsWith(prompt.DESCRIBE_PROMPT));
+  assert.ok(text.includes('"""two street tacos al pastor"""'));
+  assert.match(prompt.DESCRIBE_PROMPT, /"items":/);
+  assert.match(prompt.DESCRIBE_PROMPT, /"confidence":/);
+  assert.match(prompt.DESCRIBE_PROMPT, /restaurant or brand/);
+  assert.match(prompt.DESCRIBE_PROMPT, /typical serving/);
+});
+
+test('the function routes describe mode through cleanDescription and describePrompt', async () => {
+  const src = await source('../supabase/functions/read-food-photo/index.ts');
+  assert.match(src, /description = cleanDescription\(body\?\.description\)/);
+  assert.match(src, /describePrompt\(description!\)/);
+  assert.match(src, /mode === "describe" && !description/, 'an empty description must be refused');
+  assert.match(src, /mode !== "describe" && !images\.length/, 'photo modes still require a photo');
+  assert.doesNotMatch(src, /const DESCRIBE_PROMPT/, 'the prompt lives in meal-prompt.ts, not a copy here');
+});
+
+test('the describe sheet binds the box and lands in the estimate sheet', async () => {
+  const html = await source('../docs/index.html');
+  const start = html.indexOf('<template x-if="describing">');
+  assert.ok(start > -1, 'the describe sheet is missing');
+  const sheet = html.slice(start, html.indexOf('</template>', start));
+  assert.match(sheet, /x-model="describing\.text"/);
+  assert.match(sheet, /@click="readDescription\(\)"/);
+
+  // Two ways in: the + menu, and a search that found nothing (seeded with the term).
+  assert.match(html, /@click="startDescribe\(term\)"/);
+  assert.match(html, /startDescribe\(\)/);
+
+  const app = await source('../docs/js/app.js');
+  assert.match(app, /this\.estimate = result/, 'a description reviews in the same estimate sheet');
+  const reads = app.match(/photo\.describeMeal\(/g) ?? [];
+  assert.equal(reads.length, 1, 'only readDescription() should call describeMeal');
 });
 
 // ---- the app asks for it --------------------------------------------------------

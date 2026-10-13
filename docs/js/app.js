@@ -860,6 +860,21 @@ Alpine.store('ui', {
     }
   },
 
+  async toggleEvening() {
+    const next = !this.prefs.evening_nudge;
+    this.prefs = { ...this.prefs, evening_nudge: next };   // optimistic
+    this.prefsBusy = true;
+    try {
+      this.prefs = await push.savePrefs(Alpine.store('auth').email, { evening_nudge: next });
+      this.flash(next ? 'Evening check-in on' : 'Evening check-in off');
+    } catch (e) {
+      this.prefs = { ...this.prefs, evening_nudge: !next };  // put it back
+      this.flash(describeError(e));
+    } finally {
+      this.prefsBusy = false;
+    }
+  },
+
   get notificationLabel() {
     return {
       unknown: 'Checking…',
@@ -1347,10 +1362,11 @@ Alpine.data('logPage', () => ({
 
   servingSize: '',      // review-form converter, see applyServingSize()
   menu: false,
-  photoBusy: '',        // '' | 'label' | 'meal'
+  photoBusy: '',        // '' | 'label' | 'meal' | 'describe'
   photoError: '',
   estimate: null,       // { items, confidence, note }
   mealPhoto: null,      // { file, url, target, note, error }, see openMealPhoto()
+  describing: null,     // { text, error }, see startDescribe()
   meal: null,           // { id, name, items: [{food_id, name, quantity, unit}] }
   mealTerm: '',
   mealOnline: { status: 'idle', results: [], error: '', term: '' },
@@ -1779,6 +1795,37 @@ Alpine.data('logPage', () => ({
       else this.estimate = result;
     } catch (e) {
       // The sheet stays up with the photo and the note, so a retry is one tap.
+      pending.error = e.message ?? String(e);
+    } finally {
+      this.photoBusy = '';
+    }
+  },
+
+  /**
+   * The meal that is already eaten and gone — no label, no photo, nothing a
+   * database would know. Words in, the same estimate sheet out. A search term
+   * that found nothing is the usual way here, so it seeds the box.
+   */
+  startDescribe(seed = '') {
+    this.describing = { text: typeof seed === 'string' ? seed : '', error: '' };
+  },
+
+  closeDescribe() { this.describing = null; },
+
+  async readDescription() {
+    const pending = this.describing;
+    if (!pending || !pending.text.trim() || this.photoBusy) return;
+
+    this.photoBusy = 'describe';
+    pending.error = '';
+    try {
+      const result = await photo.describeMeal(pending.text);
+      // Closed while estimating: that was a cancel, and nothing should open.
+      if (this.describing !== pending) return;
+      this.closeDescribe();
+      this.estimate = result;
+    } catch (e) {
+      // The sheet stays up with the text, so a retry is one tap.
       pending.error = e.message ?? String(e);
     } finally {
       this.photoBusy = '';
