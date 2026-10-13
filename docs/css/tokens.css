@@ -17,12 +17,17 @@
 :root {
   /* Ground — layered, not one flat plane. v1 kept everything within a few
      percent of the same value, which is why it read as flat. */
-  --color-ink:            #0E1116;
-  --color-bg:             #14171C;
-  --color-surface:        #1D222A;
-  --color-surface-raised: #262C36;
-  --color-border:         #333B47;
-  --color-hover:          #2A313C;
+  /* Dropped to near-black (2026-10-13, by request) while keeping the blue bias
+     and the ladder's rungs: each layer still steps up by roughly the same
+     amount, because the darkness came from lowering the whole ladder, not from
+     squashing it back into v1's flatness. Borders keep a slightly larger step —
+     at these depths a hairline vanishes faster than a surface does. */
+  --color-ink:            #050608;
+  --color-bg:             #0A0C10;
+  --color-surface:        #11141A;
+  --color-surface-raised: #181D25;
+  --color-border:         #2A3340;
+  --color-hover:          #1F252E;
 
   /* Text — lifted hard from v1, whose #9C948A secondary was simply too dim. */
   --color-text:           #F3F6FA;
