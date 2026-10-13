@@ -1947,6 +1947,16 @@
                          role="img" aria-label="Weight, reps and volume over time, as change since the first session">
                       <g x-html="progressMarks"></g>
                     </svg>
+                    <!-- HTML, not SVG <text>: the viewBox scales with the card, and
+                         text inside it would scale too. Placed by percentage of
+                         the plot width, so each label sits under its date. -->
+                    <div class="progress-axis" aria-hidden="true">
+                      <template x-for="(t, i) in detailProgress.ticks" :key="t.at">
+                        <span :style="`left:${t.x / detailProgress.width * 100}%`"
+                              :class="i === 0 ? 'is-first' : (i === detailProgress.ticks.length - 1 ? 'is-last' : '')"
+                              x-text="progressTick(t.at)"></span>
+                      </template>
+                    </div>
                   </div>
 
                   <div class="plot-readout">

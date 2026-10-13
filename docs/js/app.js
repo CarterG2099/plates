@@ -3475,6 +3475,14 @@ Alpine.data('trainPage', () => ({
     ].join('');
   },
 
+  /** An axis label: "Feb 2025" across a long span, "Feb 21" across a short one. */
+  progressTick(iso) {
+    const unit = this.detailProgress?.tickUnit;
+    return new Date(iso).toLocaleDateString(undefined, unit === 'month'
+      ? { month: 'short', year: 'numeric' }
+      : { month: 'short', day: 'numeric' });
+  },
+
   progressDate(iso) {
     return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   },

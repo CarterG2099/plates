@@ -110,6 +110,55 @@ test('lines are drawn oldest to newest, left to right', () => {
   assert.match(plot.series[0].line, /^M[\d.]+ [\d.]+ L[\d.]+ [\d.]+$/);
 });
 
+// ---- the time axis ------------------------------------------------------------
+
+test('the axis runs first session to last in four even steps, under the points', () => {
+  const plot = stats.progressPlot(history(
+    ['2025-02-01T12:00:00Z', [set(100, 10)]],
+    ['2025-06-01T12:00:00Z', [set(105, 10)]],
+    ['2026-02-01T12:00:00Z', [set(110, 10)]],
+  ));
+  assert.equal(plot.ticks.length, 4);
+  assert.equal(plot.ticks[0].at, '2025-02-01T12:00:00.000Z');
+  assert.equal(plot.ticks[3].at, '2026-02-01T12:00:00.000Z');
+  assert.equal(plot.ticks[0].x, plot.points[0].x, 'first tick sits under the first session');
+  assert.equal(plot.ticks[3].x, plot.points[2].x, 'last tick sits under the last session');
+  const gaps = plot.ticks.slice(1).map((t, i) => Math.round((t.x - plot.ticks[i].x) * 10));
+  assert.ok(new Set(gaps).size === 1, `uneven ticks ${gaps}`);
+});
+
+test('a long chart labels months, a short one days', () => {
+  const long = stats.progressPlot(history(
+    ['2025-02-01T12:00:00Z', [set(100, 10)]],
+    ['2025-09-01T12:00:00Z', [set(105, 10)]],
+  ));
+  const short = stats.progressPlot(history(
+    ['2026-08-01T12:00:00Z', [set(100, 10)]],
+    ['2026-09-15T12:00:00Z', [set(105, 10)]],
+  ));
+  assert.equal(long.tickUnit, 'month');
+  assert.equal(short.tickUnit, 'day');
+});
+
+test('two sessions on the same day get one centred tick, not four on top of each other', () => {
+  const plot = stats.progressPlot(history(
+    ['2026-08-01T09:00:00Z', [set(100, 10)]],
+    ['2026-08-01T09:00:00Z', [set(105, 10)]],
+  ));
+  assert.equal(plot.ticks.length, 1);
+  assert.equal(plot.ticks[0].x, plot.width / 2);
+});
+
+test('the axis is drawn in HTML under the plot, ends aligned inward', async () => {
+  const html = await readFile(fileURLToPath(new URL('../docs/index.html', import.meta.url)), 'utf8');
+  const block = html.slice(html.indexOf('<template x-if="detailProgress">'));
+  assert.match(block, /class="progress-axis"[\s\S]*?x-for="\(t, i\) in detailProgress\.ticks"/);
+  assert.match(block, /x-text="progressTick\(t\.at\)"/);
+  const css = await readFile(fileURLToPath(new URL('../docs/css/pages.css', import.meta.url)), 'utf8');
+  assert.match(css, /\.progress-axis span\.is-first\s*\{\s*transform:\s*none;/);
+  assert.match(css, /\.progress-axis span\.is-last\s*\{\s*transform:\s*translateX\(-100%\);/);
+});
+
 test('the sheet shows it for lifts only, with a legend and dashes beside the colour', async () => {
   const app = await readFile(fileURLToPath(new URL('../docs/js/app.js', import.meta.url)), 'utf8');
   assert.match(app, /if \(!this\.detail \|\| this\.detailIsCardio\) return null;\s*return stats\.progressPlot\(this\.detailHistory\)/);

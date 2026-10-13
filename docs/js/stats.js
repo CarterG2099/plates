@@ -897,8 +897,21 @@ export function progressPlot(history, { width = 100, height = 46, pad = 3 } = {}
   const points = sessions.map((p) => ({ ...p, x: round2(x(p.at)) }));
   const last = sessions[sessions.length - 1];
 
+  // A time axis: four evenly spaced dates from the first session to the last.
+  // Months once the chart spans half a year or more, days below that — "Feb 21"
+  // under a 20-month chart says nothing about when.
+  const lastAt = Date.parse(last.at);
+  const ticks = spanMs === 0
+    ? [{ at: last.at, x: round2(width / 2) }]
+    : [0, 1 / 3, 2 / 3, 1].map((f) => {
+      const at = new Date(t0 + spanMs * f).toISOString();
+      return { at, x: round2(x(at)) };
+    });
+
   return {
     width, height, points,
+    ticks,
+    tickUnit: (lastAt - t0) >= 180 * DAY ? 'month' : 'day',
     zeroY: round2(y(0)),
     lo: Math.round(lo), hi: Math.round(hi),
     since: first.at,

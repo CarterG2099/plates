@@ -1997,6 +1997,27 @@ button.nf-tap:active { background: var(--color-hover); }
 
 .progress .plot-readout { margin-top: 0; }
 
+/* Dates under the plot. Each label is centred on its tick, except the two ends,
+   which align inward so neither runs off the card. */
+.progress-axis {
+  position: relative;
+  height: 2.2em;
+  margin-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+}
+
+.progress-axis span {
+  position: absolute;
+  top: var(--space-1);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.progress-axis span.is-first { transform: none; }
+.progress-axis span.is-last  { transform: translateX(-100%); }
+
 .progress-since {
   font-size: var(--text-xs);
   color: var(--color-text-dim);
