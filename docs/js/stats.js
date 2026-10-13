@@ -10,6 +10,7 @@ import * as local from './local.js';
 import * as sync from './sync.js';
 import { estimate1RM, historyOf, volume as volumeOf } from './workout.js';
 import { groupFor, MUSCLE_GROUPS, MUSCLE_GROUP_LABEL } from './muscle-map.js';
+import { STANDARDS, liftKey, rate, dots } from './standards.js';
 import { dayBounds, addDays, toDateOnly, fromDateOnly, entriesForDay, sumTotals, currentGoal, isComplete } from './food.js';
 
 const DAY = 86_400_000;
@@ -1109,6 +1110,65 @@ export function relativeStrength(history, weights, { window = 90, near = 14 } = 
   return {
     ratio: ratioAt(now),
     then: earlier ? { ratio: ratioAt(earlier), at: earlier.date } : null,
+  };
+}
+
+// ---- against other lifters ------------------------------------------------------
+
+/**
+ * Each rated free-weight lift you have logged, ranked against the standards for
+ * your sex at your body weight, plus a DOTS score when the big three are recent.
+ *
+ * A lift logged under more than one name ("Squat" and "Squat (Barbell)" from an
+ * import) is rated from whichever was trained most recently. A lift whose latest
+ * session has no weigh-in within two weeks is listed but not rated — see
+ * relativeStrength — rather than rated against a body weight from another time.
+ *
+ * @param {{at: string, lb: number}[]} weights  body weight, oldest first
+ */
+export function standings(index, weights, sex, { now = Date.now(), dotsWithin = 180 } = {}) {
+  const latestByLift = new Map();
+
+  for (const [key, sets] of index.byExercise) {
+    const name = sets.find((s) => s.exercise_name)?.exercise_name ?? '';
+    const lift = liftKey(name);
+    if (!lift) continue;
+    const history = historyOf(index, key, key, Infinity).filter((h) => h.oneRm);
+    if (!history.length) continue;
+    const held = latestByLift.get(lift);
+    if (!held || history[0].date > held.history[0].date) latestByLift.set(lift, { name, history });
+  }
+
+  const bodyWeight = weights?.length ? weights[weights.length - 1].lb : null;
+
+  const rows = Object.keys(STANDARDS)
+    .filter((lift) => latestByLift.has(lift))
+    .map((lift) => {
+      const { name, history } = latestByLift.get(lift);
+      // The latest session only: the 1RM, the date and the rating shown together
+      // must all be the same session's.
+      const rel = relativeStrength(history.slice(0, 1), weights);
+      const rating = rel && sex ? rate(lift, sex, rel.ratio) : null;
+      return {
+        lift,
+        label: STANDARDS[lift].label,
+        name,
+        oneRm: Math.round(history[0].oneRm),
+        at: history[0].date,
+        ratio: rel?.ratio ?? null,
+        rating,
+        nextLb: rating?.next && bodyWeight ? Math.round((rating.next.ratio * bodyWeight) / 5) * 5 : null,
+      };
+    });
+
+  // DOTS needs all three, each recent enough to describe the same lifter.
+  const big = ['squat', 'bench', 'deadlift'].map((l) => rows.find((r) => r.lift === l));
+  const recent = big.every((r) => r && now - Date.parse(r.at) <= dotsWithin * DAY);
+  const total = recent ? big.reduce((sum, r) => sum + r.oneRm, 0) : null;
+
+  return {
+    rows,
+    dots: total && sex && bodyWeight ? { score: dots(total, bodyWeight, sex), total, bodyWeight } : null,
   };
 }
 

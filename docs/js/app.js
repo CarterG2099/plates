@@ -4115,6 +4115,45 @@ Alpine.data('statsPage', () => ({
   /** A year of body weight, so a ratio from three months back has a weigh-in. */
   get weightYear() { return stats.weightSeries(this.data.weightLog, this.email, 400); },
 
+  // ---- against other lifters ------------------------------------------------
+
+  /** 'male' | 'female' | null — which standards to rank against; asked, never assumed. */
+  get mySex() {
+    const me = Alpine.store('auth').members
+      .find((m) => m.email?.toLowerCase() === this.email.toLowerCase());
+    return me?.sex ?? null;
+  },
+
+  get standings() { return stats.standings(this.data.index, this.weightYear, this.mySex); },
+
+  sexSaving: false,
+
+  /** Saved on the member row, like the photo PIN, and patched into the cache. */
+  async setSex(sex) {
+    if (this.sexSaving) return;
+    this.sexSaving = true;
+    try {
+      const { error } = await supabase.schema('plates').from('members')
+        .update({ sex }).eq('email', this.email);
+      if (error) throw error;
+      const auth = Alpine.store('auth');
+      const me = auth.members.find((m) => m.email?.toLowerCase() === this.email.toLowerCase());
+      if (me) me.sex = sex;
+      auth.members = [...auth.members];      // a new array, so the getters re-run
+      writeMembership({ email: auth.email, members: auth.members, isAdmin: auth.isAdmin });
+    } catch (e) {
+      Alpine.store('ui').flash(describeError(e));
+    } finally {
+      this.sexSaving = false;
+    }
+  },
+
+  standingLine(row) {
+    if (!row.rating) return row.ratio == null ? 'No weigh-in near your last session' : '';
+    const next = row.nextLb ? ` · ${row.rating.next.level} at ~${row.nextLb} lb` : '';
+    return `Stronger than ~${row.rating.percentile}%${next}`;
+  },
+
   /**
    * The line under a lift's name: sessions, strength for your size and how it
    * has moved, and how long since its last record.

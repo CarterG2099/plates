@@ -2606,6 +2606,61 @@
           </div>
         </div>
 
+        <!-- How you compare --------------------------------------------------- -->
+        <!-- Free-weight lifts against published body-weight standards. Machines
+             are left out on purpose: their numbers depend on the machine. The
+             standards differ by sex, so the card asks rather than assumes. -->
+        <div class="card" x-show="standings.rows.length" x-cloak>
+          <div class="readout-head">
+            <div>
+              <div class="card-label">How you compare</div>
+              <div class="stat-sub">Free-weight lifts, against lifters your sex and body weight</div>
+            </div>
+          </div>
+
+          <template x-if="!mySex">
+            <div class="compare-ask">
+              <p>Standards differ for men and women. Which should yours be measured against?</p>
+              <div class="btn-row">
+                <button class="btn" :disabled="sexSaving" @click="setSex('male')">Men's</button>
+                <button class="btn" :disabled="sexSaving" @click="setSex('female')">Women's</button>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="mySex">
+            <div>
+              <div class="rows">
+                <template x-for="row in standings.rows" :key="row.lift">
+                  <div class="row">
+                    <div class="row-text">
+                      <b x-text="row.label"></b>
+                      <small x-text="`${row.oneRm} lb est. 1RM${row.ratio ? ` · ${row.ratio.toFixed(2)}× body weight` : ''} · ${weightDate(row.at)}`"></small>
+                      <small class="compare-next" x-text="standingLine(row)"></small>
+                    </div>
+                    <span class="row-num compare-level" x-text="row.rating ? row.rating.level : '—'"></span>
+                  </div>
+                </template>
+              </div>
+
+              <div class="compare-dots" x-show="standings.dots" x-cloak>
+                <span>DOTS</span>
+                <b x-text="standings.dots && standings.dots.score"></b>
+                <small x-text="standings.dots && `${standings.dots.total} lb squat + bench + deadlift at ${standings.dots.bodyWeight} lb · ~300 solid, ~400 strong, ~500 national level`"></small>
+              </div>
+
+              <p class="plot-note">
+                Approximate: commonly published body-weight multiples, not a live
+                dataset. Each rating uses your latest session and the weigh-in
+                nearest it.
+                <button class="link-btn" :disabled="sexSaving"
+                        @click="setSex(mySex === 'male' ? 'female' : 'male')"
+                        x-text="mySex === 'male' ? 'Using men’s standards · switch' : 'Using women’s standards · switch'"></button>
+              </p>
+            </div>
+          </template>
+        </div>
+
         <!-- Personal records -------------------------------------------------- -->
         <!-- Every record as it landed: a heavier top set, more reps at a weight
              than ever, or a higher estimated 1RM. The same check as the

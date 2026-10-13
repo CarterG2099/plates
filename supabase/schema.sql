@@ -668,3 +668,9 @@ create policy plates_motion_delete on storage.objects
 
 alter table plates.notification_prefs
   add column if not exists evening_nudge boolean not null default false;
+
+-- ---- strength standards (added 2026-10-13) --------------------------------------
+-- Which set of lifting standards to rank a member's lifts against. Null until
+-- they choose: the app asks rather than assumes. Set by the member themselves
+-- through members_self.
+alter table plates.members add column if not exists sex text check (sex in ('male', 'female'));

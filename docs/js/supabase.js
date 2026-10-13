@@ -50,7 +50,7 @@ export async function getSession() {
 export async function loadMembership() {
   // photo_pin_hash rides along or the progress-photo lock asks for a brand-new
   // PIN every session — the hash saved fine, it just never came back down.
-  const { data, error } = await db('members').select('email, display_name, weight_unit, is_admin, photo_pin_hash');
+  const { data, error } = await db('members').select('email, display_name, weight_unit, is_admin, photo_pin_hash, sex');
 
   if (error) {
     return { isMember: false, members: [], error };
