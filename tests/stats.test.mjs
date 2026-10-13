@@ -163,10 +163,10 @@ test('weeklyTraining leaves empty weeks in place rather than omitting them', asy
   });
 });
 
-// ---- muscle balance --------------------------------------------------------
+// ---- sets per muscle -------------------------------------------------------
 
 const EX = [
-  { id: 'bench', name: 'Bench Press', primary_muscle: 'chest' },
+  { id: 'bench', name: 'Bench Press', primary_muscle: 'chest', secondary_muscles: ['triceps', 'shoulders'] },
   { id: 'row',   name: 'Barbell Row', primary_muscle: 'lats' },
   { id: 'squat', name: 'Back Squat',  primary_muscle: 'quadriceps' },
   { id: 'curl',  name: 'Bicep Curl',  primary_muscle: 'biceps' },
@@ -184,111 +184,88 @@ function trained(id, when, rows) {
   return { session, sets };
 }
 
-test('muscleVolume splits tonnage across the six groups', async () => {
+const setsBy = (out) => Object.fromEntries(out.groups.map((g) => [g.key, g.sets]));
+
+test('muscleSets counts sets a week, a full set for the primary group', async () => {
   await atTime(NOW, () => {
-    const a = trained('s1', daysAgo(3), [
-      ['bench', 100, 10],            // 1000 -> chest
-      ['row',   100, 10],            //  1000 -> back
-      ['squat', 200, 10],            // 2000 -> legs
-    ]);
-    const index = workout.buildIndex(a.sets, [a.session], ME);
-    const out = stats.muscleVolume(index, EX, { weeks: 12, now: NOW });
+    // Four weeks, one session each: 3 squat sets and 2 row sets a week.
+    const weeks = [3, 10, 17, 24].map((d, i) => trained(`s${i}`, daysAgo(d), [
+      ['squat', 200, 8], ['squat', 200, 8], ['squat', 200, 8],
+      ['row', 100, 10], ['row', 100, 10],
+    ]));
+    const index = workout.buildIndex(weeks.flatMap((w) => w.sets), weeks.map((w) => w.session), ME);
+    const out = stats.muscleSets(index, EX, { weeks: 4, now: NOW });
 
-    const by = Object.fromEntries(out.groups.map((g) => [g.key, g.volume]));
-    assert.deepEqual(by, { chest: 1000, back: 1000, shoulders: 0, arms: 0, legs: 2000, core: 0 });
-    assert.equal(out.total, 4000);
-    assert.equal(out.sessions, 1);
-
-    const legs = out.groups.find((g) => g.key === 'legs');
-    assert.equal(Math.round(legs.share * 100), 50);
+    assert.deepEqual(setsBy(out), { chest: 0, back: 2, shoulders: 0, arms: 0, legs: 3, core: 0 });
+    assert.equal(out.sessions, 4);
   });
 });
 
-test('muscleVolume counts work, not sets — and never counts a run', async () => {
+test('a set of curls and a set of squats are one set each, however heavy', async () => {
   await atTime(NOW, () => {
-    const a = trained('s1', daysAgo(2), [
-      ['curl', 30, 10],                                  // 300 -> arms
-      ['curl', 30, 10],                                  // 300 -> arms
-      ['squat', 300, 5],                                 // 1500 -> legs, one set
-      ['bench', 45, 10, { is_warmup: true }],            // warm-up, ignored
-      ['bench', 100, 5, { completed_at: null }],         // unfinished, ignored
+    const a = trained('s1', daysAgo(2), [['curl', 30, 10], ['squat', 400, 5]]);
+    const out = stats.muscleSets(workout.buildIndex(a.sets, [a.session], ME), EX, { weeks: 1, now: NOW });
+    assert.equal(setsBy(out).arms, 1);
+    assert.equal(setsBy(out).legs, 1);
+  });
+});
+
+test('secondary muscles add half a set to each other group, once per set', async () => {
+  await atTime(NOW, () => {
+    const a = trained('s1', daysAgo(2), [['bench', 185, 5], ['bench', 185, 5]]);
+    const out = stats.muscleSets(workout.buildIndex(a.sets, [a.session], ME), EX, { weeks: 1, now: NOW });
+    assert.deepEqual(setsBy(out), { chest: 2, back: 0, shoulders: 1, arms: 1, legs: 0, core: 0 });
+  });
+});
+
+test('warm-ups, unfinished sets, runs, old sessions and other people count for nothing', async () => {
+  await atTime(NOW, () => {
+    const mine = trained('s1', daysAgo(2), [
+      ['squat', 200, 5],
+      ['squat', 95, 10, { is_warmup: true }],
+      ['squat', 200, 5, { completed_at: null }],
       ['run', null, null, { distance_m: 5000, duration_s: 1500 }],
     ]);
-    const index = workout.buildIndex(a.sets, [a.session], ME);
-    const out = stats.muscleVolume(index, EX, { weeks: 12, now: NOW });
-
-    const by = Object.fromEntries(out.groups.map((g) => [g.key, g.volume]));
-    assert.equal(by.arms, 600, 'two sets of curls');
-    assert.equal(by.legs, 1500, 'one set of squats outweighs them');
-    assert.equal(by.chest, 0, 'a warm-up and an unfinished set are not work');
-    assert.equal(out.total, 2100, 'and the run contributes nothing at all');
-  });
-});
-
-test('muscleVolume ignores other people, unfinished sessions and old ones', async () => {
-  await atTime(NOW, () => {
-    const mine = trained('s1', daysAgo(3), [['squat', 100, 10]]);
-    const stale = trained('s2', daysAgo(200), [['squat', 100, 10]]);
-    const running = trained('s3', daysAgo(1), [['squat', 100, 10]]);
-    running.session.ended_at = null;
-    const theirs = trained('s4', daysAgo(1), [['squat', 100, 10]]);
+    const stale = trained('s2', daysAgo(60), [['squat', 200, 5]]);
+    const theirs = trained('s3', daysAgo(1), [['squat', 200, 5]]);
     theirs.session.owner_email = OTHER;
+    const running = trained('s4', daysAgo(0), [['squat', 200, 5]]);
+    running.session.ended_at = null;
 
-    const sessions = [mine, stale, running, theirs];
-    const index = workout.buildIndex(sessions.flatMap((s) => s.sets), sessions.map((s) => s.session), ME);
-    const out = stats.muscleVolume(index, EX, { weeks: 12, now: NOW });
-
-    assert.equal(out.total, 1000, 'only the one finished session of mine inside the window');
+    const all = [mine, stale, theirs, running];
+    const index = workout.buildIndex(all.flatMap((s) => s.sets), all.map((s) => s.session), ME);
+    const out = stats.muscleSets(index, EX, { weeks: 1, now: NOW });
+    assert.equal(setsBy(out).legs, 1);
     assert.equal(out.sessions, 1);
   });
 });
 
-test('work the map cannot place is set aside rather than silently dropped', async () => {
+test('each group is flagged against the 10-20 sets a week range', async () => {
+  await atTime(NOW, () => {
+    const rows = [
+      ...Array.from({ length: 12 }, () => ['squat', 200, 8]),   // 12 legs: ok
+      ...Array.from({ length: 4 }, () => ['row', 100, 10]),      //  4 back: low
+      ...Array.from({ length: 22 }, () => ['curl', 30, 10]),    // 22 arms: high
+    ];
+    const a = trained('s1', daysAgo(1), rows);
+    const out = stats.muscleSets(workout.buildIndex(a.sets, [a.session], ME), EX, { weeks: 1, now: NOW });
+    const status = Object.fromEntries(out.groups.map((g) => [g.key, g.status]));
+    assert.equal(status.legs, 'ok');
+    assert.equal(status.back, 'low');
+    assert.equal(status.arms, 'high');
+    assert.deepEqual([out.low, out.high], [10, 20]);
+  });
+});
+
+test('sets the map cannot place are counted aside, not dropped', async () => {
   await atTime(NOW, () => {
     const a = trained('s1', daysAgo(1), [['squat', 100, 10]]);
     a.sets.push({ id: 'x', owner_email: ME, session_id: 's1', exercise_id: 'mystery',
-      exercise_name: 'Sled Drag', set_index: 9, weight_lb: 90, reps: 10,
-      completed_at: daysAgo(1) });
-
-    const index = workout.buildIndex(a.sets, [a.session], ME);
-    const out = stats.muscleVolume(index, EX, { weeks: 12, now: NOW });
-
-    assert.equal(out.unplaced, 900, 'counted, and countable');
-    assert.equal(out.total, 1000, 'but not folded into a group it does not belong to');
+      exercise_name: 'Sled Drag', set_index: 9, weight_lb: 90, reps: 10, completed_at: daysAgo(1) });
+    const out = stats.muscleSets(workout.buildIndex(a.sets, [a.session], ME), EX, { weeks: 1, now: NOW });
+    assert.equal(out.unplaced, 1);
+    assert.equal(setsBy(out).legs, 1);
   });
-});
-
-test('radarPlot scales to the biggest group, not to the whole', () => {
-  const groups = [
-    { key: 'chest', label: 'Chest', volume: 100, share: 0.5 },
-    { key: 'back', label: 'Back', volume: 60, share: 0.3 },
-    { key: 'legs', label: 'Legs', volume: 40, share: 0.2 },
-  ];
-  const plot = stats.radarPlot(groups, { size: 100 });
-
-  // Straight up first, and the largest share reaches the rim — against 100% it
-  // would sit at half the radius and the chart would look like a dot.
-  const [first] = plot.points;
-  assert.equal(first.key, 'chest');
-  assert.equal(first.x, plot.cx, 'first spoke points straight up');
-  assert.equal(Math.round(plot.cy - first.y), Math.round(plot.radius));
-  assert.equal(first.percent, 50);
-
-  const back = plot.points[1];
-  assert.ok(Math.hypot(back.x - plot.cx, back.y - plot.cy) < plot.radius);
-  assert.equal(plot.points.length, 3);
-  assert.equal(plot.polygon.split(' ').length, 3);
-});
-
-test('radarPlot has nothing to draw without groups', () => {
-  assert.equal(stats.radarPlot([]), null);
-  assert.equal(stats.radarPlot(null), null);
-
-  // Every group at zero is a real state — a week where nothing was finished.
-  const empty = stats.radarPlot(
-    ['chest', 'back'].map((key) => ({ key, label: key, volume: 0, share: 0 })), { size: 100 });
-  assert.equal(empty.points.every((p) => p.x === empty.cx && p.y === empty.cy), true,
-    'collapsed to the centre rather than NaN');
 });
 
 test('topLifts ranks by how often you do the lift, not how heavy it is', () => {

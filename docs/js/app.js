@@ -579,6 +579,7 @@ const raw = {
   progressPhotos: [],
   index: workout.buildIndex([], [], ''),
   prior: new Map(),
+  stalls: new Map(),   // exercise key → stats.stallFor(), see refreshTraining
 };
 
 /**
@@ -692,6 +693,9 @@ Alpine.store('data', {
     // history rather than against yourself ten seconds ago.
     const running = workout.activeSession(sessions, Alpine.store('auth').email);
     raw.prior = workout.priorForm(raw.index, running?.id ?? null);
+    // Same exclusion, so a stall flag describes the sessions before today and
+    // does not vanish halfway through the set that would end it.
+    raw.stalls = stats.stallMap(raw.index, running?.id ?? null);
     this.trainVersion++;
   },
 
@@ -3199,6 +3203,18 @@ Alpine.data('trainPage', () => ({
     return workout.setSummary(best, this.exerciseById(group.exerciseId), group.name);
   },
 
+  /**
+   * "No PR in 3 sessions · try 245 × 9" when the lift has stopped moving, else
+   * null. The step is the smallest one that would be a record next time.
+   */
+  stallLine(group) {
+    const stall = this.data.stalls.get(group.exerciseId ?? group.name);
+    if (!stall) return null;
+    const { weight, reps } = stall.next;
+    const step = weight ? `${weight} × ${reps}` : stats.count(reps, 'rep');
+    return `No PR in ${stats.count(stall.since, 'session')} · try ${step}`;
+  },
+
   oneRm(set) { return workout.estimate1RM(set.weight_lb, set.reps); },
 
   /** Best estimated 1RM before this session — the bar a set has to clear. */
@@ -3964,93 +3980,26 @@ Alpine.data('statsPage', () => ({
     }).join('');
   },
 
+  // ---- sets per muscle -----------------------------------------------------
+
+  get muscleSets() {
+    return stats.muscleSets(this.data.index, this.data.exercises, { weeks: 4 });
+  },
+
+  get muscleInRange() {
+    return this.muscleSets.groups.filter((g) => g.status === 'ok').length;
+  },
+
+  /**
+   * A set count as a % of the bar's width. The scale runs past the top of the
+   * range so "too much" has somewhere to go, and stretches for a group beyond it.
+   */
+  setsPct(n) {
+    const max = Math.max(this.muscleSets.high * 1.25, ...this.muscleSets.groups.map((g) => g.sets));
+    return Math.min(100, (Number(n) / max) * 100);
+  },
+
   /** Pointer x to a week: the slot, not the bar, so an untrained week answers too. */
-  // ---- muscle balance ------------------------------------------------------
-
-  muscleHover: null,
-
-  get muscleBalance() {
-    return stats.muscleVolume(this.data.index, this.data.exercises, { weeks: 12 });
-  },
-
-  get musclePlot() { return stats.radarPlot(this.muscleBalance.groups, { size: 100 }); },
-
-  /** Most and least worked, which is the sentence anyone reads this chart for. */
-  get muscleRanked() {
-    return [...this.muscleBalance.groups].sort((a, b) => b.volume - a.volume);
-  },
-
-  /**
-   * Snap to the nearest spoke by angle. A radar has no slots to divide up, and
-   * asking the reader to land on a 3px vertex would make the numbers unreachable
-   * on a phone — anywhere in a group's wedge is a question about that group.
-   */
-  trackMuscle(event) {
-    if (!tracksPointer(event)) return;
-    const plot = this.musclePlot;
-    if (!plot) return;
-
-    const box = event.currentTarget.getBoundingClientRect();
-    const x = ((event.clientX - box.left) / box.width) * plot.size - plot.cx;
-    const y = ((event.clientY - box.top) / box.height) * plot.size - plot.cy;
-
-    // Same frame the plot is built in: straight up is zero, then clockwise.
-    const turn = Math.PI * 2;
-    const angle = (Math.atan2(y, x) + Math.PI / 2 + turn) % turn;
-    const i = Math.round((angle / turn) * plot.points.length) % plot.points.length;
-    this.muscleHover = plot.points[i];
-  },
-
-  /** Whichever group is being pointed at, else the one you do the most of. */
-  get muscleFocus() {
-    if (this.muscleHover) return this.muscleHover;
-    const top = this.muscleRanked[0];
-    return this.musclePlot?.points.find((p) => p.key === top?.key) ?? null;
-  },
-
-  /**
-   * The radar's marks as a string.
-   *
-   * Not x-for inside the <svg>: a <template> there is parsed in the SVG
-   * namespace and never runs, which tests/markup.test.mjs exists to catch.
-   */
-  get radarMarks() {
-    const plot = this.musclePlot;
-    if (!plot) return '';
-
-    const focus = this.muscleFocus;
-    const el = (tag, attrs, body = '') =>
-      `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ')}${body ? `>${body}</${tag}>` : '/>'}`;
-
-    const rings = plot.rings
-      .map((r) => el('circle', { class: 'radar-ring', cx: plot.cx, cy: plot.cy, r })).join('');
-
-    const spokes = plot.points
-      .map((p) => el('line', { class: 'radar-spoke', x1: plot.cx, y1: plot.cy, x2: p.edgeX, y2: p.edgeY }))
-      .join('');
-
-    const even = el('polygon', { class: 'radar-even', points: plot.even });
-    const shape = el('polygon', { class: 'radar-shape', points: plot.polygon });
-
-    const dots = plot.points.map((p) => el('circle', {
-      class: `radar-dot${focus?.key === p.key ? ' is-on' : ''}`, cx: p.x, cy: p.y, r: 1.7,
-    })).join('');
-
-    const labels = plot.points.map((p) => el('text', {
-      class: 'radar-label', x: p.labelX, y: p.labelY, 'text-anchor': p.anchor,
-    }, p.label)).join('');
-
-    return rings + spokes + even + shape + dots + labels;
-  },
-
-  /** The whole chart as a sentence, for anyone who cannot see the shape. */
-  get muscleAria() {
-    const { groups, sessions } = this.muscleBalance;
-    if (!sessions) return 'Muscle balance: nothing trained in the last 12 weeks.';
-    const parts = groups.map((g) => `${g.label} ${Math.round(g.share * 100)}%`);
-    return `Share of training volume by muscle group over 12 weeks: ${parts.join(', ')}.`;
-  },
-
   trackVolume(event) {
     if (!tracksPointer(event)) return;
     const plot = this.volumePlot;
@@ -4084,6 +4033,63 @@ Alpine.data('statsPage', () => ({
 
   get lifts() { return stats.topLifts(this.data.index); },
 
+  // ---- records and strength for your size -----------------------------------
+
+  _prs: null,   // { version, value } — prTimeline walks every lift's history
+
+  /** Every record, newest first, worked out once per training-data change. */
+  get prs() {
+    const version = Alpine.store('data').trainVersion;
+    if (this._prs?.version !== version) {
+      this._prs = { version, value: stats.prTimeline(this.data.index, { limit: 15 }) };
+    }
+    return this._prs.value;
+  },
+
+  get prsThisMonth() {
+    const since = Date.now() - 30 * 86_400_000;
+    return this.prs.events.filter((e) => Date.parse(e.at) >= since).length;
+  },
+
+  /** What a record was, in words: the heaviest set, the rep record, the 1RM. */
+  prLine(event) {
+    const parts = [];
+    if (event.kinds.includes('weight')) parts.push(`Heaviest ${event.top.weight} lb × ${event.top.reps}`);
+    if (event.kinds.includes('reps') && event.repSet) {
+      parts.push(event.repSet.weight
+        ? `Rep PR ${event.repSet.weight} × ${event.repSet.reps}`
+        : `Rep PR ${stats.count(event.repSet.reps, 'rep')}`);
+    }
+    if (event.kinds.includes('1rm')) parts.push(`Est. 1RM ${event.rm} lb`);
+    return parts.join(' · ');
+  },
+
+  /** A year of body weight, so a ratio from three months back has a weigh-in. */
+  get weightYear() { return stats.weightSeries(this.data.weightLog, this.email, 400); },
+
+  /**
+   * The line under a lift's name: sessions, strength for your size and how it
+   * has moved, and how long since its last record.
+   */
+  liftMeta(lift) {
+    const parts = [stats.count(lift.sessions, 'session')];
+
+    const history = workout.historyOf(this.data.index, lift.id, lift.name);
+    const rel = stats.relativeStrength(history, this.weightYear);
+    if (rel) {
+      const change = rel.then ? rel.ratio - rel.then.ratio : null;
+      const trend = change == null || Math.abs(change) < 0.005 ? ''
+        : ` (${change > 0 ? '+' : '−'}${Math.abs(change).toFixed(2)} since ${
+          new Date(rel.then.at).toLocaleDateString(undefined, { month: 'short' })})`;
+      parts.push(`${rel.ratio.toFixed(2)}× body weight${trend}`);
+    }
+
+    const last = this.prs.lastByKey.get(lift.id ?? lift.name);
+    if (last) parts.push(`last PR ${stats.agoLabel(Math.round((Date.now() - Date.parse(last)) / 86_400_000))}`);
+
+    return parts.join(' · ');
+  },
+
   // Which lift's history is open, by name — the id can be null on rows that
   // came in from the Hevy import with a name and nothing else.
   liftOpen: null,
@@ -4114,6 +4120,9 @@ Alpine.data('statsPage', () => ({
 
   get completeDays() { return food.completeDayStats(this.data.dayMarks, this.email); },
   get calorieSummary() { return stats.calorieSummary(this.days); },
+  get protein() {
+    return stats.proteinSummary(this.days, this.weightSummary?.latest ?? this.weight.at(-1)?.lb ?? null);
+  },
 
   calorieOpen: false,
   calorieHover: null,

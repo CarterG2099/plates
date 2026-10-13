@@ -956,6 +956,17 @@ button.nf-tap:active { background: var(--color-hover); }
   padding-top: 4px;
 }
 
+/* A nudge, not an alarm: warning-coloured so it is seen at the bar, but in the
+   same small type as "Last:" beside it. */
+.stall {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--color-warning);
+  padding-top: 4px;
+}
+
 /* The gap is what keeps consecutive finished sets apart. A hairline is invisible
    against the green — three checked sets in a row read as one block and you
    could not count them — and this is the number the eye actually uses. */
@@ -1850,65 +1861,55 @@ button.nf-tap:active { background: var(--color-hover); }
   overflow: visible;
 }
 
-/* ---- muscle balance radar ------------------------------------------------- */
+/* ---- sets per muscle ------------------------------------------------------- */
 
-/* Square, so the shape is not skewed by the card's width — a radar read on a
-   stretched canvas says something untrue about which spoke is longest. */
-.plot-radar svg { aspect-ratio: 1; height: auto; }
+.sets-bars { display: flex; flex-direction: column; gap: var(--space-2); }
 
-/* Grid and spokes are scaffolding: present enough to read a magnitude against,
-   quiet enough that the shape is what you see. */
-.radar-ring,
-.radar-spoke {
-  fill: none;
-  stroke: var(--color-border);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-.radar-even {
-  fill: none;
-  stroke: var(--color-text-dim);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-  vector-effect: non-scaling-stroke;
-  opacity: .55;
-}
-
-.radar-shape {
-  fill: var(--color-primary-soft);
-  stroke: var(--color-primary-hover);   /* validated 3:1 against the card */
-  stroke-width: 2;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.radar-dot {
-  fill: var(--color-primary-hover);
-  stroke: var(--color-surface-raised);  /* the 2px surface ring on an overlap */
-  stroke-width: 2;
-  vector-effect: non-scaling-stroke;
-}
-
-.radar-dot.is-on {
-  fill: var(--color-text);
-  r: 2.4;
-}
-
-/* Text tokens, never the series colour.
- *
- * font-size is in viewBox units, so it scales with the card: 5px here rendered
- * near 19px on a phone and shouldered "Shoulders" off the edge. 3.2 lands around
- * 11px at a phone's width, which is this page's --text-xs. text-anchor comes
- * from the plot, per point. */
-.radar-label {
-  fill: var(--color-text-muted);
+.sets-row {
+  display: grid;
+  grid-template-columns: 5.5em 1fr 4.5em;
+  align-items: center;
+  gap: var(--space-3);
   font-family: var(--font-mono);
-  font-size: 3.2px;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  dominant-baseline: middle;
+  font-size: var(--text-xs);
 }
+
+.sets-name { color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .06em; }
+
+.sets-track {
+  position: relative;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+  overflow: hidden;
+}
+
+/* The 10-20 range, behind every bar: in or out reads without a number. */
+.sets-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--color-success-soft);
+  border-left: 1px solid var(--color-success);
+  border-right: 1px solid var(--color-success);
+}
+
+.sets-fill {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-hover);
+}
+
+/* Out of range: the bar and its word turn warning, the word saying which way. */
+.sets-row.is-low .sets-fill,
+.sets-row.is-high .sets-fill { background: var(--color-warning); }
+
+.sets-num { text-align: right; font-variant-numeric: tabular-nums; }
+.sets-num b { color: var(--color-text); font-weight: 600; }
+.sets-num small { color: var(--color-warning); margin-left: 4px; text-transform: uppercase; }
 
 .plot-readout {
   display: flex;
@@ -2257,3 +2258,7 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
   cursor: pointer;
 }
 .search-clear:active { color: var(--color-text); }
+
+/* ---- protein per pound, under the calorie average ---------------------------- */
+.protein-line b { color: var(--color-text); font-weight: 600; }
+.protein-flag { color: var(--color-warning); }

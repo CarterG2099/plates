@@ -163,22 +163,25 @@ export function topLifts(index, limit = 6) {
     .filter(Boolean);
 }
 
-// ---- muscle balance --------------------------------------------------------
+// ---- sets per muscle -------------------------------------------------------
+
+/** Hard sets a week per muscle group that most hypertrophy guidance lands on. */
+export const WEEKLY_SETS = { low: 10, high: 20 };
 
 /**
- * How much work each muscle group got, as a share of the total.
+ * Working sets a week for each muscle group, averaged over the last few weeks.
  *
- * Volume rather than set count, because ten sets of curls is not ten sets of
- * squats and a chart that says otherwise is worse than no chart. volumeOf
- * already drops warm-ups, unfinished sets and anything with a distance on it, so
- * a run contributes nothing here rather than contributing zero tonnage to a
- * group it was never going to fill.
+ * Sets rather than tonnage: the question is "is each muscle getting enough
+ * work", and that is answered in sets — a set of curls and a set of squats are
+ * each one hard set for the muscle they train, which a pound count can never
+ * say, because the squat moves five times the weight.
  *
- * Exercises the muscle map cannot place are counted into `unplaced` and left out
- * of the shape — silently dropping them would make the shares add up to a
- * different hundred per cent than the reader's training did.
+ * A set counts once for its exercise's primary group and half for each other
+ * group its secondary muscles belong to (a bench set is chest, plus half for
+ * arms through the triceps). Warm-ups, unfinished sets and cardio count for
+ * nothing. Sets the map cannot place are counted in `unplaced`, not dropped.
  */
-export function muscleVolume(index, exercises, { weeks = 12, now = Date.now() } = {}) {
+export function muscleSets(index, exercises, { weeks = 4, now = Date.now() } = {}) {
   const cutoff = now - weeks * 7 * DAY;
   const byId = new Map((exercises ?? []).map((e) => [e.id, e]));
 
@@ -190,105 +193,46 @@ export function muscleVolume(index, exercises, { weeks = 12, now = Date.now() } 
     if (!session.ended_at) continue;
     if (new Date(session.started_at).getTime() < cutoff) continue;
 
-    const sets = index.bySession.get(session.id) ?? [];
+    const sets = (index.bySession.get(session.id) ?? []).filter((s) =>
+      s.completed_at && !s.is_warmup && !s.deleted_at
+      && s.distance_m == null && s.duration_s == null);
     if (!sets.length) continue;
     sessions += 1;
 
-    // Grouped per exercise so volume() sees a whole exercise at a time, which is
-    // the unit its warm-up and cardio rules are written against.
-    const byKey = new Map();
     for (const set of sets) {
-      const key = set.exercise_id ?? set.exercise_name;
-      if (!key) continue;
-      if (!byKey.has(key)) byKey.set(key, []);
-      byKey.get(key).push(set);
-    }
+      const exercise = byId.get(set.exercise_id) ?? null;
+      const primary = groupFor(exercise, set.exercise_name ?? '');
+      if (!primary || !totals.has(primary)) { unplaced += 1; continue; }
+      totals.set(primary, totals.get(primary) + 1);
 
-    for (const [, group] of byKey) {
-      const load = volumeOf(group);
-      if (!load) continue;
-
-      const first = group[0];
-      const name = first.exercise_name ?? '';
-      const key = groupFor(byId.get(first.exercise_id) ?? null, name);
-      if (key && totals.has(key)) totals.set(key, totals.get(key) + load);
-      else unplaced += load;
+      // Each other group once, however many of its muscles are listed: bench's
+      // triceps and front delts are half a set for arms and half for shoulders.
+      const others = new Set();
+      for (const muscle of exercise?.secondary_muscles ?? []) {
+        const group = groupFor({ primary_muscle: muscle });
+        if (group && group !== primary && totals.has(group)) others.add(group);
+      }
+      for (const group of others) totals.set(group, totals.get(group) + 0.5);
     }
   }
 
-  const total = [...totals.values()].reduce((a, b) => a + b, 0);
+  const perWeek = (n) => Math.round((n / weeks) * 10) / 10;
 
   return {
-    total: Math.round(total),
+    weeks,
     sessions,
-    unplaced: Math.round(unplaced),
-    groups: MUSCLE_GROUPS.map((key) => ({
-      key,
-      label: MUSCLE_GROUP_LABEL[key],
-      volume: Math.round(totals.get(key)),
-      share: total ? totals.get(key) / total : 0,
-    })),
-  };
-}
-
-/**
- * The radar's geometry, as plain numbers — no SVG here, so it can be tested.
- *
- * Radius is proportional to share, which is the honest choice and worth stating:
- * a radar's *area* grows with the square of its radius, so a group with twice
- * the volume paints four times the ink. The rings and the readout beside the
- * chart are what stop that exaggeration being read as fact.
- *
- * Scaled against the largest group rather than against 100%, or a balanced split
- * across six groups would sit at a sixth of the radius and every chart would
- * look like a dot.
- */
-export function radarPlot(groups, { size = 100, rings = 3 } = {}) {
-  if (!groups?.length) return null;
-
-  const cx = size / 2;
-  const cy = size / 2;
-  /* 0.30, not 0.36. The labels sit outside the rim and grow outwards, and the
-     longest of them — "Shoulders", on a spoke pointing sideways — is what sets
-     the ceiling: any bigger and it hangs off the edge of the card on a phone. */
-  const radius = size * 0.30;
-  const peak = Math.max(...groups.map((g) => g.share), 0);
-
-  // Straight up, then clockwise, so the first group is where a reader looks.
-  const angleAt = (i) => (i / groups.length) * Math.PI * 2 - Math.PI / 2;
-  const round = (n) => Math.round(n * 100) / 100;
-
-  const at = (i, r) => ({
-    x: round(cx + Math.cos(angleAt(i)) * r),
-    y: round(cy + Math.sin(angleAt(i)) * r),
-  });
-
-  const points = groups.map((g, i) => {
-    const r = peak ? (g.share / peak) * radius : 0;
-    const tip = at(i, r);
-    const edge = at(i, radius);
-    // Pushed past the rim so a label never sits on its own spoke.
-    const label = at(i, radius + size * 0.06);
-
-    /* Anchored by which side of the chart it is on, so a label grows away from
-       the circle instead of across it — centred text on the left and right
-       spokes is what pushed "Shoulders" off the edge of the card. */
-    const across = Math.cos(angleAt(i));
-    const anchor = Math.abs(across) < 0.25 ? 'middle' : (across > 0 ? 'start' : 'end');
-
-    return { ...g, ...tip, edgeX: edge.x, edgeY: edge.y, labelX: label.x, labelY: label.y,
-             anchor, percent: Math.round(g.share * 100) };
-  });
-
-  const polygon = points.map((p) => `${p.x},${p.y}`).join(' ');
-
-  // The shape an even split would draw, as something to compare against.
-  const evenR = peak ? (1 / groups.length / peak) * radius : 0;
-  const even = groups.map((_, i) => { const p = at(i, evenR); return `${p.x},${p.y}`; }).join(' ');
-
-  return {
-    size, cx, cy, radius, polygon, even, points,
-    rings: Array.from({ length: rings }, (_, i) => round((radius * (i + 1)) / rings)),
+    unplaced: perWeek(unplaced),
+    low: WEEKLY_SETS.low,
+    high: WEEKLY_SETS.high,
+    groups: MUSCLE_GROUPS.map((key) => {
+      const sets = perWeek(totals.get(key));
+      return {
+        key,
+        label: MUSCLE_GROUP_LABEL[key],
+        sets,
+        status: sets < WEEKLY_SETS.low ? 'low' : sets > WEEKLY_SETS.high ? 'high' : 'ok',
+      };
+    }),
   };
 }
 
@@ -302,11 +246,17 @@ export function calorieDays(log, goals, ownerEmail, days = 14, marks = null) {
     const entries = entriesForDay(log, ownerEmail, date);
     const goal = currentGoal(goals, ownerEmail, date);
     const logged = entries.length > 0;
+    const totals = sumTotals(entries);
 
     out.push({
       date,
       label: date.toLocaleDateString(undefined, { weekday: 'narrow' }),
-      kcal: Math.round(sumTotals(entries).calories),
+      kcal: Math.round(totals.calories),
+      protein: Math.round(totals.protein_g),
+      // sumTotals reads a missing value as 0, so a day with a food of unknown
+      // protein would undercount. Such a day is kept out of the protein average.
+      proteinKnown: entries.every((e) => e.protein_g != null && e.protein_g !== ''),
+      proteinTarget: Number(goal?.protein_target_g) || null,
       target: Number(goal?.calorie_target) || null,
       logged,
       // true | false | null (never reviewed). Today counts while unreviewed —
@@ -336,6 +286,34 @@ export function calorieSummary(days) {
     delta: target ? Math.round(mean - target) : null,
     loggedDays: complete.length,
     totalDays: days.length,
+  };
+}
+
+/** The range most guidance gives for someone lifting: grams per lb of body weight. */
+export const PROTEIN_PER_LB = { low: 0.7, high: 1.0 };
+
+/**
+ * Average daily protein over complete days, and what that is per pound of body
+ * weight — the number that actually says whether it is enough, since 150g is
+ * plenty at 150lb and short at 220.
+ *
+ * Only complete days where every food has a protein value count; anything else
+ * undercounts. Null without a complete day or without a body weight to divide by.
+ */
+export function proteinSummary(days, bodyWeightLb) {
+  const counted = days.filter((d) => d.logged && d.complete === true && d.proteinKnown);
+  if (!counted.length) return null;
+
+  const average = Math.round(counted.reduce((sum, d) => sum + d.protein, 0) / counted.length);
+  const perLb = bodyWeightLb ? Math.round((average / bodyWeightLb) * 100) / 100 : null;
+
+  return {
+    average,
+    days: counted.length,
+    target: counted[counted.length - 1].proteinTarget,
+    perLb,
+    status: perLb == null ? null
+      : perLb < PROTEIN_PER_LB.low ? 'low' : perLb > PROTEIN_PER_LB.high ? 'high' : 'ok',
   };
 }
 
@@ -395,6 +373,14 @@ export function count(n, singular, plural = `${singular}s`) {
  * project keeps shipping — it reached production as "1serving" and again as
  * "2 serving" — and a template string is not somewhere a test can reach.
  */
+/** "today", "3 days ago", "5 weeks ago", "4 months ago": coarser as it gets older. */
+export function agoLabel(days) {
+  if (days <= 0) return 'today';
+  if (days < 14) return `${count(days, 'day')} ago`;
+  if (days < 60) return `${count(Math.round(days / 7), 'week')} ago`;
+  return `${count(Math.round(days / 30), 'month')} ago`;
+}
+
 export function gapLabel(days) {
   if (days == null) return 'First reading';
   return `${count(days, 'day')} after the one before`;
@@ -922,6 +908,207 @@ export function progressPlot(history, { width = 100, height = 46, pad = 3 } = {}
       ys: points.map((p) => round2(y(p.pct[s.key]))),
       latest: last.pct[s.key],
     })),
+  };
+}
+
+// ---- personal records ---------------------------------------------------------
+
+/** Completed, non-warm-up, non-cardio sets with reps: the sets a record can come from. */
+function workingSets(sets) {
+  return sets.filter((s) => s.completed_at && !s.is_warmup && !s.deleted_at
+    && s.distance_m == null && s.duration_s == null && Number(s.reps) > 0);
+}
+
+/** Heaviest set, ties to the most reps. */
+function topSet(sets) {
+  return sets.reduce((best, s) => {
+    const w = Number(s.weight_lb) || 0;
+    const bw = Number(best.weight_lb) || 0;
+    return w > bw || (w === bw && Number(s.reps) > Number(best.reps)) ? s : best;
+  });
+}
+
+/**
+ * One lift's sessions, oldest first, each marked with the records it set.
+ *
+ * A session sets a record when, against everything before it, it has:
+ *   weight — a heavier top set than ever
+ *   reps   — more reps at some weight than any earlier set at that weight or
+ *            heavier (so 225 × 9 beats 225 × 8 and 235 × 8, but not 205 × 12)
+ *   1rm    — a higher estimated 1RM than ever
+ * The first session is the baseline and sets none: there is nothing to beat.
+ *
+ * Shared by the PR timeline and the stall check, so "improved" means one thing.
+ *
+ * @param {object[]} history  historyOf() output, newest first
+ */
+export function recordWalk(history) {
+  const seen = [];                 // every earlier working set, as {weight, reps}
+  let heaviest = 0;
+  let bestRm = 0;
+  const out = [];
+
+  for (const entry of history.slice().reverse()) {
+    const sets = workingSets(entry.sets);
+    if (!sets.length) continue;
+
+    const top = topSet(sets);
+    const topWeight = Number(top.weight_lb) || 0;
+    const rms = sets.map((s) => ({ s, rm: estimate1RM(Number(s.weight_lb) || 0, Number(s.reps)) || 0 }));
+    const bestOfDay = rms.reduce((a, b) => (b.rm > a.rm ? b : a));
+
+    const kinds = [];
+    let repSet = null;
+    if (out.length) {
+      if (topWeight > heaviest) kinds.push('weight');
+      if (bestOfDay.rm > bestRm && topWeight > 0) kinds.push('1rm');
+      for (const s of sets) {
+        const w = Number(s.weight_lb) || 0;
+        const earlier = seen.filter((p) => p.weight >= w);
+        if (!earlier.length) continue;                  // heavier than ever: a weight record, not a rep one
+        if (Number(s.reps) > Math.max(...earlier.map((p) => p.reps))
+            && (!repSet || w > (Number(repSet.weight_lb) || 0))) repSet = s;
+      }
+      if (repSet) kinds.push('reps');
+    }
+
+    out.push({
+      at: entry.date,
+      sessionId: entry.session?.id ?? null,
+      top: { weight: topWeight, reps: Number(top.reps) },
+      rm: bestOfDay.rm,
+      repSet: repSet && { weight: Number(repSet.weight_lb) || 0, reps: Number(repSet.reps) },
+      kinds,
+    });
+
+    for (const s of sets) seen.push({ weight: Number(s.weight_lb) || 0, reps: Number(s.reps) });
+    heaviest = Math.max(heaviest, topWeight);
+    bestRm = Math.max(bestRm, bestOfDay.rm);
+  }
+  return out;
+}
+
+/** The display name an exercise was last logged under: a snapshot, never a live lookup. */
+function nameOf(history) {
+  for (const entry of history) {
+    const named = entry.sets.find((s) => s.exercise_name);
+    if (named) return named.exercise_name;
+  }
+  return '';
+}
+
+/**
+ * Every record you have set, newest first, plus the date of each lift's latest.
+ *
+ * @returns {{ events: object[], lastByKey: Map<string, string> }}
+ */
+export function prTimeline(index, { limit = 25 } = {}) {
+  const events = [];
+  const lastByKey = new Map();
+
+  for (const key of index.byExercise.keys()) {
+    const history = historyOf(index, key, key, Infinity);
+    if (!history.length) continue;
+    const name = nameOf(history);
+
+    for (const session of recordWalk(history)) {
+      if (!session.kinds.length) continue;
+      events.push({ key, name, ...session });
+      lastByKey.set(key, session.at);            // oldest first, so the last write wins
+    }
+  }
+
+  events.sort((a, b) => (a.at < b.at ? 1 : -1));
+  return { events: events.slice(0, limit), lastByKey };
+}
+
+/** Sessions without a record before a lift counts as stalled. */
+export const STALL_SESSIONS = 3;
+
+/**
+ * Whether a lift has stopped moving, and the smallest step that would move it.
+ *
+ * Stalled is STALL_SESSIONS sessions in a row with no record of any kind since
+ * the last one (or since the baseline). The next step is double progression on
+ * the latest top set: one more rep, or once you are at 12, five more pounds
+ * and back down to 8. Bodyweight lifts only ever get the extra rep.
+ *
+ * @param {object[]} history  historyOf() output, newest first, finished sessions
+ */
+export function stallFor(history) {
+  const walk = recordWalk(history);
+  if (walk.length < STALL_SESSIONS + 1) return null;
+
+  let lastProgress = 0;
+  walk.forEach((s, i) => { if (s.kinds.length) lastProgress = i; });
+  const since = walk.length - 1 - lastProgress;
+  if (since < STALL_SESSIONS) return null;
+
+  const { weight, reps } = walk[walk.length - 1].top;
+  const next = !weight || reps < 12
+    ? { weight, reps: reps + 1 }
+    : { weight: weight + 5, reps: 8 };
+
+  return { since, top: { weight, reps }, next };
+}
+
+/**
+ * Every stalled lift, keyed as the index keys exercises. Built once per data
+ * refresh rather than per render: the session screen re-renders on every rep.
+ *
+ * The running session is left out, so the flag describes the sessions before
+ * today and does not flicker while you are halfway through beating it.
+ */
+export function stallMap(index, excludeSessionId = null) {
+  const out = new Map();
+  for (const key of index.byExercise.keys()) {
+    const history = historyOf(index, key, key, Infinity)
+      .filter((h) => h.session?.ended_at && h.session.id !== excludeSessionId);
+    const stall = stallFor(history);
+    if (stall) out.set(key, stall);
+  }
+  return out;
+}
+
+// ---- strength for your size ---------------------------------------------------
+
+/**
+ * Estimated 1RM as a multiple of body weight, now and about three months ago.
+ *
+ * Each session is paired with the weigh-in nearest to it, within two weeks; a
+ * session with no weigh-in that close has no ratio rather than a guessed one.
+ * During a cut this is the line that should hold steady or climb while the plain
+ * 1RM sags — keeping strength as the scale drops is the win it shows.
+ *
+ * @param {object[]} history  historyOf() output, newest first
+ * @param {{at: string, lb: number}[]} weights  body weight, oldest first
+ */
+export function relativeStrength(history, weights, { window = 90, near = 14 } = {}) {
+  if (!weights?.length) return null;
+
+  const ratioAt = (entry) => {
+    if (!entry.oneRm) return null;
+    const t = Date.parse(entry.date);
+    let best = null;
+    for (const w of weights) {
+      const gap = Math.abs(Date.parse(w.at) - t);
+      if (gap <= near * DAY && (!best || gap < best.gap)) best = { gap, lb: w.lb };
+    }
+    return best ? Math.round((entry.oneRm / best.lb) * 100) / 100 : null;
+  };
+
+  const now = history.find((h) => ratioAt(h) != null);
+  if (!now) return null;
+
+  const from = Date.parse(now.date) - window * DAY;
+  const earlier = history
+    .filter((h) => Date.parse(h.date) >= from && Date.parse(h.date) <= Date.parse(now.date) - 30 * DAY)
+    .reverse()
+    .find((h) => ratioAt(h) != null);
+
+  return {
+    ratio: ratioAt(now),
+    then: earlier ? { ratio: ratioAt(earlier), at: earlier.date } : null,
   };
 }
 

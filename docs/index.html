@@ -1636,6 +1636,10 @@
                       <div class="prev" x-show="previous(group)">
                         Last: <span x-text="previous(group)"></span> · tap for history
                       </div>
+                      <!-- Only when the lift has gone three sessions without a
+                           record of any kind; the step is the smallest PR. -->
+                      <div class="stall" x-show="stallLine(group)" x-cloak
+                           x-text="stallLine(group)"></div>
                     </button>
                   </div>
                   <button class="chip" @click="openExMenu(group)"
@@ -2323,56 +2327,44 @@
           </div>
         </div>
 
-        <!-- Muscle balance ---------------------------------------------------- -->
-        <div class="card" x-show="muscleBalance.sessions" x-cloak>
+        <!-- Sets per muscle --------------------------------------------------- -->
+        <!-- Working sets a week per group against the 10-20 range, as plain
+             bars: one measure, one axis, read straight across. The range is a
+             shaded band behind every bar so in or out is visible at a glance,
+             and a word says it too, so it never rests on colour. -->
+        <div class="card" x-show="muscleSets.sessions" x-cloak>
           <div class="readout-head">
             <div>
-              <div class="card-label">Muscle balance</div>
+              <div class="card-label">Sets per muscle</div>
               <div class="stat-hero">
-                <span x-text="muscleRanked[0] && Math.round(muscleRanked[0].share * 100)"></span><small>%</small>
+                <span x-text="muscleInRange"></span><small x-text="` of ${muscleSets.groups.length}`"></small>
               </div>
-              <div class="stat-sub">
-                <span x-text="muscleRanked[0] && muscleRanked[0].label.toLowerCase()"></span>,
-                your most trained · last 12 weeks
-              </div>
+              <div class="stat-sub"
+                   x-text="`in the ${muscleSets.low}-${muscleSets.high} sets a week range · last ${muscleSets.weeks} weeks`"></div>
             </div>
           </div>
 
-          <!-- One series, so no legend: the spokes are labelled and the shape is
-               the only thing drawn. Selection snaps by angle — see trackMuscle. -->
-          <div class="plot plot-radar" @pointerdown="trackMuscle($event)"
-               @pointermove="if ($event.buttons) trackMuscle($event)">
-            <!-- Built as a string, not x-for: a <template> inside <svg> is
-                 parsed in the SVG namespace and never runs. The dashed inner
-                 outline is what an even split across six groups would draw, so
-                 the shape is compared against something rather than nothing. -->
-            <svg viewBox="0 0 100 100" role="img" :aria-label="muscleAria">
-              <g x-html="radarMarks"></g>
-            </svg>
-
-            <div class="plot-readout" x-show="muscleFocus" x-cloak>
-              <b x-text="muscleFocus && `${muscleFocus.percent}% ${muscleFocus.label.toLowerCase()}`"></b>
-              <span x-text="muscleFocus && `${muscleFocus.volume.toLocaleString()} lb over 12 weeks`"></span>
-            </div>
-          </div>
-
-          <!-- Every number the shape encodes, in text. A radar's area grows with
-               the square of its radius, so the picture overstates a difference
-               the reader can check here. -->
-          <div class="stat-grid">
-            <template x-for="g in muscleRanked" :key="g.key">
-              <div class="stat-cell">
-                <small x-text="g.label"></small>
-                <b x-text="`${Math.round(g.share * 100)}%`"></b>
-                <span x-text="`${g.volume.toLocaleString()} lb`"></span>
+          <div class="sets-bars">
+            <template x-for="g in muscleSets.groups" :key="g.key">
+              <div class="sets-row" :class="`is-${g.status}`">
+                <span class="sets-name" x-text="g.label"></span>
+                <span class="sets-track">
+                  <span class="sets-band"
+                        :style="`left:${setsPct(muscleSets.low)}%; width:${setsPct(muscleSets.high) - setsPct(muscleSets.low)}%`"></span>
+                  <span class="sets-fill" :style="`width:${setsPct(g.sets)}%`"></span>
+                </span>
+                <span class="sets-num">
+                  <b x-text="g.sets"></b>
+                  <small x-show="g.status !== 'ok'" x-text="g.status"></small>
+                </span>
               </div>
             </template>
           </div>
 
           <p class="plot-note">
-            <span x-text="`Working sets only, across ${count(muscleBalance.sessions, 'workout')}.`"></span>
-            <span x-show="muscleBalance.unplaced"
-                  x-text="` ${muscleBalance.unplaced.toLocaleString()} lb is not counted — the muscle map cannot place those exercises.`"></span>
+            <span x-text="`Completed working sets across ${count(muscleSets.sessions, 'workout')}. A set counts fully for its main muscle and half for each secondary one.`"></span>
+            <span x-show="muscleSets.unplaced"
+                  x-text="` ${muscleSets.unplaced} a week are not counted — the muscle map cannot place those exercises.`"></span>
           </p>
         </div>
 
@@ -2518,7 +2510,9 @@
                         :aria-expanded="liftOpen === lift.name">
                   <div class="row-text">
                     <b x-text="lift.name"></b>
-                    <small><span x-text="lift.sessions"></span> sessions</small>
+                    <!-- Sessions, strength for your size and its trend, and how
+                         long since this lift's last record. -->
+                    <small x-text="liftMeta(lift)"></small>
                   </div>
                   <span class="pill" x-show="lift.isBest">PR</span>
                   <span class="row-num"><span x-text="lift.best"></span> lb</span>
@@ -2568,6 +2562,31 @@
           </div>
         </div>
 
+        <!-- Personal records -------------------------------------------------- -->
+        <!-- Every record as it landed: a heavier top set, more reps at a weight
+             than ever, or a higher estimated 1RM. The same check as the
+             "No PR in N sessions" nudge on the workout screen. -->
+        <div class="card" x-show="prs.events.length" x-cloak>
+          <div class="readout-head">
+            <div>
+              <div class="card-label">Personal records</div>
+              <div class="stat-hero"><span x-text="prsThisMonth"></span></div>
+              <div class="stat-sub" x-text="`${count(prsThisMonth, 'record').replace(/^\d+ /, '')} in the last 30 days`"></div>
+            </div>
+          </div>
+          <div class="rows">
+            <template x-for="e in prs.events" :key="`${e.key}-${e.at}`">
+              <div class="row">
+                <div class="row-text">
+                  <b x-text="e.name"></b>
+                  <small x-text="prLine(e)"></small>
+                </div>
+                <span class="row-num" x-text="weightDate(e.at)"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
         <!-- Nutrition -------------------------------------------------------- -->
         <div class="card" x-show="calorieSummary">
           <div class="readout-head">
@@ -2581,6 +2600,18 @@
                 <span x-text="calorieSummary && calorieSummary.delta > 0 ? 'over target' : 'under target'"></span>
                 · <span x-text="calorieSummary && count(calorieSummary.loggedDays, 'complete day')"></span>
                 <span x-show="completeDays.streak > 1" x-text="`· ${completeDays.streak} in a row`"></span>
+              </div>
+              <!-- Protein per pound of body weight: whether it is enough depends
+                   on how much of you there is. Out of range says which way. -->
+              <div class="stat-sub protein-line" x-show="protein" x-cloak>
+                <span x-text="protein && `${protein.average} g protein a day`"></span>
+                <template x-if="protein && protein.perLb !== null">
+                  <span>
+                    · <b x-text="`${protein.perLb.toFixed(2)} g/lb`"></b>
+                    <span class="protein-flag" x-show="protein.status !== 'ok'"
+                          x-text="protein.status === 'low' ? '· below 0.7–1.0' : '· above 0.7–1.0'"></span>
+                  </span>
+                </template>
               </div>
             </div>
           </div>
