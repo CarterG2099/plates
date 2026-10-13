@@ -823,6 +823,103 @@ export function liftDetail(index, lift, { limit = 30 } = {}) {
   };
 }
 
+/**
+ * Which way a lift is getting better: heavier, more reps, or more work done.
+ *
+ * Three measures with three units cannot share one axis honestly, so each is
+ * indexed to the first session shown: every line starts at 0% and the chart
+ * reads as "how far has this moved since then". Weight up while reps dip is a
+ * trade, both up is progress, and volume says which of the two the trade
+ * favoured.
+ *
+ * Per session, from completed working sets only:
+ *   weight — the heaviest set's load
+ *   reps   — that same set's reps (ties on load go to the most reps), so the
+ *            two lines describe one real set rather than a mix of two
+ *   volume — load × reps summed over the working sets
+ *
+ * A measure with nothing to index against (a bodyweight lift has no load, so
+ * no weight and no volume) is left out rather than drawn flat at zero.
+ *
+ * @param {object[]} history  historyOf() output, newest first
+ */
+export function progressPlot(history, { width = 100, height = 46, pad = 3 } = {}) {
+  const sessions = history
+    .map((entry) => {
+      const working = entry.sets.filter((s) => s.completed_at && !s.is_warmup && !s.deleted_at
+        && s.distance_m == null && s.duration_s == null && Number(s.reps) > 0);
+      if (!working.length) return null;
+
+      const top = working.reduce((best, s) => {
+        const w = Number(s.weight_lb) || 0;
+        const bw = Number(best.weight_lb) || 0;
+        return w > bw || (w === bw && Number(s.reps) > Number(best.reps)) ? s : best;
+      });
+
+      return {
+        at: entry.date,
+        weight: Number(top.weight_lb) || 0,
+        reps: Number(top.reps),
+        volume: Math.round(volumeOf(working)),
+      };
+    })
+    .filter(Boolean)
+    .reverse();                                     // oldest first, for drawing
+
+  if (sessions.length < 2) return null;
+
+  const first = sessions[0];
+  const series = PROGRESS_SERIES
+    .filter((s) => first[s.key] > 0)
+    .map((s) => ({ ...s, base: first[s.key] }));
+  if (!series.length) return null;
+
+  const change = (value, base) => Math.round(((value / base) - 1) * 1000) / 10;
+  for (const session of sessions) {
+    session.pct = Object.fromEntries(series.map((s) => [s.key, change(session[s.key], s.base)]));
+  }
+
+  // Framed to the data with 0% always in view: the baseline is the reference
+  // every line is read against.
+  const all = sessions.flatMap((p) => Object.values(p.pct));
+  let lo = Math.min(0, ...all);
+  let hi = Math.max(0, ...all);
+  if (hi - lo < 10) { const mid = (hi + lo) / 2; lo = mid - 5; hi = mid + 5; }
+  const headroom = (hi - lo) * 0.12;
+  lo -= headroom;
+  hi += headroom;
+
+  const t0 = Date.parse(first.at);
+  const spanMs = Date.parse(sessions[sessions.length - 1].at) - t0;
+  const x = (at) => (spanMs === 0 ? width / 2 : pad + ((Date.parse(at) - t0) / spanMs) * (width - pad * 2));
+  const y = (pct) => pad + (1 - (pct - lo) / (hi - lo)) * (height - pad * 2);
+
+  const points = sessions.map((p) => ({ ...p, x: round2(x(p.at)) }));
+  const last = sessions[sessions.length - 1];
+
+  return {
+    width, height, points,
+    zeroY: round2(y(0)),
+    lo: Math.round(lo), hi: Math.round(hi),
+    since: first.at,
+    series: series.map((s) => ({
+      key: s.key,
+      label: s.label,
+      line: points.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${round2(y(p.pct[s.key]))}`).join(' '),
+      ys: points.map((p) => round2(y(p.pct[s.key]))),
+      latest: last.pct[s.key],
+    })),
+  };
+}
+
+// Fixed order, so a lift with no load (weight and volume dropped) keeps reps in
+// its own colour rather than inheriting the first slot's.
+const PROGRESS_SERIES = [
+  { key: 'weight', label: 'Weight' },
+  { key: 'reps', label: 'Reps' },
+  { key: 'volume', label: 'Volume' },
+];
+
 // ---- consistency ------------------------------------------------------------
 
 /**

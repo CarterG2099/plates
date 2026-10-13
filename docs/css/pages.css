@@ -1931,6 +1931,78 @@ button.nf-tap:active { background: var(--color-hover); }
   margin: 0;
 }
 
+/* ---- lift progress: weight, reps, volume ------------------------------------
+ * Three series, so three hues — the reference categorical palette's first three
+ * dark steps, validated as a set on this surface (all pairs pass CVD and
+ * normal-vision separation, all >= 3:1). Each line also has its own dash, so
+ * identity never rests on colour alone; the legend repeats both. */
+.progress {
+  --series-weight: #3987e5;
+  --series-reps:   #d95926;
+  --series-volume: #199e70;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.progress-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.progress-key { display: inline-flex; align-items: center; gap: var(--space-2); }
+.progress-key b { color: var(--color-text); font-variant-numeric: tabular-nums; }
+
+/* A short sample of the line itself: colour and dash together. */
+.progress-key i {
+  width: 18px;
+  height: 0;
+  border-top: 2px solid var(--series);
+}
+.progress-key.is-weight { --series: var(--series-weight); }
+.progress-key.is-reps   { --series: var(--series-reps); }
+.progress-key.is-volume { --series: var(--series-volume); }
+.progress-key.is-reps i   { border-top-style: dashed; }
+.progress-key.is-volume i { border-top-style: dotted; border-top-width: 3px; }
+
+.progress-zero {
+  stroke: var(--color-border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.progress-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.progress-line.is-weight { stroke: var(--series-weight); }
+.progress-line.is-reps   { stroke: var(--series-reps); stroke-dasharray: 6 4; }
+.progress-line.is-volume { stroke: var(--series-volume); stroke-dasharray: 1 4; }
+
+.progress-dot {
+  stroke: var(--color-surface);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.progress-dot.is-weight { fill: var(--series-weight); }
+.progress-dot.is-reps   { fill: var(--series-reps); }
+.progress-dot.is-volume { fill: var(--series-volume); }
+
+.progress .plot-readout { margin-top: 0; }
+
+.progress-since {
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  margin: 0;
+}
+
 /* ---- stat cells ------------------------------------------------------------ */
 
 /* A row that opens something. .row already sets width and text-align, so this

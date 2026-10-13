@@ -3375,6 +3375,7 @@ Alpine.data('trainPage', () => ({
     };
     this.detail = detail;
     this.detailMotion = null;
+    this.progressHover = null;
     // The drawing shows at once; the clip replaces it when it arrives, but only
     // if the same exercise is still the one open. Compared by id because Alpine
     // hands `this.detail` back as a reactive proxy, never the object assigned.
@@ -3418,6 +3419,67 @@ Alpine.data('trainPage', () => ({
   get detailIsCardio() {
     return workout.isCardio(this.detail?.exercise, this.detail?.name ?? '');
   },
+
+  // ---- progress: weight, reps and volume on one indexed chart --------------
+
+  progressHover: null,   // index into detailProgress.points
+
+  get detailProgress() {
+    if (!this.detail || this.detailIsCardio) return null;
+    return stats.progressPlot(this.detailHistory);
+  },
+
+  /** Snap to the nearest session by x, as the weight chart does. */
+  trackProgress(event) {
+    if (!tracksPointer(event)) return;
+    const plot = this.detailProgress;
+    if (!plot) return;
+    const box = event.currentTarget.getBoundingClientRect();
+    const at = ((event.clientX - box.left) / box.width) * plot.width;
+    let nearest = 0;
+    plot.points.forEach((p, i) => {
+      if (Math.abs(p.x - at) < Math.abs(plot.points[nearest].x - at)) nearest = i;
+    });
+    this.progressHover = nearest;
+  },
+
+  /** The tapped session, else the latest; with each line's y at that point. */
+  get progressFocus() {
+    const plot = this.detailProgress;
+    if (!plot) return null;
+    const i = this.progressHover != null && this.progressHover < plot.points.length
+      ? this.progressHover : plot.points.length - 1;
+    const point = plot.points[i];
+    return {
+      ...point,
+      marks: plot.series.map((s) => ({ key: s.key, y: s.ys[i] })),
+    };
+  },
+
+  /**
+   * Everything inside the chart's <svg>, as markup. Built here rather than with
+   * x-for because a <template> inside <svg> never renders (markup.test.mjs).
+   * Numbers only go in — every value is coerced — so this is not an injection
+   * surface.
+   */
+  get progressMarks() {
+    const plot = this.detailProgress;
+    const focus = this.progressFocus;
+    if (!plot || !focus) return '';
+    const n = (v) => Number(v);
+    return [
+      `<line x1="0" x2="${n(plot.width)}" y1="${n(plot.zeroY)}" y2="${n(plot.zeroY)}" class="progress-zero"/>`,
+      ...plot.series.map((s) => `<path d="${s.line.replace(/[^MLe\d.\s-]/g, '')}" class="progress-line is-${s.key}"/>`),
+      `<line x1="${n(focus.x)}" x2="${n(focus.x)}" y1="0" y2="${n(plot.height)}" class="plot-crosshair"/>`,
+      ...focus.marks.map((m) => `<circle cx="${n(focus.x)}" cy="${n(m.y)}" r="1.6" class="progress-dot is-${m.key}"/>`),
+    ].join('');
+  },
+
+  progressDate(iso) {
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  },
+
+  signedPct(n) { return `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(Math.round(n))}%`; },
 
   /**
    * The headline record. A run's is the furthest one; a lift's is the heaviest

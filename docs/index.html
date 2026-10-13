@@ -1926,6 +1926,42 @@
                 <span class="chip"><span x-text="detailHistory.length"></span> sessions</span>
               </div>
 
+              <!-- Weight, reps and volume, each as % change since the first
+                   session shown, so three units share one honest axis. Tap or
+                   drag to read a session's real numbers; the selection stays. -->
+              <template x-if="detailProgress">
+                <div class="progress">
+                  <div class="progress-legend">
+                    <template x-for="s in detailProgress.series" :key="s.key">
+                      <span class="progress-key" :class="`is-${s.key}`">
+                        <i aria-hidden="true"></i>
+                        <span x-text="s.label"></span>
+                        <b x-text="signedPct(progressFocus.pct[s.key])"></b>
+                      </span>
+                    </template>
+                  </div>
+
+                  <div class="plot" @pointerdown="trackProgress($event)"
+                       @pointermove="if ($event.buttons) trackProgress($event)">
+                    <svg x-effect="$el.setAttribute('viewBox', `0 0 ${detailProgress.width} ${detailProgress.height}`)"
+                         role="img" aria-label="Weight, reps and volume over time, as change since the first session">
+                      <g x-html="progressMarks"></g>
+                    </svg>
+                  </div>
+
+                  <div class="plot-readout">
+                    <b x-text="progressFocus.weight
+                         ? `${progressFocus.weight} lb × ${progressFocus.reps}`
+                         : `${progressFocus.reps} reps`"></b>
+                    <span x-text="progressFocus.volume
+                         ? `${progressFocus.volume.toLocaleString()} lb volume · ${progressDate(progressFocus.at)}`
+                         : progressDate(progressFocus.at)"></span>
+                  </div>
+                  <p class="progress-since"
+                     x-text="`Change since ${progressDate(detailProgress.since)}`"></p>
+                </div>
+              </template>
+
               <div class="rows">
                 <template x-for="entry in detailHistory" :key="entry.session.id">
                   <div class="row">
