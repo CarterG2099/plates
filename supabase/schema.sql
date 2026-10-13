@@ -636,3 +636,26 @@ create policy day_marks_update on plates.day_marks
   for update using (plates.is_owner(owner_email)) with check (plates.is_owner(owner_email));
 create policy day_marks_delete on plates.day_marks
   for delete using (plates.is_owner(owner_email));
+
+-- ---- exercise motion clips (added 2026-10-13) ----------------------------------
+-- Looping demonstrations cut from Hevy's exercise animations; see docs/js/motion.js.
+-- They are Hevy's artwork, so they live here, readable by members only, and never
+-- in the public repo. Every member can watch them; only an admin adds or replaces
+-- them. 2MB cap: a clip is one loop at 540px, 100-520KB.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('plates-exercise-motion', 'plates-exercise-motion', false, 2097152, array['video/mp4'])
+on conflict (id) do nothing;
+
+create policy plates_motion_read on storage.objects
+  for select to authenticated
+  using (bucket_id = 'plates-exercise-motion' and plates.is_member());
+create policy plates_motion_insert on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'plates-exercise-motion' and plates.is_admin());
+create policy plates_motion_update on storage.objects
+  for update to authenticated
+  using (bucket_id = 'plates-exercise-motion' and plates.is_admin())
+  with check (bucket_id = 'plates-exercise-motion' and plates.is_admin());
+create policy plates_motion_delete on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'plates-exercise-motion' and plates.is_admin());

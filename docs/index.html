@@ -1870,7 +1870,17 @@
               </div>
 
               <div class="detail-top">
-                <div class="figure-pair" x-html="muscleMapPair(detail.exerciseId, detail.name)"></div>
+                <!-- The clip replaces the drawing once it has loaded; until then,
+                     and whenever there is no clip, the drawing is what shows. -->
+                <div class="figure-pair" x-show="!detailMotion"
+                     x-html="muscleMapPair(detail.exerciseId, detail.name)"></div>
+                <!-- x-if, not x-show: a hidden <video> keeps decoding the last
+                     clip when you move straight on to an exercise without one. -->
+                <template x-if="detailMotion">
+                  <video class="motion" :src="detailMotion"
+                         autoplay muted loop playsinline disablepictureinpicture
+                         aria-hidden="true"></video>
+                </template>
 
                 <div class="how" x-data="{ open: false }">
                   <div class="card-label" x-show="detail.exercise.primary_muscle"

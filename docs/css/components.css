@@ -352,6 +352,20 @@
   .figure-pair.has-art.has-art-2 .art-2 { animation: none; }
 }
 
+/* The looping clip, in the drawing's place and at the drawing's width. The clips
+   are cut on white, so they sit on a white card rather than pretending to be
+   part of the dark sheet. */
+.motion {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 540 / 492;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+
 /* ---- sheet furniture ------------------------------------------------------- */
 /* A title row with a close control, so sheets stop ending in a stack of
    full-width buttons where only one is the actual action. */

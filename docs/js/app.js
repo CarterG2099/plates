@@ -20,6 +20,7 @@ import * as progress from './progress.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
 import { exerciseArt, exerciseArtPair } from './muscle-map.js';
+import * as motion from './motion.js';
 import * as stats from './stats.js';
 import * as push from './push.js';
 
@@ -3364,16 +3365,25 @@ Alpine.data('trainPage', () => ({
   // ---- exercise history ----------------------------------------------------
 
   detail: null,   // { exerciseId, name, exercise }
+  detailMotion: null,   // object URL of the looping clip, see motion.js
 
   openExercise(exerciseId, name) {
-    this.detail = {
+    const detail = {
       exerciseId,
       name,
       exercise: this.exerciseById(exerciseId) ?? { name },
     };
+    this.detail = detail;
+    this.detailMotion = null;
+    // The drawing shows at once; the clip replaces it when it arrives, but only
+    // if the same exercise is still the one open. Compared by id because Alpine
+    // hands `this.detail` back as a reactive proxy, never the object assigned.
+    motion.motionUrl(detail.exercise.name || name).then((url) => {
+      if (this.detail?.exerciseId === exerciseId) this.detailMotion = url;
+    });
   },
 
-  closeExercise() { this.detail = null; },
+  closeExercise() { this.detail = null; this.detailMotion = null; },
 
   /**
    * The note is yours alone — one row per person per exercise — and it carries
