@@ -21,6 +21,7 @@ import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
 import { exerciseArt, exerciseArtPair } from './muscle-map.js';
 import * as motion from './motion.js';
+import { backStack, topBackdrop } from './back.js';
 import * as stats from './stats.js';
 import * as push from './push.js';
 
@@ -4781,3 +4782,45 @@ window.Alpine = Alpine;
 window.plates = { supabase, local, sync, food };
 
 Alpine.start();
+
+/**
+ * The phone's back steps back through the app — see back.js for the model.
+ *
+ * A layer is an open sheet, or the log panel where it covers the screen (on a
+ * phone; on desktop it is a side panel that stays open, not a step to undo).
+ * Sheets are found by their backdrop, and the top one is closed by a click on
+ * that backdrop: every sheet already closes itself that way, so back reuses
+ * each sheet's own close rather than knowing about any of them.
+ */
+function backNavigation() {
+  const ui = Alpine.store('ui');
+  const desktop = window.matchMedia('(min-width: 900px)');
+  const panelIsLayer = () => ui.logOpen && !desktop.matches;
+
+  const stack = backStack({
+    history: window.history,
+    layers: () => document.querySelectorAll('.sheet-backdrop').length + (panelIsLayer() ? 1 : 0),
+    closeTop: () => {
+      const top = topBackdrop(document, (el) => getComputedStyle(el).zIndex);
+      if (top) top.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      else if (panelIsLayer()) ui.closeLog();
+    },
+    getView: () => ui.view,
+    setView: (view) => ui.go(view),
+  });
+
+  // Batched: one render can add and remove many nodes, and only the count after
+  // it has settled matters.
+  let queued = false;
+  const later = () => {
+    if (queued) return;
+    queued = true;
+    queueMicrotask(() => { queued = false; stack.sync(); });
+  };
+
+  new MutationObserver(later).observe(document.body, { childList: true, subtree: true });
+  Alpine.effect(() => { ui.view; ui.logOpen; later(); });
+  window.addEventListener('popstate', (event) => stack.onPop(event));
+}
+
+backNavigation();
