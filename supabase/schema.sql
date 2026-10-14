@@ -674,3 +674,14 @@ alter table plates.notification_prefs
 -- they choose: the app asks rather than assumes. Set by the member themselves
 -- through members_self.
 alter table plates.members add column if not exists sex text check (sex in ('male', 'female'));
+
+-- ---- members can only edit their own settings (added 2026-10-14) ---------------
+-- members_self lets a member update their own row, and the table-wide UPDATE
+-- grant let that update reach every column — so any member could set is_admin
+-- on themselves (and with it add members and replace exercise clips), or change
+-- their own email out from under every row keyed to it. Policies filter rows,
+-- not columns; a column grant is what limits the columns. These four are the
+-- only ones the app writes on a member's own row. Admin powers come from
+-- is_admin, set by hand in SQL, never through the API.
+revoke update on plates.members from authenticated, anon;
+grant update (display_name, weight_unit, photo_pin_hash, sex) on plates.members to authenticated;
