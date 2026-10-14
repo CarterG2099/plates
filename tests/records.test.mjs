@@ -118,11 +118,59 @@ test('two sessions without a record is not yet a stall', () => {
   assert.equal(stats.stallFor(history), null);
 });
 
-test('at 12 reps the next step is five pounds more and back to 8', () => {
+test('the suggestion is a real record: one more rep than ever at that weight or heavier', () => {
+  // 245 x 10 back in the baseline, 245 x 8 lately: 245 x 9 would not be a PR.
   const history = workout.historyOf(indexOf([
-    [d(0), [[100, 12]]], [d(7), [[100, 12]]], [d(14), [[100, 12]]], [d(21), [[100, 12]]],
+    [d(0), [[245, 10]]], [d(7), [[245, 8]]], [d(14), [[245, 8]]], [d(21), [[245, 8]]],
   ]), 'squat', 'squat', Infinity);
-  assert.deepEqual(stats.stallFor(history).next, { weight: 105, reps: 8 });
+  assert.deepEqual(stats.stallFor(history).next, { weight: 245, reps: 11 });
+});
+
+test('heavier sets count against a weight too: 275 x 10 means 245 needs 11', () => {
+  const history = workout.historyOf(indexOf([
+    [d(0), [[275, 10]]], [d(7), [[245, 8]]], [d(14), [[245, 8]]], [d(21), [[245, 8]]],
+  ]), 'squat', 'squat', Infinity);
+  assert.deepEqual(stats.stallFor(history).next, { weight: 245, reps: 11 });
+});
+
+test('past 15 reps the step is five pounds more, at whatever beats that weight', () => {
+  const history = workout.historyOf(indexOf([
+    [d(0), [[100, 15], [105, 9]]], [d(7), [[100, 15]]], [d(14), [[100, 15]]], [d(21), [[100, 15]]],
+  ]), 'squat', 'squat', Infinity);
+  assert.deepEqual(stats.stallFor(history).next, { weight: 105, reps: 10 });
+});
+
+// ---- breaking a stall, live ---------------------------------------------------
+
+const frontier = [{ weight: 275, reps: 10 }, { weight: 245, reps: 10 }, { weight: 225, reps: 12 }];
+const doneSet = (weight_lb, reps, extra = {}) => ({ weight_lb, reps, completed_at: d(30), is_warmup: false, ...extra });
+
+test('a set beats the frontier with more reps than ever at its weight or heavier', () => {
+  assert.equal(stats.beatsFrontier(doneSet(245, 11), frontier), true);
+  assert.equal(stats.beatsFrontier(doneSet(245, 10), frontier), false, 'equal is not more');
+  assert.equal(stats.beatsFrontier(doneSet(225, 11), frontier), false, '225 x 12 already done');
+  assert.equal(stats.beatsFrontier(doneSet(260, 10), frontier), false, '275 x 10 already beats it');
+  assert.equal(stats.beatsFrontier(doneSet(260, 11), frontier), true);
+});
+
+test('heavier than ever is a record at any reps', () => {
+  assert.equal(stats.beatsFrontier(doneSet(285, 1), frontier), true);
+});
+
+test('unfinished sets, warm-ups and cardio never break a stall', () => {
+  assert.equal(stats.beatsFrontier(doneSet(245, 12, { completed_at: null }), frontier), false);
+  assert.equal(stats.beatsFrontier(doneSet(245, 12, { is_warmup: true }), frontier), false);
+  assert.equal(stats.beatsFrontier(doneSet(null, null, { distance_m: 5000 }), frontier), false);
+});
+
+test('meeting the suggestion always breaks the stall it came from', () => {
+  const history = workout.historyOf(indexOf([
+    [d(0), [[275, 10]]], [d(7), [[245, 8]]], [d(14), [[245, 8]]], [d(21), [[245, 8]]],
+  ]), 'squat', 'squat', Infinity);
+  const stall = stats.stallFor(history);
+  const { weight, reps } = stall.next;
+  assert.equal(stats.beatsFrontier(doneSet(weight, reps), stall.frontier), true);
+  assert.equal(stats.beatsFrontier(doneSet(weight, reps - 1), stall.frontier), false);
 });
 
 test('a bodyweight stall only ever asks for another rep', () => {
@@ -209,6 +257,29 @@ test('the workout card shows the stall nudge, built once per refresh without the
   assert.match(app, /return `No PR in \$\{stats\.count\(stall\.since, 'session'\)\} · try \$\{step\}`/);
   const html = await source('../docs/index.html');
   assert.match(html, /<div class="stall" x-show="stallLine\(group\)" x-cloak\s*x-text="stallLine\(group\)"><\/div>/);
+});
+
+test('a ticked set that beats the stall swaps the nudge for the celebration, live', async () => {
+  const app = await source('../docs/js/app.js');
+  // The nudge steps aside as soon as a live row beats the frontier...
+  assert.match(app, /if \(!stall \|\| this\.stallBreaker\(group\)\) return null;/);
+  // ...read off the rows as they are now, not as they were stored.
+  assert.match(app, /const set = this\.currentSet\(s\);\s*if \(!stats\.beatsFrontier\(set, stall\.frontier\)\) continue;/);
+  assert.match(app, /return `Stall broken · \$\{what\} · new PR`;/);
+  const html = await source('../docs/index.html');
+  assert.match(html, /<div class="stall-broken" x-show="brokenLine\(group\)" x-cloak\s*x-text="brokenLine\(group\)"><\/div>/);
+});
+
+test('breaking the stall is announced once, ahead of a plain PR', async () => {
+  const app = await source('../docs/js/app.js');
+  const fn = app.slice(app.indexOf('  announceRecord(set) {'), app.indexOf('  async dropSet(set)'));
+  assert.ok(fn.indexOf('Stall broken') < fn.indexOf('`PR · ${group.name}`'), 'stall message is checked first');
+  assert.match(fn, /const earlier = group\.sets\.some\(\(s\) => s\.id !== set\.id/);
+});
+
+test('the celebration respects reduced motion', async () => {
+  const css = await source('../docs/css/pages.css');
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.stall-broken \{ animation: none; \}/);
 });
 
 test('the stats page has the PR timeline, and each lift its ratio and last PR', async () => {

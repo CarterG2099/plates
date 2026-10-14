@@ -3152,8 +3152,23 @@ Alpine.data('trainPage', () => ({
    */
   announceRecord(set) {
     const group = this.groups.find((g) => g.sets.some((s) => s.id === set.id));
-    if (!group || !workout.isRecord(set, this.bestBefore(group))) return;
+    if (!group) return;
 
+    // The set that ends a stall is the bigger news, and said once: a second
+    // record set in the same session is still a PR, not a second stall broken.
+    const stall = this.data.stalls.get(group.exerciseId ?? group.name);
+    if (stall && stats.beatsFrontier(set, stall.frontier)) {
+      const earlier = group.sets.some((s) => s.id !== set.id
+        && stats.beatsFrontier(this.currentSet(s), stall.frontier));
+      if (!earlier) {
+        const what = Number(set.weight_lb) ? `${set.weight_lb} × ${set.reps}` : stats.count(Number(set.reps), 'rep');
+        Alpine.store('ui').flash(`Stall broken · ${group.name} · ${what}`);
+        if (navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 160]);
+        return;
+      }
+    }
+
+    if (!workout.isRecord(set, this.bestBefore(group))) return;
     Alpine.store('ui').flash(`PR · ${group.name}`);
     if (navigator.vibrate) navigator.vibrate([60, 50, 60]);
   },
@@ -3257,10 +3272,35 @@ Alpine.data('trainPage', () => ({
    */
   stallLine(group) {
     const stall = this.data.stalls.get(group.exerciseId ?? group.name);
-    if (!stall) return null;
+    if (!stall || this.stallBreaker(group)) return null;
     const { weight, reps } = stall.next;
     const step = weight ? `${weight} × ${reps}` : stats.count(reps, 'rep');
     return `No PR in ${stats.count(stall.since, 'session')} · try ${step}`;
+  },
+
+  /**
+   * The set in this session that ended the lift's stall, heaviest first, or
+   * null. Read off the live rows, so the nudge gives way the moment the set is
+   * ticked — and comes back if it is unticked.
+   */
+  stallBreaker(group) {
+    const stall = this.data.stalls.get(group.exerciseId ?? group.name);
+    if (!stall) return null;
+    let best = null;
+    for (const s of group.sets) {
+      const set = this.currentSet(s);
+      if (!stats.beatsFrontier(set, stall.frontier)) continue;
+      if (!best || (Number(set.weight_lb) || 0) > (Number(best.weight_lb) || 0)) best = set;
+    }
+    return best;
+  },
+
+  /** What replaces the nudge once it is beaten. */
+  brokenLine(group) {
+    const set = this.stallBreaker(group);
+    if (!set) return null;
+    const what = Number(set.weight_lb) ? `${set.weight_lb} × ${set.reps}` : stats.count(Number(set.reps), 'rep');
+    return `Stall broken · ${what} · new PR`;
   },
 
   oneRm(set) { return workout.estimate1RM(set.weight_lb, set.reps); },

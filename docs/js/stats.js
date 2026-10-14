@@ -1026,13 +1026,56 @@ export function prTimeline(index, { limit = 25 } = {}) {
 /** Sessions without a record before a lift counts as stalled. */
 export const STALL_SESSIONS = 3;
 
+/** Past this many reps the suggestion moves to the next weight up instead. */
+const REP_CEILING = 15;
+
+/**
+ * The most reps ever done at each weight, as [{weight, reps}] heaviest first —
+ * everything a new set has to beat to be a rep or weight record.
+ */
+function frontierOf(history) {
+  const best = new Map();
+  for (const entry of history) {
+    for (const s of workingSets(entry.sets)) {
+      const w = Number(s.weight_lb) || 0;
+      best.set(w, Math.max(best.get(w) ?? 0, Number(s.reps)));
+    }
+  }
+  return [...best].map(([weight, reps]) => ({ weight, reps })).sort((a, b) => b.weight - a.weight);
+}
+
+/** Most reps ever done at `weight` or heavier, or 0 if nothing that heavy has been lifted. */
+function repsToBeat(frontier, weight) {
+  let most = 0;
+  for (const p of frontier) if (p.weight >= weight) most = Math.max(most, p.reps);
+  return most;
+}
+
+/**
+ * Whether a set is a record against what came before it: more reps than ever at
+ * its weight or heavier, which covers a heavier-than-ever set too (nothing to
+ * beat, so any rep counts). The same rule recordWalk applies session by session.
+ */
+export function beatsFrontier(set, frontier) {
+  if (!set?.completed_at || set.is_warmup || set.deleted_at) return false;
+  if (set.distance_m != null || set.duration_s != null) return false;
+  const reps = Number(set.reps);
+  if (!(reps > 0)) return false;
+  return reps > repsToBeat(frontier, Number(set.weight_lb) || 0);
+}
+
 /**
  * Whether a lift has stopped moving, and the smallest step that would move it.
  *
  * Stalled is STALL_SESSIONS sessions in a row with no record of any kind since
- * the last one (or since the baseline). The next step is double progression on
- * the latest top set: one more rep, or once you are at 12, five more pounds
- * and back down to 8. Bodyweight lifts only ever get the extra rep.
+ * the last one (or since the baseline). The next step is the smallest set that
+ * would actually be a record at the weight you are lifting now: one more rep
+ * than you have ever done at that weight or heavier. Once that passes
+ * REP_CEILING, five pounds more instead, at whatever beats that weight.
+ * Bodyweight lifts only ever get the extra rep.
+ *
+ * `frontier` goes out with it so the session screen can tell, set by set, when
+ * the stall is broken.
  *
  * @param {object[]} history  historyOf() output, newest first, finished sessions
  */
@@ -1045,12 +1088,16 @@ export function stallFor(history) {
   const since = walk.length - 1 - lastProgress;
   if (since < STALL_SESSIONS) return null;
 
+  const frontier = frontierOf(history);
   const { weight, reps } = walk[walk.length - 1].top;
-  const next = !weight || reps < 12
-    ? { weight, reps: reps + 1 }
-    : { weight: weight + 5, reps: 8 };
 
-  return { since, top: { weight, reps }, next };
+  let next = { weight, reps: repsToBeat(frontier, weight) + 1 };
+  if (weight && next.reps > REP_CEILING) {
+    const up = weight + 5;
+    next = { weight: up, reps: Math.max(1, repsToBeat(frontier, up) + 1) };
+  }
+
+  return { since, top: { weight, reps }, next, frontier };
 }
 
 /**

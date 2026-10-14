@@ -967,6 +967,30 @@ button.nf-tap:active { background: var(--color-hover); }
   padding-top: 4px;
 }
 
+/* The nudge, beaten: success-coloured and a moment of movement as it appears,
+   the visual half of the toast and the buzz. */
+.stall-broken {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--color-success);
+  font-weight: 600;
+  padding-top: 4px;
+  animation: stall-broken .6s ease-out;
+  transform-origin: left center;
+}
+
+@keyframes stall-broken {
+  0%   { opacity: 0; transform: scale(.8); }
+  50%  { opacity: 1; transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stall-broken { animation: none; }
+}
+
 /* The gap is what keeps consecutive finished sets apart. A hairline is invisible
    against the green — three checked sets in a row read as one block and you
    could not count them — and this is the number the eye actually uses. */

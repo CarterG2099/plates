@@ -1684,6 +1684,9 @@
                            record of any kind; the step is the smallest PR. -->
                       <div class="stall" x-show="stallLine(group)" x-cloak
                            x-text="stallLine(group)"></div>
+                      <!-- Replaces the nudge the moment a ticked set beats it. -->
+                      <div class="stall-broken" x-show="brokenLine(group)" x-cloak
+                           x-text="brokenLine(group)"></div>
                     </button>
                   </div>
                   <button class="chip" @click="openExMenu(group)"
