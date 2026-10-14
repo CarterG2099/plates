@@ -186,6 +186,23 @@ test('a serving with no household text falls back to the measurement', () => {
   assert.equal(r.servingOf({ servingSize: 30, servingSizeUnit: 'ml' }).label, '30 ml');
 });
 
+test('USDA label-database unit codes scale like their plain words', () => {
+  // Branded records carry GRM/MLT/ONZ as often as g/ml — Crunchmaster crackers
+  // arrived as 30 GRM, were refused, and landed in the form at 400 kcal/100g.
+  assert.deepEqual(r.servingOf({ servingSize: 30, servingSizeUnit: 'GRM' }),
+    { grams: 30, label: '30 g' });
+  assert.equal(r.servingOf({ servingSize: 240, servingSizeUnit: 'MLT' }).grams, 240);
+  assert.equal(r.servingOf({ servingSize: 2, servingSizeUnit: 'ONZ' }).grams, 2 * 28.3495);
+});
+
+test('a serving hiding in the household text is recovered', () => {
+  const serving = r.servingOf({ householdServingFullText: '15 crackers (30 g)' });
+  assert.deepEqual(serving, { grams: 30, label: '15 crackers (30 g)' });
+  assert.equal(r.servingOf({ householdServingFullText: '1 oz' }).grams, 28.3495);
+  assert.equal(r.servingOf({ householdServingFullText: '2 crackers' }), null,
+    'a count with no mass still cannot be scaled');
+});
+
 test('a serving in a unit that cannot be scaled is refused', () => {
   assert.equal(r.servingOf({ servingSize: 1, servingSizeUnit: 'bar' }), null);
   assert.equal(r.servingOf({ servingSize: 0, servingSizeUnit: 'g' }), null);

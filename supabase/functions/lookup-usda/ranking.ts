@@ -96,15 +96,41 @@ export function kjToKcal(kj: number | null): number | null {
  * Per 100 g remains the fallback for foods with no recorded portion, because
  * there is then nothing to express a serving in.
  */
+// Branded records spell their units as the old label-database codes as often as
+// the plain words — GRM for grams, MLT for millilitres, ONZ for ounces. All of
+// them are a mass or volume the per-100g figures can be scaled onto, and
+// refusing the codes left those foods in the form at per-100g numbers nobody
+// eats ("why is Crunchmaster 400 calories?").
+const SCALABLE_UNITS: Record<string, { factor: number; shown: string }> = {
+  g: { factor: 1, shown: "g" },
+  gm: { factor: 1, shown: "g" },
+  grm: { factor: 1, shown: "g" },
+  ml: { factor: 1, shown: "ml" },
+  mlt: { factor: 1, shown: "ml" },
+  oz: { factor: 28.3495, shown: "oz" },
+  onz: { factor: 28.3495, shown: "oz" },
+};
+
 export function servingOf(food: UsdaFood): { grams: number; label: string } | null {
   // Branded: the label serving, but only as a mass or volume. A "1 bar" serving
   // with no weight cannot be scaled from a per-100g figure.
   const size = Number(food.servingSize);
-  const unit = (food.servingSizeUnit ?? "").trim().toLowerCase();
-  if (Number.isFinite(size) && size > 0 && (unit === "g" || unit === "ml")) {
+  const unit = SCALABLE_UNITS[(food.servingSizeUnit ?? "").trim().toLowerCase()];
+  const household = (food.householdServingFullText ?? "").trim();
+  if (Number.isFinite(size) && size > 0 && unit) {
     return {
-      grams: size,
-      label: (food.householdServingFullText ?? "").trim() || `${size} ${unit}`,
+      grams: size * unit.factor,
+      label: household || `${size} ${unit.shown}`,
+    };
+  }
+
+  // Some records put the serving only in the household text — "15 crackers
+  // (30 g)" — with servingSize absent or in a unit nothing can scale.
+  const fromText = household.match(/([\d.]+)\s*(g|ml|oz)\b/i);
+  if (fromText && Number(fromText[1]) > 0) {
+    return {
+      grams: Number(fromText[1]) * SCALABLE_UNITS[fromText[2].toLowerCase()].factor,
+      label: household,
     };
   }
 
