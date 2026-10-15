@@ -14,8 +14,11 @@ data class SetScreen(
     val reps: Int?,
     /** "135 × 8" — that set last time, or null the first time. */
     val lastTime: String?,
-    /** Already ticked: opened from the overview to fix its numbers. */
+    /** Already ticked: opened to fix its numbers, or to untick. */
     val done: Boolean = false,
+    /** The sets the ‹ and › buttons step to; null at either end. */
+    val previousId: String? = null,
+    val nextId: String? = null,
 )
 
 /** One row of the overview. */
@@ -75,7 +78,6 @@ data class WorkoutScreen(
     val total: Int,
     val cardioLeft: Int,
     val lastActivity: String?,
-    val lastTicked: SetRow?,
     /** The set "one more" copies when the plan runs out. */
     val lastSet: SetRow?,
 )
@@ -88,6 +90,9 @@ fun workoutScreen(state: State, email: String, focus: String? = null): WorkoutSc
 
     val screen = current?.let { set ->
         val (weight, reps, lastTime) = numbersFor(state, email, sets, set)
+        // Every set the watch can show, ticked or not, in workout order.
+        val stops = sets.filter { Workout.canOpen(state, it) }
+        val at = stops.indexOfFirst { it.id == set.id }
         SetScreen(
             set = set,
             number = Workout.positionInExercise(sets, set) + 1,
@@ -96,6 +101,8 @@ fun workoutScreen(state: State, email: String, focus: String? = null): WorkoutSc
             reps = reps,
             lastTime = lastTime,
             done = set.completedAt != null,
+            previousId = stops.getOrNull(at - 1)?.id,
+            nextId = stops.getOrNull(at + 1)?.id,
         )
     }
 
@@ -106,7 +113,6 @@ fun workoutScreen(state: State, email: String, focus: String? = null): WorkoutSc
         total = sets.size,
         cardioLeft = Workout.cardioLeft(state, sets),
         lastActivity = Workout.lastActivity(sets),
-        lastTicked = Workout.lastTicked(sets),
         lastSet = sets.lastOrNull { !Workout.isCardio(state.exercises[it.exerciseId], it.exerciseName) },
     )
 }

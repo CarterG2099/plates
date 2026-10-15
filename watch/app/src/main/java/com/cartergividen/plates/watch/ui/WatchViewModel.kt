@@ -226,11 +226,21 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
         syncNow()
     }
 
-    fun undoLast() {
+    /** ‹ or ›: the previous or next set in workout order, ticked or not. */
+    fun step(direction: Int) {
         val me = email ?: return
-        val last = workoutScreen(state, me, _focus.value)?.lastTicked ?: return
-        update { it.save(Workout.undo(last, now())) }
-        _focus.value = last.id
+        val current = workoutScreen(state, me, _focus.value)?.current ?: return
+        val target = if (direction < 0) current.previousId else current.nextId
+        if (target != null) open(target)
+    }
+
+    /** Take the tick off the set on screen, and stay on it to redo it. */
+    fun untick() {
+        val me = email ?: return
+        val current = workoutScreen(state, me, _focus.value)?.current ?: return
+        if (!current.done) return
+        update { it.save(Workout.undo(current.set, now())) }
+        _focus.value = current.set.id
         _draft.value = null
         syncNow()
     }

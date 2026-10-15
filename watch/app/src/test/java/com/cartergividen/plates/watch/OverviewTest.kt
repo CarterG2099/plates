@@ -90,6 +90,25 @@ class OverviewTest {
         assertEquals("b2", workoutScreen(workout(), ME, focus = "r1")!!.current!!.set.id)
     }
 
+    // ---- stepping one set at a time ----------------------------------------------------
+
+    @Test fun `stepping goes through sets in workout order, across exercises`() {
+        val state = workout()
+        val b3 = workoutScreen(state, ME, focus = "b3")!!.current!!
+        assertEquals("b2", b3.previousId)
+        assertEquals("from bench to lat", "l1", b3.nextId)
+    }
+
+    @Test fun `stepping includes ticked sets, so you can go back to one`() {
+        assertEquals("b1", workoutScreen(workout(), ME, focus = "b2")!!.current!!.previousId)
+    }
+
+    @Test fun `stepping stops at the ends and steps over cardio`() {
+        val state = workout()
+        assertNull("nothing before the first set", workoutScreen(state, ME, focus = "b1")!!.current!!.previousId)
+        assertNull("the run after lat is not a stop", workoutScreen(state, ME, focus = "l2")!!.current!!.nextId)
+    }
+
     // ---- where the tick goes next -------------------------------------------------------
 
     @Test fun `after a tick, the next set of the same exercise`() {

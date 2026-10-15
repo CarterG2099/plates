@@ -180,10 +180,10 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
     val weight = if (current != null && draft?.setId == current.set.id) draft!!.weightLb else current?.weightLb
     val reps = if (current != null && draft?.setId == current.set.id) draft!!.reps else current?.reps
 
-    // A new set on screen — ticked, undone, or added — starts at the top, where
-    // its name and numbers are. The tick sits below them, so without this every
-    // set after the first opened scrolled halfway down.
-    LaunchedEffect(current?.set?.id) { list.scrollToItem(0) }
+    // A new set on screen — stepped to, ticked, added — or one just unticked
+    // starts at the top, where its name and numbers are. The tick sits below
+    // them, so without this every set after the first opened scrolled halfway down.
+    LaunchedEffect(current?.set?.id, current?.done) { list.scrollToItem(0) }
 
     when (editing) {
         Field.WEIGHT -> return NumberWheel(
@@ -205,12 +205,21 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
                 )
             }
             item {
-                Caption(
-                    "Set ${current.number} of ${current.ofExercise}" +
-                        if (current.done) " · ticked, fix and save"
-                        else (current.lastTime?.let { " · last $it" } ?: ""),
-                )
+                // ‹ Set 2 of 3 › — step through sets one at a time, ticked or not.
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CompactButton(
+                        onClick = { vm.step(-1) }, enabled = current.previousId != null,
+                        colors = ButtonDefaults.secondaryButtonColors(),
+                    ) { Text("‹", fontSize = 18.sp) }
+                    Text("Set ${current.number} of ${current.ofExercise}", style = MaterialTheme.typography.caption1)
+                    CompactButton(
+                        onClick = { vm.step(1) }, enabled = current.nextId != null,
+                        colors = ButtonDefaults.secondaryButtonColors(),
+                    ) { Text("›", fontSize = 18.sp) }
+                }
             }
+            val note = if (current.done) "Ticked · fix and save" else current.lastTime?.let { "Last $it" }
+            note?.let { item { Caption(it) } }
             item {
                 Stepper(Workout.weightLabel(weight), "lb", { editing = Field.WEIGHT },
                     { vm.stepWeight(-1) }, { vm.stepWeight(1) })
@@ -229,6 +238,16 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
                     enabled = Workout.canTick(reps),
                     modifier = Modifier.size(ButtonDefaults.LargeButtonSize),
                 ) { Text(if (current.done) "Save" else "✓", fontSize = if (current.done) 16.sp else 26.sp) }
+            }
+            if (current.done) {
+                item {
+                    Chip(
+                        label = { Text("Untick set") },
+                        onClick = vm::untick,
+                        colors = ChipDefaults.secondaryChipColors(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
             screen.lastActivity?.let { item { RestClock(it) } }
         } else {
@@ -258,16 +277,6 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
         }
         item { Caption(statusLine(status)) }
 
-        if (screen.lastTicked != null) {
-            item {
-                Chip(
-                    label = { Text("Undo last set") },
-                    onClick = vm::undoLast,
-                    colors = ChipDefaults.secondaryChipColors(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
         item {
             Chip(
                 label = { Text(if (confirmFinish) "Tap again to finish" else "Finish workout") },

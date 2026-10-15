@@ -152,9 +152,6 @@ object Workout {
     /** app.js toggleDone, unticking. The numbers stay; only the tick goes. */
     fun undo(set: SetRow, now: String): SetRow = set.copy(completedAt = null, updatedAt = now)
 
-    /** The most recently ticked set, for undoing a mis-tap. */
-    fun lastTicked(sets: List<SetRow>): SetRow? =
-        sets.filter { it.completedAt != null }.maxByOrNull { Stamp.parse(it.completedAt!!) }
 
     /** workout.js addSet: one more of the same exercise, at the end of the session. */
     fun oneMore(like: SetRow, sets: List<SetRow>, now: String, newId: () -> String): SetRow =
