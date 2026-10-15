@@ -1,5 +1,6 @@
 package com.cartergividen.plates.watch.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,7 +44,7 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.cartergividen.plates.watch.data.Stamp
 import com.cartergividen.plates.watch.data.State
-import com.cartergividen.plates.watch.logic.CodeEntry
+import com.cartergividen.plates.watch.logic.OverviewGroup
 import com.cartergividen.plates.watch.logic.WorkoutScreen
 import com.cartergividen.plates.watch.logic.Workout
 import kotlinx.coroutines.delay
@@ -206,7 +207,8 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
             item {
                 Caption(
                     "Set ${current.number} of ${current.ofExercise}" +
-                        (current.lastTime?.let { " · last $it" } ?: ""),
+                        if (current.done) " · ticked, fix and save"
+                        else (current.lastTime?.let { " · last $it" } ?: ""),
                 )
             }
             item {
@@ -226,7 +228,7 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
                     },
                     enabled = Workout.canTick(reps),
                     modifier = Modifier.size(ButtonDefaults.LargeButtonSize),
-                ) { Text("✓", fontSize = 26.sp) }
+                ) { Text(if (current.done) "Save" else "✓", fontSize = if (current.done) 16.sp else 26.sp) }
             }
             screen.lastActivity?.let { item { RestClock(it) } }
         } else {
@@ -245,7 +247,16 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
             }
         }
 
-        item { Caption("${screen.done} of ${screen.total} sets · ${statusLine(status)}") }
+        item {
+            Chip(
+                label = { Text("All sets") },
+                secondaryLabel = { Text("${screen.done} of ${screen.total} done") },
+                onClick = { vm.showOverview(true) },
+                colors = ChipDefaults.secondaryChipColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item { Caption(statusLine(status)) }
 
         if (screen.lastTicked != null) {
             item {
@@ -321,4 +332,74 @@ private fun RestClock(since: String) {
     }
     val seconds = ((now - Stamp.parse(since).toEpochMilli()) / 1000).coerceAtLeast(0)
     Caption("Rest %d:%02d".format(seconds / 60, seconds % 60))
+}
+
+// ---- the overview --------------------------------------------------------------------
+
+/**
+ * Every set, by exercise. Tap one to jump to it — ticked ones too, to fix a
+ * number. The set that was on screen is highlighted, so it's easy to go back.
+ */
+@Composable
+fun OverviewScreen(vm: WatchViewModel, groups: List<OverviewGroup>, screen: WorkoutScreen) {
+    // Swipe-back closes the overview rather than leaving the app.
+    BackHandler { vm.showOverview(false) }
+
+    // Opens on the set you were on, not on the top of the list.
+    val currentRow = remember(groups) {
+        var index = 1   // the header
+        for (group in groups) {
+            index += 1
+            val at = group.sets.indexOfFirst { it.current }
+            if (at >= 0) return@remember index + at
+            index += group.sets.size
+        }
+        1
+    }
+    val list = rememberScalingLazyListState(initialCenterItemIndex = currentRow)
+
+    Page(list = list) {
+        item { Text("${screen.done} of ${screen.total} sets", style = MaterialTheme.typography.title3) }
+        for (group in groups) {
+            item {
+                Text(
+                    group.name, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.caption1, color = MaterialTheme.colors.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                )
+            }
+            for ((i, row) in group.sets.withIndex()) {
+                item {
+                    Chip(
+                        label = {
+                            Text(
+                                when {
+                                    !row.canOpen -> "Set ${i + 1} · on phone"
+                                    row.done -> "✓  ${row.label}"
+                                    else -> "Set ${i + 1} · ${row.label}"
+                                },
+                                maxLines = 1,
+                            )
+                        },
+                        onClick = { vm.open(row.set.id) },
+                        enabled = row.canOpen,
+                        colors = when {
+                            row.current -> ChipDefaults.primaryChipColors()
+                            row.done -> ChipDefaults.childChipColors()
+                            else -> ChipDefaults.secondaryChipColors()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+        item {
+            Chip(
+                label = { Text("Back to set") },
+                onClick = { vm.showOverview(false) },
+                colors = ChipDefaults.secondaryChipColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
 }

@@ -76,9 +76,27 @@ object Workout {
     fun positionInExercise(sets: List<SetRow>, set: SetRow): Int =
         sets.filter { it.exerciseKey == set.exerciseKey }.indexOfFirst { it.id == set.id }
 
-    /** The next set to do: the first unticked one the watch can log. */
-    fun currentSet(state: State, sets: List<SetRow>): SetRow? =
-        sets.firstOrNull { it.completedAt == null && !isCardio(state.exercises[it.exerciseId], it.exerciseName) }
+    fun canOpen(state: State, set: SetRow): Boolean = !isCardio(state.exercises[set.exerciseId], set.exerciseName)
+
+    /**
+     * The set on screen: the one you jumped to from the overview, ticked or not,
+     * else the first open one. A jump to a set that has since gone — deleted on
+     * the phone — or to cardio quietly falls back rather than showing nothing.
+     */
+    fun currentSet(state: State, sets: List<SetRow>, focus: String? = null): SetRow? =
+        sets.firstOrNull { it.id == focus && canOpen(state, it) }
+            ?: sets.firstOrNull { it.completedAt == null && canOpen(state, it) }
+
+    /**
+     * Where the screen goes after a tick: the next open set of the same exercise,
+     * so jumping to lat pulldowns because the bench was taken keeps you on lat
+     * pulldowns. Then any set of it you skipped. Null once the exercise is done,
+     * which means the first open set in the workout.
+     */
+    fun nextAfterTick(state: State, sets: List<SetRow>, ticked: SetRow): String? {
+        val open = sets.filter { it.exerciseKey == ticked.exerciseKey && it.completedAt == null && canOpen(state, it) }
+        return (open.firstOrNull { it.setIndex > ticked.setIndex } ?: open.firstOrNull())?.id
+    }
 
     /** Unticked cardio, left for the phone. */
     fun cardioLeft(state: State, sets: List<SetRow>): Int =

@@ -14,7 +14,59 @@ data class SetScreen(
     val reps: Int?,
     /** "135 × 8" — that set last time, or null the first time. */
     val lastTime: String?,
+    /** Already ticked: opened from the overview to fix its numbers. */
+    val done: Boolean = false,
 )
+
+/** One row of the overview. */
+data class OverviewSet(
+    val set: SetRow,
+    /** "140 × 8": what you did, or for an open set what ticking it would record. */
+    val label: String,
+    val done: Boolean,
+    val canOpen: Boolean,
+    val current: Boolean,
+)
+
+data class OverviewGroup(val name: String, val sets: List<OverviewSet>)
+
+/**
+ * The numbers a set would be ticked with, and last time's line: its own if the
+ * phone typed them, else that set last time, else the one just done this session.
+ */
+private fun numbersFor(state: State, email: String, sets: List<SetRow>, set: SetRow): Triple<Double?, Int?, String?> {
+    val position = Workout.positionInExercise(sets, set)
+    val placeholder = Workout.placeholder(Workout.previous(state, email, set), position)
+    val fallback = placeholder ?: Workout.earlierThisSession(sets, set)
+    return Triple(
+        set.weightLb ?: fallback?.weightLb,
+        set.reps ?: fallback?.reps,
+        placeholder?.let { "${Workout.weightLabel(it.weightLb)} × ${it.reps ?: "—"}" },
+    )
+}
+
+/** Every set of the open workout, by exercise in the order they come. */
+fun overview(state: State, email: String, focus: String? = null): List<OverviewGroup>? {
+    val session = Workout.activeSession(state, email) ?: return null
+    val sets = Workout.setsFor(state, session.id)
+    val current = Workout.currentSet(state, sets, focus)
+
+    return sets.groupBy { it.exerciseKey }.values.map { group ->
+        OverviewGroup(
+            name = group.first().exerciseName,
+            sets = group.map { set ->
+                val (weight, reps, _) = numbersFor(state, email, sets, set)
+                OverviewSet(
+                    set = set,
+                    label = "${Workout.weightLabel(weight)} × ${reps ?: "—"}",
+                    done = set.completedAt != null,
+                    canOpen = Workout.canOpen(state, set),
+                    current = set.id == current?.id,
+                )
+            },
+        )
+    }
+}
 
 data class WorkoutScreen(
     val session: SessionRow,
@@ -29,23 +81,21 @@ data class WorkoutScreen(
 )
 
 /** Everything the workout screen shows, worked out from state alone. */
-fun workoutScreen(state: State, email: String): WorkoutScreen? {
+fun workoutScreen(state: State, email: String, focus: String? = null): WorkoutScreen? {
     val session = Workout.activeSession(state, email) ?: return null
     val sets = Workout.setsFor(state, session.id)
-    val current = Workout.currentSet(state, sets)
+    val current = Workout.currentSet(state, sets, focus)
 
     val screen = current?.let { set ->
-        val same = sets.filter { it.exerciseKey == set.exerciseKey }
-        val position = Workout.positionInExercise(sets, set)
-        val placeholder = Workout.placeholder(Workout.previous(state, email, set), position)
-        val fallback = placeholder ?: Workout.earlierThisSession(sets, set)
+        val (weight, reps, lastTime) = numbersFor(state, email, sets, set)
         SetScreen(
             set = set,
-            number = position + 1,
-            ofExercise = same.size,
-            weightLb = set.weightLb ?: fallback?.weightLb,
-            reps = set.reps ?: fallback?.reps,
-            lastTime = placeholder?.let { "${Workout.weightLabel(it.weightLb)} × ${it.reps ?: "—"}" },
+            number = Workout.positionInExercise(sets, set) + 1,
+            ofExercise = sets.count { it.exerciseKey == set.exerciseKey },
+            weightLb = weight,
+            reps = reps,
+            lastTime = lastTime,
+            done = set.completedAt != null,
         )
     }
 

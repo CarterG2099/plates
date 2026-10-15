@@ -53,6 +53,13 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
     private val _draft = MutableStateFlow<Draft?>(null)
     val draft: StateFlow<Draft?> = _draft.asStateFlow()
 
+    // The set jumped to from the overview; null means the first open one.
+    private val _focus = MutableStateFlow<String?>(null)
+    val focus: StateFlow<String?> = _focus.asStateFlow()
+
+    private val _overviewOpen = MutableStateFlow(false)
+    val overviewOpen: StateFlow<Boolean> = _overviewOpen.asStateFlow()
+
     private val _code = MutableStateFlow(CodeEntry())
     val code: StateFlow<CodeEntry> = _code.asStateFlow()
     private val _pairing = MutableStateFlow<String?>(null)   // error, or "Pairing…"
@@ -156,10 +163,19 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
         syncNow()
     }
 
+    fun showOverview(open: Boolean) { _overviewOpen.value = open }
+
+    /** Jump to a set from the overview. */
+    fun open(setId: String) {
+        _focus.value = setId
+        _draft.value = null
+        _overviewOpen.value = false
+    }
+
     /** The numbers on screen: what you dialled, else what the set already holds. */
     private fun dialled(): Draft? {
         val me = email ?: return null
-        val current = workoutScreen(state, me)?.current ?: return null
+        val current = workoutScreen(state, me, _focus.value)?.current ?: return null
         val draft = _draft.value
         return if (draft?.setId == current.set.id) draft
         else Draft(current.set.id, current.weightLb, current.reps)
@@ -185,29 +201,47 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
         _draft.value = d.copy(reps = reps)
     }
 
+    /**
+     * Tick the set on screen, then move on: the next set of the same exercise,
+     * else the first open one. A set reopened from the overview is saved with its
+     * new numbers and keeps its tick — fixing a number is not redoing the set.
+     */
     fun tick() {
         val me = email ?: return
-        val current = workoutScreen(state, me)?.current ?: return
+        val screen = workoutScreen(state, me, _focus.value) ?: return
+        val current = screen.current ?: return
         val d = dialled() ?: return
         if (!Workout.canTick(d.reps)) return
-        update { it.save(Workout.complete(current.set, d.weightLb, d.reps, now())) }
+
+        val stamp = now()
+        if (current.done) {
+            update { it.save(current.set.copy(weightLb = d.weightLb, reps = d.reps, updatedAt = stamp)) }
+            _focus.value = null
+        } else {
+            val ticked = Workout.complete(current.set, d.weightLb, d.reps, stamp)
+            update { it.save(ticked) }
+            _focus.value = Workout.nextAfterTick(state, Workout.setsFor(state, screen.session.id), ticked)
+        }
         _draft.value = null
         syncNow()
     }
 
     fun undoLast() {
         val me = email ?: return
-        val last = workoutScreen(state, me)?.lastTicked ?: return
+        val last = workoutScreen(state, me, _focus.value)?.lastTicked ?: return
         update { it.save(Workout.undo(last, now())) }
+        _focus.value = last.id
         _draft.value = null
         syncNow()
     }
 
     fun oneMore() {
         val me = email ?: return
-        val screen = workoutScreen(state, me) ?: return
+        val screen = workoutScreen(state, me, _focus.value) ?: return
         val like = screen.lastSet ?: return
-        update { it.save(Workout.oneMore(like, Workout.setsFor(state, screen.session.id), now(), ::newId)) }
+        val added = Workout.oneMore(like, Workout.setsFor(state, screen.session.id), now(), ::newId)
+        update { it.save(added) }
+        _focus.value = added.id
         syncNow()
     }
 
@@ -216,6 +250,8 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
         val session = Workout.activeSession(state, me) ?: return
         update { it.save(Workout.finish(session, now())) }
         _draft.value = null
+        _focus.value = null
+        _overviewOpen.value = false
         syncNow()
     }
 }

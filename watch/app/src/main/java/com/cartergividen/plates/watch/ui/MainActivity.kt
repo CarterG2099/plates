@@ -7,6 +7,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.wear.compose.material.MaterialTheme
+import com.cartergividen.plates.watch.logic.overview
 import com.cartergividen.plates.watch.logic.workoutScreen
 
 class MainActivity : ComponentActivity() {
@@ -18,14 +19,19 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 val session by vm.session.collectAsState()
                 val state by vm.stateFlow.collectAsState()
+                val focus by vm.focus.collectAsState()
+                val overviewOpen by vm.overviewOpen.collectAsState()
                 val me = session?.email
 
                 when {
                     me == null -> PairScreen(vm)
                     else -> {
-                        val workout = workoutScreen(state, me)
-                        if (workout != null) WorkoutScreenUi(vm, workout)
-                        else HomeScreen(vm, state, me)
+                        val workout = workoutScreen(state, me, focus)
+                        when {
+                            workout == null -> HomeScreen(vm, state, me)
+                            overviewOpen -> OverviewScreen(vm, overview(state, me, focus).orEmpty(), workout)
+                            else -> WorkoutScreenUi(vm, workout)
+                        }
                     }
                 }
             }
