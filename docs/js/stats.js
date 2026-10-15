@@ -930,28 +930,38 @@ function topSet(sets) {
 }
 
 /**
+ * How far back a record has to beat. Six months, not all time: a lifter coming
+ * back from a break or partway through a cut is measured against where they
+ * have been lately, so a record is something they can actually set this month.
+ */
+export const RECORD_WINDOW_DAYS = 182;
+
+/**
  * One lift's sessions, oldest first, each marked with the records it set.
  *
- * A session sets a record when, against everything before it, it has:
- *   weight — a heavier top set than ever
- *   reps   — more reps at some weight than any earlier set at that weight or
- *            heavier (so 225 × 9 beats 225 × 8 and 235 × 8, but not 205 × 12)
- *   1rm    — a higher estimated 1RM than ever
- * The first session is the baseline and sets none: there is nothing to beat.
+ * A session sets a record when, against the six months before it, it has:
+ *   weight — a heavier top set
+ *   reps   — more reps at some weight than any set in that window at that
+ *            weight or heavier (so 225 × 9 beats 225 × 8 and 235 × 8, but not
+ *            205 × 12)
+ *   1rm    — a higher estimated 1RM
+ * A session with nothing in its window — the first, or the first back after a
+ * long break — is a baseline and sets none: there is nothing to beat.
  *
  * Shared by the PR timeline and the stall check, so "improved" means one thing.
  *
  * @param {object[]} history  historyOf() output, newest first
  */
-export function recordWalk(history) {
-  const seen = [];                 // every earlier working set, as {weight, reps}
-  let heaviest = 0;
-  let bestRm = 0;
+export function recordWalk(history, { window = RECORD_WINDOW_DAYS } = {}) {
+  const seen = [];                 // every earlier working set, as {t, weight, reps, rm}
   const out = [];
 
   for (const entry of history.slice().reverse()) {
     const sets = workingSets(entry.sets);
     if (!sets.length) continue;
+
+    const t = Date.parse(entry.date);
+    const prior = seen.filter((p) => p.t >= t - window * DAY);
 
     const top = topSet(sets);
     const topWeight = Number(top.weight_lb) || 0;
@@ -960,13 +970,15 @@ export function recordWalk(history) {
 
     const kinds = [];
     let repSet = null;
-    if (out.length) {
+    if (prior.length) {
+      const heaviest = Math.max(...prior.map((p) => p.weight));
+      const bestRm = Math.max(...prior.map((p) => p.rm));
       if (topWeight > heaviest) kinds.push('weight');
       if (bestOfDay.rm > bestRm && topWeight > 0) kinds.push('1rm');
       for (const s of sets) {
         const w = Number(s.weight_lb) || 0;
-        const earlier = seen.filter((p) => p.weight >= w);
-        if (!earlier.length) continue;                  // heavier than ever: a weight record, not a rep one
+        const earlier = prior.filter((p) => p.weight >= w);
+        if (!earlier.length) continue;                  // heavier than the window: a weight record, not a rep one
         if (Number(s.reps) > Math.max(...earlier.map((p) => p.reps))
             && (!repSet || w > (Number(repSet.weight_lb) || 0))) repSet = s;
       }
@@ -980,11 +992,10 @@ export function recordWalk(history) {
       rm: bestOfDay.rm,
       repSet: repSet && { weight: Number(repSet.weight_lb) || 0, reps: Number(repSet.reps) },
       kinds,
+      baseline: !prior.length,
     });
 
-    for (const s of sets) seen.push({ weight: Number(s.weight_lb) || 0, reps: Number(s.reps) });
-    heaviest = Math.max(heaviest, topWeight);
-    bestRm = Math.max(bestRm, bestOfDay.rm);
+    for (const { s, rm } of rms) seen.push({ t, weight: Number(s.weight_lb) || 0, reps: Number(s.reps), rm });
   }
   return out;
 }
@@ -1040,6 +1051,18 @@ export function repCeiling(name) {
 }
 
 /**
+ * The fewest reps a suggestion asks for once it has moved up in weight. Above
+ * anything lifted lately, a single is technically a record, and "try 250 × 1"
+ * is no use to anyone — so a heavier suggestion asks for a real set: 5 reps on
+ * the heavy lifts, 8 on everything else (the bottom of the usual ranges).
+ */
+export const REP_FLOOR = { heavy: 5, default: 8 };
+
+export function repFloor(name) {
+  return HEAVY.test(String(name ?? '').trim()) ? REP_FLOOR.heavy : REP_FLOOR.default;
+}
+
+/**
  * The most reps ever done at each weight, as [{weight, reps}] heaviest first —
  * everything a new set has to beat to be a rep or weight record.
  */
@@ -1091,24 +1114,31 @@ export function beatsFrontier(set, frontier) {
  *
  * @param {object[]} history  historyOf() output, newest first, finished sessions
  */
-export function stallFor(history, { ceiling = REP_CEILING.default } = {}) {
-  const walk = recordWalk(history);
+export function stallFor(history, { ceiling = REP_CEILING.default, floor = REP_FLOOR.default, now = Date.now(), window = RECORD_WINDOW_DAYS } = {}) {
+  const walk = recordWalk(history, { window });
   if (walk.length < STALL_SESSIONS + 1) return null;
 
+  // A baseline (first session, or first back after a break) restarts the count
+  // the same way a record does: there was nothing to beat before it.
   let lastProgress = 0;
-  walk.forEach((s, i) => { if (s.kinds.length) lastProgress = i; });
+  walk.forEach((s, i) => { if (s.kinds.length || s.baseline) lastProgress = i; });
   const since = walk.length - 1 - lastProgress;
   if (since < STALL_SESSIONS) return null;
 
-  const frontier = frontierOf(history);
+  // What today's session has to beat: the last six months, as recordWalk will
+  // judge it. Nothing in that window means today is a baseline, not a stall.
+  const recent = history.filter((h) => Date.parse(h.date) >= now - window * DAY);
+  if (!recent.length) return null;
+  const frontier = frontierOf(recent);
   const { weight, reps } = walk[walk.length - 1].top;
 
   let next = { weight, reps: repsToBeat(frontier, weight) + 1 };
   if (weight) {
-    // Above the heaviest set ever, one rep is a record, so this always ends.
+    // Above the heaviest recent set the floor is enough for a record, and the
+    // floor is under the ceiling, so this always ends.
     while (next.reps > ceiling) {
       const up = next.weight + 5;
-      next = { weight: up, reps: repsToBeat(frontier, up) + 1 };
+      next = { weight: up, reps: Math.max(repsToBeat(frontier, up) + 1, Math.min(floor, ceiling)) };
     }
   }
 
@@ -1122,12 +1152,13 @@ export function stallFor(history, { ceiling = REP_CEILING.default } = {}) {
  * The running session is left out, so the flag describes the sessions before
  * today and does not flicker while you are halfway through beating it.
  */
-export function stallMap(index, excludeSessionId = null) {
+export function stallMap(index, excludeSessionId = null, { now = Date.now() } = {}) {
   const out = new Map();
   for (const key of index.byExercise.keys()) {
     const history = historyOf(index, key, key, Infinity)
       .filter((h) => h.session?.ended_at && h.session.id !== excludeSessionId);
-    const stall = stallFor(history, { ceiling: repCeiling(nameOf(history)) });
+    const name = nameOf(history);
+    const stall = stallFor(history, { ceiling: repCeiling(name), floor: repFloor(name), now });
     if (stall) out.set(key, stall);
   }
   return out;

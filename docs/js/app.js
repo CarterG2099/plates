@@ -3300,7 +3300,7 @@ Alpine.data('trainPage', () => ({
     const set = this.stallBreaker(group);
     if (!set) return null;
     const what = Number(set.weight_lb) ? `${set.weight_lb} × ${set.reps}` : stats.count(Number(set.reps), 'rep');
-    return `Stall broken · ${what} · new PR`;
+    return `Stall broken · ${what} · best in 6 months`;
   },
 
   oneRm(set) { return workout.estimate1RM(set.weight_lb, set.reps); },

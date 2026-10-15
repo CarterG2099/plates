@@ -40,6 +40,11 @@ const kindsOf = (sessions) => walkOf(sessions).map((s) => s.kinds);
 
 const d = (n) => `2026-0${Math.floor(n / 28) + 1}-${String((n % 28) + 1).padStart(2, '0')}T12:00:00Z`;
 
+// "Today" for the stall checks: just after these sessions, so they are all
+// inside the six-month window that records and suggestions are measured over.
+const SOON = Date.parse('2026-03-01T12:00:00Z');
+const stallOf = (history, opts = {}) => stats.stallFor(history, { now: SOON, ...opts });
+
 // ---- what counts as a record ------------------------------------------------
 
 test('the first session is the baseline and sets no record', () => {
@@ -105,7 +110,7 @@ test('three sessions without a record is a stall, with one more rep as the next 
     [d(0), [[225, 8]]], [d(7), [[245, 8]]],
     [d(14), [[245, 8], [245, 6]]], [d(21), [[245, 8], [245, 6]]], [d(28), [[245, 8], [245, 5]]],
   ]), 'squat', 'squat', Infinity);
-  const stall = stats.stallFor(history);
+  const stall = stallOf(history);
   assert.equal(stall.since, 3);
   assert.deepEqual(stall.top, { weight: 245, reps: 8 });
   assert.deepEqual(stall.next, { weight: 245, reps: 9 });
@@ -115,7 +120,7 @@ test('two sessions without a record is not yet a stall', () => {
   const history = workout.historyOf(indexOf([
     [d(0), [[225, 8]]], [d(7), [[245, 8]]], [d(14), [[245, 8]]], [d(21), [[245, 8]]],
   ]), 'squat', 'squat', Infinity);
-  assert.equal(stats.stallFor(history), null);
+  assert.equal(stallOf(history), null);
 });
 
 test('the suggestion is a real record: one more rep than ever at that weight or heavier', () => {
@@ -123,44 +128,60 @@ test('the suggestion is a real record: one more rep than ever at that weight or 
   const history = workout.historyOf(indexOf([
     [d(0), [[245, 10]]], [d(7), [[245, 8]]], [d(14), [[245, 8]]], [d(21), [[245, 8]]],
   ]), 'squat', 'squat', Infinity);
-  assert.deepEqual(stats.stallFor(history).next, { weight: 245, reps: 11 });
+  assert.deepEqual(stallOf(history).next, { weight: 245, reps: 11 });
 });
 
 test('heavier sets count against a weight too: 275 x 10 means 245 needs 11', () => {
   const history = workout.historyOf(indexOf([
     [d(0), [[275, 10]]], [d(7), [[245, 8]]], [d(14), [[245, 8]]], [d(21), [[245, 8]]],
   ]), 'squat', 'squat', Infinity);
-  assert.deepEqual(stats.stallFor(history).next, { weight: 245, reps: 11 });
+  assert.deepEqual(stallOf(history).next, { weight: 245, reps: 11 });
 });
 
 test('past 12 reps the step is five pounds more, at whatever beats that weight', () => {
   const history = workout.historyOf(indexOf([
     [d(0), [[100, 12], [105, 9]]], [d(7), [[100, 12]]], [d(14), [[100, 12]]], [d(21), [[100, 12]]],
   ]), 'squat', 'squat', Infinity);
-  assert.deepEqual(stats.stallFor(history).next, { weight: 105, reps: 10 });
+  assert.deepEqual(stallOf(history).next, { weight: 105, reps: 10 });
 });
 
 test('up to 12 reps the step stays at the same weight', () => {
   const history = workout.historyOf(indexOf([
     [d(0), [[100, 11]]], [d(7), [[100, 11]]], [d(14), [[100, 11]]], [d(21), [[100, 11]]],
   ]), 'squat', 'squat', Infinity);
-  assert.deepEqual(stats.stallFor(history).next, { weight: 100, reps: 12 });
+  assert.deepEqual(stallOf(history).next, { weight: 100, reps: 12 });
 });
 
 test('heavy lifts stop at 8 reps and climb in weight until a record fits', () => {
   // 225 x 8 every time: 225 x 9 would be over the ceiling, and 230 has never
-  // been lifted, so 230 x 1 is already a record.
+  // been lifted — any rep there is a record, so it asks for the floor, 5.
   const plain = workout.historyOf(indexOf([
     [d(0), [[225, 8]]], [d(7), [[225, 8]]], [d(14), [[225, 8]]], [d(21), [[225, 8]]],
   ]), 'squat', 'squat', Infinity);
-  assert.deepEqual(stats.stallFor(plain, { ceiling: 8 }).next, { weight: 230, reps: 1 });
+  assert.deepEqual(stallOf(plain, { ceiling: 8, floor: 5 }).next, { weight: 230, reps: 5 });
 
   // With 235 x 6 and 240 x 3 in the past, the first weight with a record at
-  // 8 reps or fewer is 230 (beat 235 x 6 with 7).
+  // 8 reps or fewer is 230 (beat 235 x 6 with 7), already above the floor.
   const deeper = workout.historyOf(indexOf([
     [d(0), [[225, 8], [235, 6], [240, 3]]], [d(7), [[225, 8]]], [d(14), [[225, 8]]], [d(21), [[225, 8]]],
   ]), 'squat', 'squat', Infinity);
-  assert.deepEqual(stats.stallFor(deeper, { ceiling: 8 }).next, { weight: 230, reps: 7 });
+  assert.deepEqual(stallOf(deeper, { ceiling: 8, floor: 5 }).next, { weight: 230, reps: 7 });
+});
+
+test('a heavier suggestion never asks for a single, nor for more than the ceiling', () => {
+  const history = workout.historyOf(indexOf([
+    [d(0), [[225, 8]]], [d(7), [[225, 8]]], [d(14), [[225, 8]]], [d(21), [[225, 8]]],
+  ]), 'squat', 'squat', Infinity);
+  const { next } = stallOf(history, { ceiling: 8, floor: 5 });
+  assert.ok(next.reps >= 5 && next.reps <= 8, `${next.reps}`);
+  // A floor above the ceiling is clamped to it rather than looping forever.
+  assert.deepEqual(stallOf(history, { ceiling: 8, floor: 10 }).next, { weight: 230, reps: 8 });
+});
+
+test('heavy lifts floor at 5 reps, everything else at 8', () => {
+  assert.equal(stats.repFloor('Squat (Barbell)'), 5);
+  assert.equal(stats.repFloor('Romanian Deadlift'), 5);
+  assert.equal(stats.repFloor('Lat Pulldown'), 8);
 });
 
 test('squats, deadlifts and the barbell presses are heavy; everything else gets 12', () => {
@@ -174,7 +195,61 @@ test('squats, deadlifts and the barbell presses are heavy; everything else gets 
 });
 
 test('the stall map uses each lift\'s own ceiling', async () => {
-  assert.match(await source('../docs/js/stats.js'), /stallFor\(history, \{ ceiling: repCeiling\(nameOf\(history\)\) \}\)/);
+  assert.match(await source('../docs/js/stats.js'), /stallFor\(history, \{ ceiling: repCeiling\(name\), floor: repFloor\(name\), now \}\)/);
+});
+
+// ---- the six-month window -------------------------------------------------------
+
+const iso = (s) => `${s}T12:00:00Z`;
+const OCT = Date.parse(iso('2026-10-14'));
+
+test('a set from more than six months ago no longer sets the bar', () => {
+  // 275 x 10 last winter; 245 x 8 all autumn. Against all time 245 needed 11;
+  // against six months it needs 9.
+  const history = workout.historyOf(indexOf([
+    [iso('2026-01-10'), [[275, 10]]],
+    [iso('2026-09-01'), [[245, 8]]], [iso('2026-09-15'), [[245, 8]]],
+    [iso('2026-09-29'), [[245, 8]]], [iso('2026-10-06'), [[245, 8]]],
+  ]), 'squat', 'squat', Infinity);
+  assert.deepEqual(stats.stallFor(history, { now: OCT }).next, { weight: 245, reps: 9 });
+});
+
+test('beating the last six months is a record even below an older best', () => {
+  const index = indexOf([
+    [iso('2026-01-10'), [[275, 10]]],
+    [iso('2026-09-01'), [[245, 8]]],
+    [iso('2026-09-15'), [[245, 9]]],               // a record now, not against January
+  ]);
+  const { events } = stats.prTimeline(index);
+  assert.deepEqual(events.map((e) => e.at.slice(0, 10)), ['2026-09-15']);
+});
+
+test('the first session back after a long break is a baseline, not a record or a stall', () => {
+  const walk = stats.recordWalk(workout.historyOf(indexOf([
+    [iso('2026-01-10'), [[225, 5]]],
+    [iso('2026-09-01'), [[185, 5]]],               // 8 months later: nothing in the window
+  ]), 'squat', 'squat', Infinity));
+  assert.equal(walk[1].baseline, true);
+  assert.deepEqual(walk[1].kinds, []);
+});
+
+test('the stall count restarts at a baseline, as it would at a record', () => {
+  const history = workout.historyOf(indexOf([
+    [iso('2026-01-10'), [[225, 5]]], [iso('2026-01-17'), [[225, 5]]],
+    [iso('2026-01-24'), [[225, 5]]], [iso('2026-01-31'), [[225, 5]]],
+    [iso('2026-09-01'), [[185, 5]]],               // back after a break
+    [iso('2026-09-08'), [[185, 5]]], [iso('2026-09-15'), [[185, 5]]],
+  ]), 'squat', 'squat', Infinity);
+  assert.equal(stats.stallFor(history, { now: OCT }), null, 'two since the baseline is not yet three');
+});
+
+test('a lift not done in six months gets no nudge: today would be a baseline', () => {
+  const history = workout.historyOf(indexOf([
+    [iso('2026-01-03'), [[225, 5]]], [iso('2026-01-10'), [[225, 5]]],
+    [iso('2026-01-17'), [[225, 5]]], [iso('2026-01-24'), [[225, 5]]],
+  ]), 'squat', 'squat', Infinity);
+  assert.notEqual(stats.stallFor(history, { now: Date.parse(iso('2026-02-01')) }), null);
+  assert.equal(stats.stallFor(history, { now: OCT }), null);
 });
 
 // ---- breaking a stall, live ---------------------------------------------------
@@ -204,7 +279,7 @@ test('meeting the suggestion always breaks the stall it came from', () => {
   const history = workout.historyOf(indexOf([
     [d(0), [[275, 10]]], [d(7), [[245, 8]]], [d(14), [[245, 8]]], [d(21), [[245, 8]]],
   ]), 'squat', 'squat', Infinity);
-  const stall = stats.stallFor(history);
+  const stall = stallOf(history);
   const { weight, reps } = stall.next;
   assert.equal(stats.beatsFrontier(doneSet(weight, reps), stall.frontier), true);
   assert.equal(stats.beatsFrontier(doneSet(weight, reps - 1), stall.frontier), false);
@@ -214,7 +289,7 @@ test('a bodyweight stall only ever asks for another rep', () => {
   const history = workout.historyOf(indexOf([
     [d(0), [[null, 15]]], [d(7), [[null, 15]]], [d(14), [[null, 15]]], [d(21), [[null, 15]]],
   ]), 'squat', 'squat', Infinity);
-  assert.deepEqual(stats.stallFor(history).next, { weight: 0, reps: 16 });
+  assert.deepEqual(stallOf(history).next, { weight: 0, reps: 16 });
 });
 
 test('the stall map leaves out the session you are in the middle of', () => {
@@ -224,7 +299,7 @@ test('the stall map leaves out the session you are in the middle of', () => {
     [d(35), [[245, 8]]],                          // today, unfinished
   ];
   const index = indexOf(sessions, { open: 's5' });
-  assert.equal(stats.stallMap(index, 's5').get('squat').since, 3);
+  assert.equal(stats.stallMap(index, 's5', { now: SOON }).get('squat').since, 3);
 });
 
 // ---- strength for your size --------------------------------------------------
@@ -302,7 +377,7 @@ test('a ticked set that beats the stall swaps the nudge for the celebration, liv
   assert.match(app, /if \(!stall \|\| this\.stallBreaker\(group\)\) return null;/);
   // ...read off the rows as they are now, not as they were stored.
   assert.match(app, /const set = this\.currentSet\(s\);\s*if \(!stats\.beatsFrontier\(set, stall\.frontier\)\) continue;/);
-  assert.match(app, /return `Stall broken · \$\{what\} · new PR`;/);
+  assert.match(app, /return `Stall broken · \$\{what\} · best in 6 months`;/);
   const html = await source('../docs/index.html');
   assert.match(html, /<div class="stall-broken" x-show="brokenLine\(group\)" x-cloak\s*x-text="brokenLine\(group\)"><\/div>/);
 });
