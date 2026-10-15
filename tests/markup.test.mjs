@@ -108,3 +108,32 @@ test('set-cell value bindings never overwrite a focused input', async () => {
       `a set cell binding lacks the focused guard: ${binding}`);
   }
 });
+
+// ---- the loading barbell -----------------------------------------------------
+
+test('both boot screens show the loading barbell, three plates a side', () => {
+  const loaders = html.match(/<div class="loader" role="status" aria-label="Loading">[\s\S]*?<div class="loader-word">Plates<\/div>/g) ?? [];
+  assert.equal(loaders.length, 2, 'the static #boot screen and the Alpine boot template');
+  for (const loader of loaders) {
+    for (const side of ['left', 'right']) {
+      for (const plate of ['25', '20', '15']) {
+        assert.match(loader, new RegExp(`class="loader-plate is-${side} is-${plate}"`), `${side} ${plate}`);
+      }
+    }
+  }
+  const boot = html.slice(html.indexOf('<div id="boot">'), html.indexOf('<div class="app"'));
+  assert.match(boot, /class="loader"/, '#boot carries it, before any script runs');
+  assert.doesNotMatch(html, /class="spinner" role="status" aria-label="Loading"/, 'the old boot spinner is gone');
+});
+
+test('the Alpine boot screen picks the loop up where #boot left it', () => {
+  assert.match(html, /x-init="\$el\.style\.setProperty\('--loader-phase', `-\$\{Math\.round\(performance\.now\(\) % 2400\)\}ms`\)"/);
+});
+
+test('the loader is in base.css, stills under reduced motion, and runs on the page phase', async () => {
+  const css = await readFile(fileURLToPath(new URL('../docs/css/base.css', import.meta.url)), 'utf8');
+  assert.match(css, /@keyframes loader-rep/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.loader-lift, \.loader-floor, \.loader-plate \{ animation: none; \}/);
+  // The shorthand resets the delay, so each animated part sets the phase after it.
+  assert.equal((css.match(/animation-delay: var\(--loader-phase, 0s\);/g) ?? []).length, 3);
+});

@@ -231,13 +231,144 @@ button {
   z-index: 50;
 }
 
-.boot-mark {
+/* ---- the loading barbell -----------------------------------------------------
+ * A bar gets loaded — red, blue, yellow, the plate colours the whole app is
+ * painted in — does one rep, and is stripped again, on a 2.4s loop.
+ *
+ * Plain CSS on a handful of spans, here in base.css, because the static #boot
+ * screen shows it before any script has run. The same markup reappears in the
+ * Alpine boot template; both read --loader-phase so the second picks up the
+ * loop where the first left it rather than restarting mid-rep at the handoff. */
+.loader {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+}
+
+.loader-rig {
+  position: relative;
+  width: 200px;
+  height: 72px;
+  --t: 2.4s;
+}
+
+/* The bar and every plate on it move together for the rep. */
+.loader-lift {
+  position: absolute;
+  inset: 0;
+  animation: loader-rep var(--t) ease-in-out infinite;
+  animation-delay: var(--loader-phase, 0s);
+}
+
+.loader-bar {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 33px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-text-muted);
+}
+
+/* The sleeves: a shade lighter, where the plates sit. */
+.loader-bar::before,
+.loader-bar::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  width: 52px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--color-plate-white);
+}
+.loader-bar::before { left: 0; }
+.loader-bar::after { right: 0; }
+
+.loader-plate {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  border-radius: 3px;
+  translate: 0 -50%;
+  opacity: 0;
+  animation: var(--t) cubic-bezier(.3, 1.4, .5, 1) infinite;
+  animation-delay: var(--loader-phase, 0s);
+}
+
+/* Heaviest innermost, as loaded: red 25, blue 20, yellow 15. */
+.loader-plate.is-25 { height: 64px; background: var(--color-fat); }
+.loader-plate.is-20 { height: 56px; background: var(--color-protein); }
+.loader-plate.is-15 { height: 46px; background: var(--color-carbs); }
+
+.loader-plate.is-left  { --from: -40px; }
+.loader-plate.is-right { --from: 40px; }
+
+.loader-plate.is-left.is-25  { left: 44px; animation-name: loader-on-1; }
+.loader-plate.is-left.is-20  { left: 32px; animation-name: loader-on-2; }
+.loader-plate.is-left.is-15  { left: 20px; animation-name: loader-on-3; }
+.loader-plate.is-right.is-25 { right: 44px; animation-name: loader-on-1; }
+.loader-plate.is-right.is-20 { right: 32px; animation-name: loader-on-2; }
+.loader-plate.is-right.is-15 { right: 20px; animation-name: loader-on-3; }
+
+/* The floor: a shadow that tightens as the bar leaves it. */
+.loader-floor {
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  width: 150px;
+  height: 6px;
+  margin-left: -75px;
+  border-radius: 50%;
+  background: var(--color-border);
+  opacity: .8;
+  animation: loader-shadow var(--t) ease-in-out infinite;
+  animation-delay: var(--loader-phase, 0s);
+}
+
+/* On one at a time from the outside, held for the rep, off together. */
+@keyframes loader-on-1 {
+  0%, 6%    { opacity: 0; transform: translateX(var(--from)); }
+  14%, 82%  { opacity: 1; transform: none; }
+  92%, 100% { opacity: 0; transform: translateX(var(--from)); }
+}
+@keyframes loader-on-2 {
+  0%, 14%   { opacity: 0; transform: translateX(var(--from)); }
+  22%, 82%  { opacity: 1; transform: none; }
+  92%, 100% { opacity: 0; transform: translateX(var(--from)); }
+}
+@keyframes loader-on-3 {
+  0%, 22%   { opacity: 0; transform: translateX(var(--from)); }
+  30%, 82%  { opacity: 1; transform: none; }
+  92%, 100% { opacity: 0; transform: translateX(var(--from)); }
+}
+
+/* One rep, once fully loaded: a slight dip, drive up, settle. */
+@keyframes loader-rep {
+  0%, 36%   { transform: none; }
+  42%       { transform: translateY(3px); }
+  54%       { transform: translateY(-18px); }
+  66%, 100% { transform: none; }
+}
+
+@keyframes loader-shadow {
+  0%, 36%   { transform: scaleX(1); opacity: .8; }
+  54%       { transform: scaleX(.7); opacity: .4; }
+  66%, 100% { transform: scaleX(1); opacity: .8; }
+}
+
+.loader-word {
   font-family: var(--font-mono);
   font-size: var(--text-2xl);
   font-weight: 700;
   letter-spacing: -.03em;
   color: var(--color-text);
   opacity: .9;
+}
+
+/* Still: a loaded bar, at rest. */
+@media (prefers-reduced-motion: reduce) {
+  .loader-lift, .loader-floor, .loader-plate { animation: none; }
+  .loader-plate { opacity: 1; }
 }
 
 /* Fade rather than cut, so a fast boot doesn't flash. */

@@ -53,7 +53,23 @@
 <!-- Painted by the HTML parser, before Alpine exists. Without this the page is
      blank until a 100 KB framework has downloaded, parsed and walked the DOM. -->
 <div id="boot">
-  <div class="boot-mark">Plates</div>
+  <!-- A bar being loaded, before any script runs: pure CSS, see .loader in
+       base.css. Repeated in the Alpine boot template below. -->
+  <div class="loader" role="status" aria-label="Loading">
+    <div class="loader-rig" aria-hidden="true">
+      <span class="loader-floor"></span>
+      <span class="loader-lift">
+        <span class="loader-bar"></span>
+        <span class="loader-plate is-left is-25"></span>
+        <span class="loader-plate is-left is-20"></span>
+        <span class="loader-plate is-left is-15"></span>
+        <span class="loader-plate is-right is-25"></span>
+        <span class="loader-plate is-right is-20"></span>
+        <span class="loader-plate is-right is-15"></span>
+      </span>
+    </div>
+    <div class="loader-word">Plates</div>
+  </div>
 </div>
 
 <!-- Bare x-data roots the Alpine component tree. Without it Alpine never walks
@@ -66,8 +82,25 @@
        arrived — a 0.17 layout shift to save an interval nobody can perceive.
        The local read is ~4ms of IndexedDB, so this waits on almost nothing. -->
   <template x-if="!$store.auth.ready || ($store.auth.isMember && !$store.data.ready)">
-    <div class="screen-centered">
-      <div class="spinner" role="status" aria-label="Loading"></div>
+    <!-- The same bar as #boot. Started at the page clock's place in the loop,
+         so the static screen fading off this one doesn't restart the rep. -->
+    <div class="screen-centered"
+         x-init="$el.style.setProperty('--loader-phase', `-${Math.round(performance.now() % 2400)}ms`)">
+      <div class="loader" role="status" aria-label="Loading">
+        <div class="loader-rig" aria-hidden="true">
+          <span class="loader-floor"></span>
+          <span class="loader-lift">
+            <span class="loader-bar"></span>
+            <span class="loader-plate is-left is-25"></span>
+            <span class="loader-plate is-left is-20"></span>
+            <span class="loader-plate is-left is-15"></span>
+            <span class="loader-plate is-right is-25"></span>
+            <span class="loader-plate is-right is-20"></span>
+            <span class="loader-plate is-right is-15"></span>
+          </span>
+        </div>
+        <div class="loader-word">Plates</div>
+      </div>
     </div>
   </template>
 
