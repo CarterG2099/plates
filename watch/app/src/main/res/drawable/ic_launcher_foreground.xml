@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A barbell: two plates on a bar, inside the adaptive icon's safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#E8EAED" android:pathData="M30,52h48v4h-48z" />
+    <path android:fillColor="#E8EAED" android:pathData="M36,38h6v32h-6z" />
+    <path android:fillColor="#E8EAED" android:pathData="M66,38h6v32h-6z" />
+    <path android:fillColor="#E8EAED" android:pathData="M43,43h4v22h-4z" />
+    <path android:fillColor="#E8EAED" android:pathData="M61,43h4v22h-4z" />
+</vector>
