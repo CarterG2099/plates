@@ -613,6 +613,9 @@ const raw = {
   stalls: new Map(),   // exercise key → stats.stallFor(), see refreshTraining
 };
 
+/** One map per refreshTraining still reading; see there. */
+const patchesInFlight = new Set();
+
 /**
  * Read raw data while still re-rendering when it changes.
  *
@@ -706,14 +709,27 @@ Alpine.store('data', {
    * With two years imported, session_sets alone is thousands of rows.
    */
   async refreshTraining() {
-    const [exercises, routines, routineExercises, sessions, sessionSets, exerciseNotes] = await Promise.all([
-      local.all('exercises'),
-      local.all('routines'),
-      local.all('routine_exercises'),
-      local.all('sessions'),
-      local.all('session_sets'),
-      local.all('exercise_notes'),
-    ]);
+    // Sets patched while the reads below are in flight. A read can begin before
+    // a tick's write lands and come back without it, and assigning that over
+    // memory took the tick off the screen — a sync's refresh, triggered by the
+    // other person logging anything, was enough. Those patches are newer than
+    // anything the read can hold, so they go back on top.
+    const patched = new Map();
+    patchesInFlight.add(patched);
+    let exercises, routines, routineExercises, sessions, sessionSets, exerciseNotes;
+    try {
+      [exercises, routines, routineExercises, sessions, sessionSets, exerciseNotes] = await Promise.all([
+        local.all('exercises'),
+        local.all('routines'),
+        local.all('routine_exercises'),
+        local.all('sessions'),
+        local.all('session_sets'),
+        local.all('exercise_notes'),
+      ]);
+    } finally {
+      patchesInFlight.delete(patched);
+    }
+    if (patched.size) sessionSets = sessionSets.map((s) => patched.get(s.id) ?? s);
 
     Object.assign(raw, { exercises, routines, routineExercises, sessions, sessionSets, exerciseNotes });
 
@@ -743,6 +759,8 @@ Alpine.store('data', {
    * those go through the full refresh.
    */
   patchSet(row) {
+    for (const patched of patchesInFlight) patched.set(row.id, row);
+
     const splice = (list) => {
       const i = list?.findIndex((s) => s.id === row.id) ?? -1;
       if (i !== -1) list[i] = row;
@@ -3238,8 +3256,10 @@ Alpine.data('trainPage', () => ({
    * prefilled text you would have to clear first.
    */
   toggleDone(set, fallback = null) {
-    const done = Boolean(set.completed_at);
+    // From the current row, the same one the green is drawn from: the row's own
+    // copy can be a revision behind, and a tap on a green set must untick it.
     const current = this.currentSet(set);
+    const done = Boolean(current.completed_at);
     const next = { completed_at: done ? null : new Date().toISOString() };
 
     // Adopted in the same object as the checkmark, so the numbers filling in and
