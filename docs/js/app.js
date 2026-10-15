@@ -400,6 +400,35 @@ Alpine.magic('wheel', () => (el, { base, value, set }) => {
  * it already knew. The cache paints immediately; the real check runs behind it
  * and corrects if access was revoked.
  */
+// A finished estimate waiting to be reviewed — see the ui store. Per device,
+// and per account so a shared phone does not hand one person another's lunch.
+const READY_ESTIMATE_KEY = 'plates:ready-estimate';
+const READY_ESTIMATE_MAX_MS = 24 * 3600_000;
+
+function readReadyEstimate() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(READY_ESTIMATE_KEY) || 'null');
+    if (!saved?.result?.items?.length) return null;
+    if (Date.now() - Date.parse(saved.at) > READY_ESTIMATE_MAX_MS) return null;
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+/** A banner-sized name for what is being estimated: one line, ~60 characters. */
+function shortLabel(text) {
+  const s = String(text ?? '').replace(/\s+/g, ' ').trim();
+  return s.length > 60 ? `${s.slice(0, 57).trimEnd()}…` : s;
+}
+
+function writeReadyEstimate(entry) {
+  try {
+    if (entry) localStorage.setItem(READY_ESTIMATE_KEY, JSON.stringify(entry));
+    else localStorage.removeItem(READY_ESTIMATE_KEY);
+  } catch { /* private mode: it still waits in memory for this session */ }
+}
+
 const MEMBERSHIP_KEY = 'plates:membership';
 
 const readMembership = () => {
@@ -796,6 +825,37 @@ Alpine.store('ui', {
   finished: null,
   celebrate(payload) { this.finished = payload; },
   dismissFinished() { this.finished = null; },
+
+  // ---- an AI estimate finishing in the background ---------------------------
+  //
+  // Closing the photo or describe sheet mid-estimate used to throw the answer
+  // away when it arrived. The request was never cancelled — only ignored — so
+  // now it is kept: `estimatingAway` says one is still running, and the result
+  // waits in `readyEstimate` until reviewed, in localStorage so closing the app
+  // does not lose it. A day old and it is dropped as stale.
+
+  estimatingAway: '',     // what is being estimated, while its sheet is closed
+  readyEstimate: readReadyEstimate(),   // { result, target, label, at } | null
+  estimateRequested: false,
+
+  holdEstimate(entry) {
+    this.readyEstimate = entry;
+    writeReadyEstimate(entry);
+  },
+  dropReadyEstimate() {
+    this.readyEstimate = null;
+    writeReadyEstimate(null);
+  },
+  /** The waiting estimate, if it is this account's. */
+  get myReadyEstimate() {
+    const r = this.readyEstimate;
+    return r && r.owner === Alpine.store('auth').email ? r : null;
+  },
+  /** Open the log panel, which opens the waiting estimate where it belongs. */
+  reviewEstimate() {
+    this.logOpen = true;
+    this.estimateRequested = true;
+  },
 
   // ---- settings ------------------------------------------------------------
   //
@@ -1409,6 +1469,19 @@ Alpine.data('logPage', () => ({
       this.openScanner();
     });
 
+    // "Review" on a finished background estimate: open it where it would have
+    // opened had the sheet stayed up — the estimate sheet, or the meal builder.
+    this.$watch(() => Alpine.store('ui').estimateRequested, (wanted) => {
+      if (!wanted) return;
+      const ui = Alpine.store('ui');
+      ui.estimateRequested = false;
+      const ready = ui.myReadyEstimate;
+      if (!ready) return;
+      ui.dropReadyEstimate();
+      if (ready.target === 'meal') this.mealFromEstimate(ready.result);
+      else this.estimate = ready.result;
+    });
+
     // One search box. Local results are already reactive off `term`; this runs
     // the network half behind them.
     this.$watch('term', () => this.queueSearch('online', this.term));
@@ -1801,7 +1874,10 @@ Alpine.data('logPage', () => ({
   },
 
   closeMealPhoto() {
-    if (this.mealPhoto) URL.revokeObjectURL(this.mealPhoto.url);
+    if (this.mealPhoto) {
+      URL.revokeObjectURL(this.mealPhoto.url);
+      this.noteRunningAway(this.mealPhoto.note || 'Your photo');
+    }
     this.mealPhoto = null;
   },
 
@@ -1813,16 +1889,39 @@ Alpine.data('logPage', () => ({
     pending.error = '';
     try {
       const result = await photo.estimateMeal(pending.file, pending.note);
-      // Closed while reading: that was a cancel, and nothing should open.
-      if (this.mealPhoto !== pending) return;
+      // Closed while reading: kept for later rather than thrown away.
+      if (this.mealPhoto !== pending) {
+        this.keepForLater(result, pending.target, pending.note || 'Your photo');
+        return;
+      }
       this.closeMealPhoto();
       if (pending.target === 'meal') this.mealFromEstimate(result);
       else this.estimate = result;
     } catch (e) {
       // The sheet stays up with the photo and the note, so a retry is one tap.
-      pending.error = e.message ?? String(e);
+      // Gone already, it is said out loud instead.
+      if (this.mealPhoto !== pending) Alpine.store('ui').flash(`Estimate failed · ${e.message ?? e}`);
+      else pending.error = e.message ?? String(e);
     } finally {
       this.photoBusy = '';
+      Alpine.store('ui').estimatingAway = '';
+    }
+  },
+
+  /**
+   * A result whose sheet was closed while it ran: held, announced, and opened
+   * from the Today banner or the log panel when you get to it.
+   */
+  keepForLater(result, target, label) {
+    const ui = Alpine.store('ui');
+    ui.holdEstimate({ result, target, label: shortLabel(label), at: new Date().toISOString(), owner: this.email });
+    ui.flash('Estimate ready');
+  },
+
+  /** Closing mid-estimate leaves it running, and says so where you land. */
+  noteRunningAway(label) {
+    if (this.photoBusy === 'meal' || this.photoBusy === 'describe') {
+      Alpine.store('ui').estimatingAway = shortLabel(label);
     }
   },
 
@@ -1835,7 +1934,10 @@ Alpine.data('logPage', () => ({
     this.describing = { text: typeof seed === 'string' ? seed : '', error: '' };
   },
 
-  closeDescribe() { this.describing = null; },
+  closeDescribe() {
+    if (this.describing) this.noteRunningAway(this.describing.text);
+    this.describing = null;
+  },
 
   async readDescription() {
     const pending = this.describing;
@@ -1845,15 +1947,21 @@ Alpine.data('logPage', () => ({
     pending.error = '';
     try {
       const result = await photo.describeMeal(pending.text);
-      // Closed while estimating: that was a cancel, and nothing should open.
-      if (this.describing !== pending) return;
+      // Closed while estimating: kept for later rather than thrown away.
+      if (this.describing !== pending) {
+        this.keepForLater(result, 'estimate', pending.text);
+        return;
+      }
       this.closeDescribe();
       this.estimate = result;
     } catch (e) {
-      // The sheet stays up with the text, so a retry is one tap.
-      pending.error = e.message ?? String(e);
+      // The sheet stays up with the text, so a retry is one tap. Gone already,
+      // it is said out loud instead.
+      if (this.describing !== pending) Alpine.store('ui').flash(`Estimate failed · ${e.message ?? e}`);
+      else pending.error = e.message ?? String(e);
     } finally {
       this.photoBusy = '';
+      Alpine.store('ui').estimatingAway = '';
     }
   },
 

@@ -140,6 +140,18 @@
       <!-- Today ------------------------------------------------------------ -->
       <main class="app-main" x-data="todayPage" x-show="$store.ui.view === 'today'">
 
+        <!-- An AI estimate whose sheet was closed: still running, or done and
+             waiting. Review opens it where it would have opened. -->
+        <div class="estimate-banner" x-show="$store.ui.estimatingAway" x-cloak role="status">
+          <span class="spinner" style="width:14px;height:14px" aria-hidden="true"></span>
+          <span>Estimating <b x-text="$store.ui.estimatingAway"></b>… you can keep using the app.</span>
+        </div>
+        <div class="estimate-banner is-ready" x-show="!$store.ui.estimatingAway && $store.ui.myReadyEstimate" x-cloak role="status">
+          <span>Estimate ready · <b x-text="$store.ui.myReadyEstimate && $store.ui.myReadyEstimate.label"></b></span>
+          <button class="btn btn-primary" @click="$store.ui.reviewEstimate()">Review</button>
+          <button class="tap" @click="$store.ui.dropReadyEstimate()" aria-label="Discard the estimate">×</button>
+        </div>
+
         <div class="datenav">
           <button class="tap" @click="$store.ui.shiftDay(-1)" aria-label="Previous day">‹</button>
           <button class="datenav-label" @click="$store.ui.goToday()">
