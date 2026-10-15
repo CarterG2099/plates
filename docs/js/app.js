@@ -3161,7 +3161,7 @@ Alpine.data('trainPage', () => ({
       const earlier = group.sets.some((s) => s.id !== set.id
         && stats.beatsFrontier(this.currentSet(s), stall.frontier));
       if (!earlier) {
-        const what = Number(set.weight_lb) ? `${set.weight_lb} × ${set.reps}` : stats.count(Number(set.reps), 'rep');
+        const what = this.setText(set.weight_lb, set.reps, stall.addedWeight);
         Alpine.store('ui').flash(`Stall broken · ${group.name} · ${what}`);
         if (navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 160]);
         return;
@@ -3274,8 +3274,17 @@ Alpine.data('trainPage', () => ({
     const stall = this.data.stalls.get(group.exerciseId ?? group.name);
     if (!stall || this.stallBreaker(group)) return null;
     const { weight, reps } = stall.next;
-    const step = weight ? `${weight} × ${reps}` : stats.count(reps, 'rep');
-    return `No PR in ${stats.count(stall.since, 'session')} · try ${step}`;
+    return `No PR in ${stats.count(stall.since, 'session')} · try ${this.setText(weight, reps, stall.addedWeight)}`;
+  },
+
+  /**
+   * "245 × 8", "12 reps", or "+5 lb × 8" for weight on top of body weight —
+   * a pull-up's 5 is not a 5 lb pull-up.
+   */
+  setText(weight, reps, addedWeight = false) {
+    const w = Number(weight) || 0;
+    if (!w) return stats.count(Number(reps), 'rep');
+    return addedWeight ? `+${w} lb × ${reps}` : `${w} × ${reps}`;
   },
 
   /**
@@ -3299,7 +3308,8 @@ Alpine.data('trainPage', () => ({
   brokenLine(group) {
     const set = this.stallBreaker(group);
     if (!set) return null;
-    const what = Number(set.weight_lb) ? `${set.weight_lb} × ${set.reps}` : stats.count(Number(set.reps), 'rep');
+    const stall = this.data.stalls.get(group.exerciseId ?? group.name);
+    const what = this.setText(set.weight_lb, set.reps, stall?.addedWeight);
     return `Stall broken · ${what} · best in 6 months`;
   },
 

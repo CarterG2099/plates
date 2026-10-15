@@ -1106,8 +1106,9 @@ export function beatsFrontier(set, frontier) {
  * than you have ever done at that weight or heavier. If that is more reps than
  * the lift's ceiling (repCeiling), the weight goes up five pounds at a time
  * until a record fits under it — which, past your heaviest ever set at that
- * many reps, can be a heavy single or double. Bodyweight lifts only ever get
- * the extra rep.
+ * many reps, can be a heavy single or double. Bodyweight lifts cap the same
+ * way: past the ceiling the step is added weight — +5 lb on a belt or between
+ * the feet — and `addedWeight` says the weight is on top of body weight.
  *
  * `frontier` goes out with it so the session screen can tell, set by set, when
  * the stall is broken.
@@ -1133,16 +1134,14 @@ export function stallFor(history, { ceiling = REP_CEILING.default, floor = REP_F
   const { weight, reps } = walk[walk.length - 1].top;
 
   let next = { weight, reps: repsToBeat(frontier, weight) + 1 };
-  if (weight) {
-    // Above the heaviest recent set the floor is enough for a record, and the
-    // floor is under the ceiling, so this always ends.
-    while (next.reps > ceiling) {
-      const up = next.weight + 5;
-      next = { weight: up, reps: Math.max(repsToBeat(frontier, up) + 1, Math.min(floor, ceiling)) };
-    }
+  // Above the heaviest recent set the floor is enough for a record, and the
+  // floor is under the ceiling, so this always ends.
+  while (next.reps > ceiling) {
+    const up = next.weight + 5;
+    next = { weight: up, reps: Math.max(repsToBeat(frontier, up) + 1, Math.min(floor, ceiling)) };
   }
 
-  return { since, top: { weight, reps }, next, frontier };
+  return { since, top: { weight, reps }, next, frontier, addedWeight: !weight };
 }
 
 /**

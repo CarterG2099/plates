@@ -285,11 +285,39 @@ test('meeting the suggestion always breaks the stall it came from', () => {
   assert.equal(stats.beatsFrontier(doneSet(weight, reps - 1), stall.frontier), false);
 });
 
-test('a bodyweight stall only ever asks for another rep', () => {
+test('a bodyweight stall asks for another rep up to the ceiling', () => {
   const history = workout.historyOf(indexOf([
-    [d(0), [[null, 15]]], [d(7), [[null, 15]]], [d(14), [[null, 15]]], [d(21), [[null, 15]]],
+    [d(0), [[null, 10]]], [d(7), [[null, 10]]], [d(14), [[null, 10]]], [d(21), [[null, 10]]],
   ]), 'squat', 'squat', Infinity);
-  assert.deepEqual(stallOf(history).next, { weight: 0, reps: 16 });
+  const stall = stallOf(history);
+  assert.deepEqual(stall.next, { weight: 0, reps: 11 });
+  assert.equal(stall.addedWeight, true);
+});
+
+test('past 12 a bodyweight lift adds weight instead: +5 lb at the floor', () => {
+  // 12 pull-ups done; 13 is over the ceiling, so the step is a weighted set,
+  // which is a record at any reps — asked at the floor, 8.
+  const history = workout.historyOf(indexOf([
+    [d(0), [[null, 12]]], [d(7), [[null, 12]]], [d(14), [[null, 12]]], [d(21), [[null, 12]]],
+  ]), 'squat', 'squat', Infinity);
+  const stall = stallOf(history);
+  assert.deepEqual(stall.next, { weight: 5, reps: 8 });
+  assert.equal(stall.addedWeight, true);
+  // And that weighted set breaks the stall.
+  assert.equal(stats.beatsFrontier(doneSet(5, 8), stall.frontier), true);
+});
+
+test('a loaded lift is not marked as added weight', () => {
+  const history = workout.historyOf(indexOf([
+    [d(0), [[225, 8]]], [d(7), [[225, 8]]], [d(14), [[225, 8]]], [d(21), [[225, 8]]],
+  ]), 'squat', 'squat', Infinity);
+  assert.equal(stallOf(history).addedWeight, false);
+});
+
+test('the nudge says +5 lb for weight on top of body weight', async () => {
+  const app = await source('../docs/js/app.js');
+  assert.match(app, /return addedWeight \? `\+\$\{w\} lb × \$\{reps\}` : `\$\{w\} × \$\{reps\}`;/);
+  assert.match(app, /if \(!w\) return stats\.count\(Number\(reps\), 'rep'\);/);
 });
 
 test('the stall map leaves out the session you are in the middle of', () => {
@@ -366,7 +394,7 @@ test('agoLabel gets coarser as it gets older, and pluralises', () => {
 test('the workout card shows the stall nudge, built once per refresh without the running session', async () => {
   const app = await source('../docs/js/app.js');
   assert.match(app, /raw\.stalls = stats\.stallMap\(raw\.index, running\?\.id \?\? null\)/);
-  assert.match(app, /return `No PR in \$\{stats\.count\(stall\.since, 'session'\)\} · try \$\{step\}`/);
+  assert.match(app, /return `No PR in \$\{stats\.count\(stall\.since, 'session'\)\} · try \$\{this\.setText\(weight, reps, stall\.addedWeight\)\}`/);
   const html = await source('../docs/index.html');
   assert.match(html, /<div class="stall" x-show="stallLine\(group\)" x-cloak\s*x-text="stallLine\(group\)"><\/div>/);
 });
