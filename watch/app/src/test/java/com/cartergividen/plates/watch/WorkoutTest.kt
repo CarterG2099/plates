@@ -126,6 +126,54 @@ class WorkoutTest {
         assertEquals("reps still fall back", 6, current.reps)
     }
 
+    @Test fun `with no history, a set starts from the one just ticked this session`() {
+        var state = State()
+        state = state.merge(com.cartergividen.plates.watch.data.Table.SESSIONS,
+            listOf(session("now", started = "2026-10-14T10:00:00Z", ended = null))).first
+        state = state.merge(com.cartergividen.plates.watch.data.Table.SETS, listOf(
+            set("p1", "now", exercise = "lat", name = "Lat Pulldown", index = 0, weight = 100.0, reps = 10,
+                done = "2026-10-14T10:05:00Z"),
+            set("p2", "now", exercise = "lat", name = "Lat Pulldown", index = 1),
+        )).first
+
+        val current = workoutScreen(state, ME)!!.current!!
+        assertEquals("p2", current.set.id)
+        assertEquals(100.0, current.weightLb)
+        assertEquals(10, current.reps)
+        assertNull("this session is not 'last time'", current.lastTime)
+    }
+
+    @Test fun `the very first set of something new is blank`() {
+        var state = State()
+        state = state.merge(com.cartergividen.plates.watch.data.Table.SESSIONS,
+            listOf(session("now", started = "2026-10-14T10:00:00Z", ended = null))).first
+        state = state.merge(com.cartergividen.plates.watch.data.Table.SETS,
+            listOf(set("p1", "now", exercise = "lat", name = "Lat Pulldown"))).first
+
+        val current = workoutScreen(state, ME)!!.current!!
+        assertNull(current.weightLb)
+        assertNull(current.reps)
+    }
+
+    @Test fun `a set cannot be ticked without reps, but can without weight`() {
+        assertFalse(Workout.canTick(null))
+        assertFalse(Workout.canTick(0))
+        assertTrue("bodyweight: reps and no load", Workout.canTick(12))
+    }
+
+    @Test fun `the wheels cover the plates and land on the value shown`() {
+        assertEquals(0.0, Workout.WEIGHT_OPTIONS.first(), 0.0)
+        assertTrue("reaches a heavy deadlift", Workout.WEIGHT_OPTIONS.last() >= 500.0)
+        assertEquals(135.0, Workout.WEIGHT_OPTIONS[Workout.weightIndex(135.0)], 0.0)
+        assertEquals("blank starts at the empty bar", 45.0, Workout.WEIGHT_OPTIONS[Workout.weightIndex(null)], 0.0)
+        assertEquals("an off-grid weight snaps to the nearest notch", 135.0,
+            Workout.WEIGHT_OPTIONS[Workout.weightIndex(134.0)], 0.0)
+        assertEquals(0, Workout.weightIndex(-10.0))
+        assertEquals(Workout.WEIGHT_OPTIONS.lastIndex, Workout.weightIndex(9_999.0))
+        assertEquals(10, Workout.REPS_OPTIONS[Workout.repsIndex(10)])
+        assertEquals("blank starts at eight", 8, Workout.REPS_OPTIONS[Workout.repsIndex(null)])
+    }
+
     @Test fun `cardio is skipped and counted for the phone`() {
         val state = history().let { s ->
             s.copy(

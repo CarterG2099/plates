@@ -38,12 +38,13 @@ fun workoutScreen(state: State, email: String): WorkoutScreen? {
         val same = sets.filter { it.exerciseKey == set.exerciseKey }
         val position = Workout.positionInExercise(sets, set)
         val placeholder = Workout.placeholder(Workout.previous(state, email, set), position)
+        val fallback = placeholder ?: Workout.earlierThisSession(sets, set)
         SetScreen(
             set = set,
             number = position + 1,
             ofExercise = same.size,
-            weightLb = set.weightLb ?: placeholder?.weightLb,
-            reps = set.reps ?: placeholder?.reps,
+            weightLb = set.weightLb ?: fallback?.weightLb,
+            reps = set.reps ?: fallback?.reps,
             lastTime = placeholder?.let { "${Workout.weightLabel(it.weightLb)} × ${it.reps ?: "—"}" },
         )
     }

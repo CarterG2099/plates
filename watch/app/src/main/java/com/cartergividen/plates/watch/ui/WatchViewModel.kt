@@ -175,10 +175,21 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
         _draft.value = d.copy(reps = Workout.stepReps(d.reps, direction))
     }
 
+    fun setWeight(weightLb: Double) {
+        val d = dialled() ?: return
+        _draft.value = d.copy(weightLb = weightLb)
+    }
+
+    fun setReps(reps: Int) {
+        val d = dialled() ?: return
+        _draft.value = d.copy(reps = reps)
+    }
+
     fun tick() {
         val me = email ?: return
         val current = workoutScreen(state, me)?.current ?: return
         val d = dialled() ?: return
+        if (!Workout.canTick(d.reps)) return
         update { it.save(Workout.complete(current.set, d.weightLb, d.reps, now())) }
         _draft.value = null
         syncNow()

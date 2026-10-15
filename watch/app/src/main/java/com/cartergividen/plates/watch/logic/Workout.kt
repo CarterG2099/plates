@@ -152,6 +152,32 @@ object Workout {
         return session.copy(endedAt = end, updatedAt = now)
     }
 
+    /**
+     * No history for this exercise: the set of it you just ticked, this
+     * session. So only the very first set of something new starts blank —
+     * after that, set 2 opens where set 1 left off.
+     */
+    fun earlierThisSession(sets: List<SetRow>, set: SetRow): SetRow? =
+        sets.filter { it.exerciseKey == set.exerciseKey && it.completedAt != null && it.setIndex < set.setIndex }
+            .maxByOrNull { it.setIndex }
+
+    /** A set needs reps to be a set. Weight may stay empty: bodyweight work has none. */
+    fun canTick(reps: Int?): Boolean = reps != null && reps > 0
+
+    // The wheels behind a tap on the number. Five-pound notches, not 2.5: on the
+    // emulator a bezel click moved one notch, and halving the notches halves the
+    // spinning to a heavy set. A blank value opens on the empty bar and a typical
+    // set, which is where most first sets of something new begin.
+    val WEIGHT_OPTIONS: List<Double> = (0..120).map { it * 5.0 }
+    val REPS_OPTIONS: List<Int> = (1..50).toList()
+    private const val BLANK_WEIGHT = 45.0
+    private const val BLANK_REPS = 8
+
+    fun weightIndex(weight: Double?): Int =
+        Math.round((weight ?: BLANK_WEIGHT) / 5.0).toInt().coerceIn(0, WEIGHT_OPTIONS.lastIndex)
+
+    fun repsIndex(reps: Int?): Int = ((reps ?: BLANK_REPS) - 1).coerceIn(0, REPS_OPTIONS.lastIndex)
+
     fun stepWeight(weight: Double?, direction: Int): Double =
         ((weight ?: 0.0) + direction * WEIGHT_STEP).coerceAtLeast(0.0)
 

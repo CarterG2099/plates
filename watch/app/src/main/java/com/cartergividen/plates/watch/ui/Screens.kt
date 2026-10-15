@@ -1,7 +1,10 @@
 package com.cartergividen.plates.watch.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,7 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
+import androidx.wear.compose.foundation.lazy.ScalingLazyListState
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.material.Picker
+import androidx.wear.compose.material.rememberPickerState
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Chip
@@ -43,8 +49,10 @@ import com.cartergividen.plates.watch.logic.Workout
 import kotlinx.coroutines.delay
 
 @Composable
-private fun Page(content: ScalingLazyListScope.() -> Unit) {
-    val list = rememberScalingLazyListState()
+private fun Page(
+    list: ScalingLazyListState = rememberScalingLazyListState(),
+    content: ScalingLazyListScope.() -> Unit,
+) {
     Scaffold(
         timeText = { TimeText() },
         positionIndicator = { PositionIndicator(scalingLazyListState = list) },
@@ -74,16 +82,15 @@ fun PairScreen(vm: WatchViewModel) {
     val code by vm.code.collectAsState()
     val message by vm.pairing.collectAsState()
 
-    Page {
-        item { Text("Pair with Plates", style = MaterialTheme.typography.title3) }
-        item { Caption("On your phone: Settings → Pair a watch → Get code") }
+    // The code and the keys first, opening on the top row of keys: the
+    // instructions are read once, the keypad is used eight times.
+    Page(list = rememberScalingLazyListState(initialCenterItemIndex = 1)) {
         item {
             Text(
                 code.shown, fontSize = 22.sp, fontWeight = FontWeight.Medium,
                 letterSpacing = 2.sp, modifier = Modifier.padding(vertical = 4.dp),
             )
         }
-        message?.let { item { Caption(it) } }
         for (row in listOf(listOf(1, 2, 3), listOf(4, 5, 6), listOf(7, 8, 9))) {
             item { KeyRow(row.map { d -> d.toString() to { vm.press(d) } }) }
         }
@@ -96,6 +103,8 @@ fun PairScreen(vm: WatchViewModel) {
                 ),
             )
         }
+        message?.let { item { Caption(it) } }
+        item { Caption("Get the code on your phone: Settings → Pair a watch") }
     }
 }
 
@@ -163,12 +172,29 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
     val status by vm.status.collectAsState()
     val haptics = LocalHapticFeedback.current
     var confirmFinish by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Field?>(null) }
+    val list = rememberScalingLazyListState(initialCenterItemIndex = 0)
 
     val current = screen.current
     val weight = if (current != null && draft?.setId == current.set.id) draft!!.weightLb else current?.weightLb
     val reps = if (current != null && draft?.setId == current.set.id) draft!!.reps else current?.reps
 
-    Page {
+    // A new set on screen — ticked, undone, or added — starts at the top, where
+    // its name and numbers are. The tick sits below them, so without this every
+    // set after the first opened scrolled halfway down.
+    LaunchedEffect(current?.set?.id) { list.scrollToItem(0) }
+
+    when (editing) {
+        Field.WEIGHT -> return NumberWheel(
+            "Weight, lb", Workout.WEIGHT_OPTIONS.map(Workout::weightLabel), Workout.weightIndex(weight),
+        ) { i -> vm.setWeight(Workout.WEIGHT_OPTIONS[i]); editing = null }
+        Field.REPS -> return NumberWheel(
+            "Reps", Workout.REPS_OPTIONS.map(Int::toString), Workout.repsIndex(reps),
+        ) { i -> vm.setReps(Workout.REPS_OPTIONS[i]); editing = null }
+        null -> Unit
+    }
+
+    Page(list = list) {
         if (current != null) {
             item {
                 Text(
@@ -183,14 +209,22 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
                         (current.lastTime?.let { " · last $it" } ?: ""),
                 )
             }
-            item { Stepper(Workout.weightLabel(weight), "lb", { vm.stepWeight(-1) }, { vm.stepWeight(1) }) }
-            item { Stepper(reps?.toString() ?: "—", "reps", { vm.stepReps(-1) }, { vm.stepReps(1) }) }
+            item {
+                Stepper(Workout.weightLabel(weight), "lb", { editing = Field.WEIGHT },
+                    { vm.stepWeight(-1) }, { vm.stepWeight(1) })
+            }
+            item {
+                Stepper(reps?.toString() ?: "—", "reps", { editing = Field.REPS },
+                    { vm.stepReps(-1) }, { vm.stepReps(1) })
+            }
+            if (!Workout.canTick(reps)) item { Caption("Tap the reps to set them") }
             item {
                 Button(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         vm.tick()
                     },
+                    enabled = Workout.canTick(reps),
                     modifier = Modifier.size(ButtonDefaults.LargeButtonSize),
                 ) { Text("✓", fontSize = 26.sp) }
             }
@@ -234,12 +268,44 @@ fun WorkoutScreenUi(vm: WatchViewModel, screen: WorkoutScreen) {
     }
 }
 
+private enum class Field { WEIGHT, REPS }
+
+/** − value + : the buttons nudge, a tap on the value opens the wheel for big jumps. */
 @Composable
-private fun Stepper(value: String, unit: String, minus: () -> Unit, plus: () -> Unit) {
+private fun Stepper(value: String, unit: String, open: () -> Unit, minus: () -> Unit, plus: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         CompactButton(onClick = minus, colors = ButtonDefaults.secondaryButtonColors()) { Text("−") }
-        Text("$value $unit", fontSize = 20.sp, fontWeight = FontWeight.Medium)
+        Text(
+            "$value $unit", fontSize = 20.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.clickable(onClick = open).padding(horizontal = 4.dp, vertical = 6.dp),
+        )
         CompactButton(onClick = plus, colors = ButtonDefaults.secondaryButtonColors()) { Text("+") }
+    }
+}
+
+/** A scroll wheel — finger or bezel — and a tick to keep the value. */
+@Composable
+private fun NumberWheel(title: String, options: List<String>, initial: Int, done: (Int) -> Unit) {
+    val state = rememberPickerState(
+        initialNumberOfOptions = options.size, initiallySelectedOption = initial, repeatItems = false,
+    )
+    // No clock here: the wheel needs the full height, and its label sat on top of it.
+    Scaffold {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Caption(title)
+            Picker(
+                state = state,
+                contentDescription = title,
+                modifier = Modifier.size(width = 140.dp, height = 110.dp),
+            ) { i -> Text(options[i], fontSize = 26.sp, fontWeight = FontWeight.Medium) }
+            Button(onClick = { done(state.selectedOption) }, modifier = Modifier.size(ButtonDefaults.SmallButtonSize)) {
+                Text("✓", fontSize = 20.sp)
+            }
+        }
     }
 }
 
