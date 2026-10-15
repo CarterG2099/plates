@@ -24,6 +24,7 @@ import * as motion from './motion.js';
 import { backStack, topBackdrop } from './back.js';
 import * as stats from './stats.js';
 import * as push from './push.js';
+import * as watch from './watch.js';
 
 /** Exactly, so a round-trip through miles does not drift the stored metres. */
 const MILE_M = 1609.344;
@@ -811,6 +812,7 @@ Alpine.store('ui', {
 
   openSettings() {
     this.settingsOpen = true;
+    this.watchCode = null;
     this.loadSettings();
   },
 
@@ -875,6 +877,28 @@ Alpine.store('ui', {
       this.prefsBusy = false;
     }
   },
+
+  // ---- pairing a watch -------------------------------------------------------
+  //
+  // The code lives only in this sheet's memory: it works once and dies in five
+  // minutes, so there is nothing worth keeping once the sheet closes.
+
+  watchCode: null,   // { code, expiresAt }
+  watchBusy: false,
+
+  async pairWatch() {
+    this.watchBusy = true;
+    try {
+      this.watchCode = await watch.createPairing();
+    } catch (e) {
+      this.flash(describeError(e));
+    } finally {
+      this.watchBusy = false;
+    }
+  },
+
+  get watchCodeText() { return this.watchCode ? watch.formatCode(this.watchCode.code) : ''; },
+  get watchExpiryText() { return this.watchCode ? watch.expiryLabel(this.watchCode.expiresAt) : ''; },
 
   get notificationLabel() {
     return {

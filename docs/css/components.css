@@ -609,6 +609,16 @@
   word-break: break-all;
 }
 
+/* Read across a room to a wrist: big, spaced, and tabular so no digit shifts. */
+.watch-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+  text-align: center;
+  margin: var(--space-2) 0 0;
+}
+
 /* ---- progress photos --------------------------------------------------------
    The locked state shows a lock and a PIN field — deliberately no thumbnails,
    no blur-that-hints. A curtain that previews its contents isn't one. */

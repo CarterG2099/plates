@@ -685,3 +685,24 @@ alter table plates.members add column if not exists sex text check (sex in ('mal
 -- is_admin, set by hand in SQL, never through the API.
 revoke update on plates.members from authenticated, anon;
 grant update (display_name, weight_unit, photo_pin_hash, sex) on plates.members to authenticated;
+
+-- ---- watch pairing (added 2026-10-14) -------------------------------------------
+-- A watch can't do the Google sign-in, so the phone vouches for it: Settings →
+-- Pair a watch makes a one-time 8-digit code, the watch types it, and the
+-- watch-pair function trades it for a session of the watch's own. Only the
+-- function (service role) touches this table — RLS on with no policies, and no
+-- grants, so the API serves nothing from it to anyone. Codes are stored hashed,
+-- live five minutes, work once, and every wrong guess counts against every
+-- live code so guessing burns them out.
+create table if not exists plates.watch_pairings (
+  id              uuid primary key default gen_random_uuid(),
+  owner_email     text not null,
+  code_hash       text not null,
+  expires_at      timestamptz not null,
+  used_at         timestamptz,
+  failed_attempts integer not null default 0,
+  created_at      timestamptz not null default now()
+);
+alter table plates.watch_pairings enable row level security;
+revoke all on plates.watch_pairings from anon, authenticated;
+create index if not exists watch_pairings_code_hash on plates.watch_pairings (code_hash);

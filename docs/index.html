@@ -3206,6 +3206,22 @@
                               $el.checked = $store.ui.prefs.evening_nudge">
             </label>
 
+            <div class="card-label" style="margin-top: var(--space-4)">Watch</div>
+            <div class="setting">
+              <span class="setting-text">
+                <b>Pair a watch</b>
+                <small x-text="$store.ui.watchCode
+                  ? `Type this on the watch, ${$store.ui.watchExpiryText}`
+                  : 'Shows a one-time code for the Plates watch app'"></small>
+              </span>
+              <button class="btn" x-show="!$store.ui.watchCode"
+                      :disabled="$store.ui.watchBusy"
+                      @click="$store.ui.pairWatch()"
+                      x-text="$store.ui.watchBusy ? 'Getting…' : 'Get code'"></button>
+            </div>
+            <p class="watch-code" x-show="$store.ui.watchCode" x-cloak
+               x-text="$store.ui.watchCodeText"></p>
+
             <div class="card-label" style="margin-top: var(--space-4)">Account</div>
             <p class="setting-meta" x-text="$store.auth.email"></p>
             <button class="btn btn-block" @click="$store.auth.signOut()">Sign out</button>
