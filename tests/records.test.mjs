@@ -133,11 +133,48 @@ test('heavier sets count against a weight too: 275 x 10 means 245 needs 11', () 
   assert.deepEqual(stats.stallFor(history).next, { weight: 245, reps: 11 });
 });
 
-test('past 15 reps the step is five pounds more, at whatever beats that weight', () => {
+test('past 12 reps the step is five pounds more, at whatever beats that weight', () => {
   const history = workout.historyOf(indexOf([
-    [d(0), [[100, 15], [105, 9]]], [d(7), [[100, 15]]], [d(14), [[100, 15]]], [d(21), [[100, 15]]],
+    [d(0), [[100, 12], [105, 9]]], [d(7), [[100, 12]]], [d(14), [[100, 12]]], [d(21), [[100, 12]]],
   ]), 'squat', 'squat', Infinity);
   assert.deepEqual(stats.stallFor(history).next, { weight: 105, reps: 10 });
+});
+
+test('up to 12 reps the step stays at the same weight', () => {
+  const history = workout.historyOf(indexOf([
+    [d(0), [[100, 11]]], [d(7), [[100, 11]]], [d(14), [[100, 11]]], [d(21), [[100, 11]]],
+  ]), 'squat', 'squat', Infinity);
+  assert.deepEqual(stats.stallFor(history).next, { weight: 100, reps: 12 });
+});
+
+test('heavy lifts stop at 8 reps and climb in weight until a record fits', () => {
+  // 225 x 8 every time: 225 x 9 would be over the ceiling, and 230 has never
+  // been lifted, so 230 x 1 is already a record.
+  const plain = workout.historyOf(indexOf([
+    [d(0), [[225, 8]]], [d(7), [[225, 8]]], [d(14), [[225, 8]]], [d(21), [[225, 8]]],
+  ]), 'squat', 'squat', Infinity);
+  assert.deepEqual(stats.stallFor(plain, { ceiling: 8 }).next, { weight: 230, reps: 1 });
+
+  // With 235 x 6 and 240 x 3 in the past, the first weight with a record at
+  // 8 reps or fewer is 230 (beat 235 x 6 with 7).
+  const deeper = workout.historyOf(indexOf([
+    [d(0), [[225, 8], [235, 6], [240, 3]]], [d(7), [[225, 8]]], [d(14), [[225, 8]]], [d(21), [[225, 8]]],
+  ]), 'squat', 'squat', Infinity);
+  assert.deepEqual(stats.stallFor(deeper, { ceiling: 8 }).next, { weight: 230, reps: 7 });
+});
+
+test('squats, deadlifts and the barbell presses are heavy; everything else gets 12', () => {
+  for (const name of ['Squat (Barbell)', 'Hack Squat (Machine)', 'Front Squat', 'Deadlift', 'Romanian Deadlift',
+    'Sumo Deadlift', 'Bench Press (Barbell)', 'Overhead Press', 'Military Press']) {
+    assert.equal(stats.repCeiling(name), 8, name);
+  }
+  for (const name of ['Bench Press (Dumbbell)', 'Lat Pulldown', 'Leg Extension', 'Hip Thrust', 'Bent Over Row (Barbell)']) {
+    assert.equal(stats.repCeiling(name), 12, name);
+  }
+});
+
+test('the stall map uses each lift\'s own ceiling', async () => {
+  assert.match(await source('../docs/js/stats.js'), /stallFor\(history, \{ ceiling: repCeiling\(nameOf\(history\)\) \}\)/);
 });
 
 // ---- breaking a stall, live ---------------------------------------------------

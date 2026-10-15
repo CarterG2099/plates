@@ -1026,8 +1026,18 @@ export function prTimeline(index, { limit = 25 } = {}) {
 /** Sessions without a record before a lift counts as stalled. */
 export const STALL_SESSIONS = 3;
 
-/** Past this many reps the suggestion moves to the next weight up instead. */
-const REP_CEILING = 15;
+/**
+ * The most reps the nudge will ask for before it asks for more weight instead.
+ * Heavy compound lifts stop at 8: a 12-rep squat or deadlift set is mostly a
+ * conditioning test, and not the way anyone wants to set a squat record.
+ */
+export const REP_CEILING = { heavy: 8, default: 12 };
+
+const HEAVY = /squat|deadlift|^(flat )?bench press( \(barbell\))?$|^(standing )?(overhead|military) press( \(barbell\))?$/i;
+
+export function repCeiling(name) {
+  return HEAVY.test(String(name ?? '').trim()) ? REP_CEILING.heavy : REP_CEILING.default;
+}
 
 /**
  * The most reps ever done at each weight, as [{weight, reps}] heaviest first —
@@ -1070,16 +1080,18 @@ export function beatsFrontier(set, frontier) {
  * Stalled is STALL_SESSIONS sessions in a row with no record of any kind since
  * the last one (or since the baseline). The next step is the smallest set that
  * would actually be a record at the weight you are lifting now: one more rep
- * than you have ever done at that weight or heavier. Once that passes
- * REP_CEILING, five pounds more instead, at whatever beats that weight.
- * Bodyweight lifts only ever get the extra rep.
+ * than you have ever done at that weight or heavier. If that is more reps than
+ * the lift's ceiling (repCeiling), the weight goes up five pounds at a time
+ * until a record fits under it — which, past your heaviest ever set at that
+ * many reps, can be a heavy single or double. Bodyweight lifts only ever get
+ * the extra rep.
  *
  * `frontier` goes out with it so the session screen can tell, set by set, when
  * the stall is broken.
  *
  * @param {object[]} history  historyOf() output, newest first, finished sessions
  */
-export function stallFor(history) {
+export function stallFor(history, { ceiling = REP_CEILING.default } = {}) {
   const walk = recordWalk(history);
   if (walk.length < STALL_SESSIONS + 1) return null;
 
@@ -1092,9 +1104,12 @@ export function stallFor(history) {
   const { weight, reps } = walk[walk.length - 1].top;
 
   let next = { weight, reps: repsToBeat(frontier, weight) + 1 };
-  if (weight && next.reps > REP_CEILING) {
-    const up = weight + 5;
-    next = { weight: up, reps: Math.max(1, repsToBeat(frontier, up) + 1) };
+  if (weight) {
+    // Above the heaviest set ever, one rep is a record, so this always ends.
+    while (next.reps > ceiling) {
+      const up = next.weight + 5;
+      next = { weight: up, reps: repsToBeat(frontier, up) + 1 };
+    }
   }
 
   return { since, top: { weight, reps }, next, frontier };
@@ -1112,7 +1127,7 @@ export function stallMap(index, excludeSessionId = null) {
   for (const key of index.byExercise.keys()) {
     const history = historyOf(index, key, key, Infinity)
       .filter((h) => h.session?.ended_at && h.session.id !== excludeSessionId);
-    const stall = stallFor(history);
+    const stall = stallFor(history, { ceiling: repCeiling(nameOf(history)) });
     if (stall) out.set(key, stall);
   }
   return out;
