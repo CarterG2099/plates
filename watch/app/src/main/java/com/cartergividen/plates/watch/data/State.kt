@@ -1,6 +1,7 @@
 package com.cartergividen.plates.watch.data
 
 import kotlinx.serialization.Serializable
+import java.time.Instant
 
 /** The five tables the watch mirrors, with exactly the columns [Rows] carries. */
 enum class Table(val path: String, val columns: String) {
@@ -131,17 +132,21 @@ data class State(
             if (set.id in queuedSets || session == null || session.endedAt == null) keep += set.id
         }
 
-        live.filter { it.completedAt != null && !it.isWarmup }
-            .groupBy { it.exerciseKey }
-            .forEach { (key, done) ->
-                val recent = done.map { it.sessionId }.distinct()
-                    .mapNotNull { sessions[it] }
-                    .sortedByDescending { Stamp.parse(it.startedAt) }
-                    .take(2)
-                    .map { it.id }
-                    .toSet()
-                live.filter { it.exerciseKey == key && it.sessionId in recent }.forEach { keep += it.id }
-            }
+        // Grouped once and each start parsed once: this runs after every sync,
+        // and scanning every set again for each exercise was most of its cost.
+        val started = HashMap<String, Instant>()
+        fun startOf(session: SessionRow) = started.getOrPut(session.id) { Stamp.parse(session.startedAt) }
+
+        live.groupBy { it.exerciseKey }.values.forEach { all ->
+            val recent = all.filter { it.completedAt != null && !it.isWarmup }
+                .map { it.sessionId }.distinct()
+                .mapNotNull { sessions[it] }
+                .sortedByDescending { startOf(it) }
+                .take(2)
+                .map { it.id }
+                .toSet()
+            all.filter { it.sessionId in recent }.forEach { keep += it.id }
+        }
 
         return copy(sets = sets.filterKeys { it in keep || it in queuedSets })
     }

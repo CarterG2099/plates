@@ -21,9 +21,11 @@ class MainActivity : ComponentActivity() {
                 val state by vm.stateFlow.collectAsState()
                 val focus by vm.focus.collectAsState()
                 val overviewOpen by vm.overviewOpen.collectAsState()
+                val loaded by vm.loaded.collectAsState()
                 val me = session?.email
 
                 when {
+                    !loaded -> Unit   // a fraction of a second of black, not a wrong screen
                     me == null -> PairScreen(vm)
                     else -> {
                         val workout = workoutScreen(state, me, focus)

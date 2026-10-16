@@ -17,6 +17,19 @@ android {
         versionName = "0.1"
     }
 
+    buildTypes {
+        // What goes on the watch. A debug build is unshrunk and debuggable, which
+        // costs Compose dearly: on a Galaxy Watch 4 it measured a 9.6s cold start
+        // and a 73ms median frame. Signed with the debug key so it installs over
+        // the debug build without losing the pairing or queued sets.
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -126,4 +126,36 @@ class StateTest {
         assertTrue("the two real outings survive", "real-old" in kept && "real-mid" in kept)
         assertFalse(state.compact().sets.containsKey("warm-new"))
     }
+
+    @Test fun `each exercise keeps its own last two outings, warm-ups included`() {
+        var state = State()
+        state = state.merge(Table.SESSIONS, listOf(
+            session("d1", started = "2026-10-01T10:00:00Z"),
+            session("d2", started = "2026-10-02T10:00:00Z"),
+            session("d3", started = "2026-10-03T10:00:00Z"),
+        )).first
+        state = state.merge(Table.SETS, listOf(
+            set("bench-1", "d1", done = "2026-10-01T10:10:00Z"),
+            set("bench-2", "d2", done = "2026-10-02T10:10:00Z"),
+            set("bench-2w", "d2", done = "2026-10-02T10:05:00Z", warmup = true),
+            set("bench-3", "d3", done = "2026-10-03T10:10:00Z"),
+            // Rows only on the first day: still its two most recent.
+            set("row-1", "d1", exercise = "row", name = "Row", done = "2026-10-01T10:20:00Z"),
+        )).first
+
+        assertEquals(setOf("bench-2", "bench-2w", "bench-3", "row-1"), state.compact().sets.keys)
+    }
+
+    // The watch saves its whole state file only when the state changes, and most
+    // syncs pull back exactly what it already has. Those must come out equal.
+    @Test fun `pulling back what is already here, and compacting again, change nothing`() {
+        var state = State()
+        val sessions = listOf(session("d1", started = "2026-10-01T10:00:00Z"))
+        val sets = listOf(set("s1", "d1", done = "2026-10-01T10:10:00Z"))
+        state = state.merge(Table.SESSIONS, sessions).first
+        state = state.merge(Table.SETS, sets).first.compact()
+
+        val again = state.merge(Table.SESSIONS, sessions).first.merge(Table.SETS, sets).first.compact()
+        assertEquals(state, again)
+    }
 }

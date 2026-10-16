@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -40,14 +41,19 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
     private val remote = Supabase()
     private val syncer = Syncer(remote)
 
-    private val _state = MutableStateFlow(disk.loadState())
+    // Filled from disk off the main thread: the file is ~470KB of JSON, and
+    // parsing it before the first frame was most of a cold start on the watch.
+    private val _state = MutableStateFlow(State())
     val stateFlow: StateFlow<State> = _state.asStateFlow()
     override val state: State get() = _state.value
+
+    private val _loaded = MutableStateFlow(false)
+    val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
 
     private val _session = MutableStateFlow(disk.loadSession())
     val session: StateFlow<Session?> = _session.asStateFlow()
 
-    private val _status = MutableStateFlow(SyncStatus(pending = state.outbox.size))
+    private val _status = MutableStateFlow(SyncStatus())
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
 
     private val _draft = MutableStateFlow<Draft?>(null)
@@ -72,15 +78,26 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
+            val stored = disk.loadState()
+            _state.value = stored
+            _status.update { it.copy(pending = stored.outbox.size) }
+            _loaded.value = true
             for (s in saves) disk.saveState(s)
         }
     }
 
     @Synchronized
     override fun update(change: (State) -> State) {
+        val before = _state.value
         _state.update(change)
-        saves.trySend(_state.value)
-        _status.update { it.copy(pending = _state.value.outbox.size) }
+        val after = _state.value
+        // An equal state leaves the flow holding the old object. Most syncs pull
+        // back only what is already here, and re-saving the whole file for each
+        // one kept the watch busy every 15 seconds. Nothing is saved before the
+        // load either: it would write an empty state over the real one.
+        if (after === before || !_loaded.value) return
+        saves.trySend(after)
+        _status.update { it.copy(pending = after.outbox.size) }
     }
 
     // ---- sync ---------------------------------------------------------------
@@ -100,6 +117,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
     fun syncNow() {
         val current = _session.value ?: return
         viewModelScope.launch {
+            _loaded.first { it }
             if (!syncLock.tryLock()) return@launch   // one pass at a time; the next poll catches up
             try {
                 _status.update { it.copy(busy = true) }
@@ -108,7 +126,9 @@ class WatchViewModel(app: Application) : AndroidViewModel(app), StateHolder {
                     _session.value = fresh
                     withContext(Dispatchers.IO) { disk.saveSession(fresh) }
                 }
-                syncer.sync(this@WatchViewModel, fresh)
+                // Decoding, merging and pruning are the heavy part, and on the
+                // main thread they stalled whatever was on screen.
+                withContext(Dispatchers.Default) { syncer.sync(this@WatchViewModel, fresh) }
                 _status.update { it.copy(busy = false, error = null) }
             } catch (e: Exception) {
                 // Usually just no signal. Everything stays queued for the next pass.
