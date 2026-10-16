@@ -119,3 +119,42 @@ test('an Alpine proxy can be written without a clone error', async () => {
   const row = await local.save('foods', reactive, ME);
   assert.equal((await local.get('foods', row.id)).name, 'Proxied');
 });
+
+// ---- how often it checks ----------------------------------------------------
+
+/** The intervals sync.js schedules, without any of them running. */
+function watchTimers(fn) {
+  const delays = [];
+  const set = globalThis.setInterval;
+  const clear = globalThis.clearInterval;
+  globalThis.setInterval = (_, ms) => { delays.push(ms); return delays.length; };
+  globalThis.clearInterval = () => {};
+  try { fn(); } finally {
+    globalThis.setInterval = set;
+    globalThis.clearInterval = clear;
+  }
+  return delays;
+}
+
+test('checks every minute, and every 15 seconds while a workout is open', () => {
+  navigator.onLine = false;
+  const delays = watchTimers(() => {
+    sync.start();
+    sync.workoutRunning(true);
+    sync.workoutRunning(true);    // already fast: nothing rescheduled
+    sync.workoutRunning(false);
+    sync.stop();
+  });
+  assert.deepEqual(delays, [60_000, 15_000, 60_000]);
+});
+
+test('a workout found before sync starts is not a timer of its own, but sets the pace', () => {
+  navigator.onLine = false;
+  const delays = watchTimers(() => {
+    sync.workoutRunning(true);
+    sync.start();
+    sync.stop();
+    sync.workoutRunning(false);
+  });
+  assert.deepEqual(delays, [15_000]);
+});

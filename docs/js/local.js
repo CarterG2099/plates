@@ -130,19 +130,26 @@ export async function putManyLocal(table, rows) {
  * older copy back, the screen refreshed to the placeholder, and checking the
  * set then made the placeholder permanent. Ties go to the remote row, matching
  * last-write-wins everywhere else; re-applying identical content is harmless.
+ *
+ * Returns how many rows were news: not already here at that stamp or newer.
+ * The pull's cursor is inclusive, so most of what comes back is this device's
+ * own writes, and those must not count as something to redraw.
  */
 export async function putManyLocalIfNewer(table, rows) {
-  if (!rows.length) return;
+  let news = 0;
+  if (!rows.length) return news;
   await run(table, 'readwrite', (s) => {
     for (const row of rows) {
       const read = s.get(row.id);
       read.onsuccess = () => {
         const existing = read.result;
         if (existing?.updated_at && existing.updated_at > row.updated_at) return;
+        if (!existing?.updated_at || row.updated_at > existing.updated_at) news += 1;
         s.put(row);
       };
     }
   });
+  return news;
 }
 
 // ---- outbox ----------------------------------------------------------------

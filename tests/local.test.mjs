@@ -160,3 +160,23 @@ test('putManyLocalIfNewer applies newer rows, ties, and rows it has never seen',
   ]);
   assert.equal((await local.get('session_sets', 'old')).echoed, true);
 });
+
+// The pull's cursor is inclusive, so every pull brings back this device's own
+// writes. Counting those as news re-rendered the whole app after each one.
+test('putManyLocalIfNewer counts only rows that are news', async () => {
+  await local.putLocal('session_sets', { id: 'mine', reps: 5, updated_at: '2026-09-11T10:00:00.120Z' });
+  await local.putLocal('session_sets', { id: 'edited', reps: 5, updated_at: '2026-09-11T10:00:00Z' });
+  await local.putLocal('session_sets', { id: 'ahead', reps: 9, updated_at: '2026-09-11T10:05:00Z' });
+  await local.putLocal('session_sets', { id: 'same', reps: 4, updated_at: '2026-09-11T10:00:00Z' });
+
+  const news = await local.putManyLocalIfNewer('session_sets', [
+    { id: 'mine', reps: 5, updated_at: '2026-09-11T10:00:00.12+00:00' },   // own write, as Postgres prints it
+    { id: 'edited', reps: 6, updated_at: '2026-09-11T10:01:00Z' },          // changed elsewhere
+    { id: 'ahead', reps: 7, updated_at: '2026-09-11T10:00:00Z' },           // older than ours
+    { id: 'fresh', reps: 3, updated_at: '2026-09-11T10:00:00Z' },           // never seen
+    { id: 'same', reps: 4, updated_at: '2026-09-11T10:00:00Z' },            // already have exactly this
+  ]);
+
+  assert.equal(news, 2);
+  assert.equal(await local.putManyLocalIfNewer('session_sets', []), 0);
+});

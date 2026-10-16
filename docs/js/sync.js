@@ -34,10 +34,13 @@ const PAGE_SIZE = 1000;
 /** Rows per upsert request. Keeps a bulk import inside PostgREST's limits. */
 const PUSH_CHUNK = 500;
 const POLL_MS = 60_000;
+/** During a workout, so a set ticked on the watch shows on the phone within a rest. */
+const WORKOUT_POLL_MS = 15_000;
 
 const listeners = new Set();
 let running = false;
 let timer = null;
+let pollMs = POLL_MS;
 
 export const state = {
   online: navigator.onLine,
@@ -140,12 +143,6 @@ async function pullTable(table) {
   let from = 0;
   let applied = 0;
 
-  // One read of local timestamps up front, rather than a transaction per row.
-  // The first pull of the ~800-exercise library would otherwise crawl.
-  const localStamps = new Map(
-    (await local.allRaw(table)).map((r) => [r.id, r.updated_at]),
-  );
-
   for (;;) {
     let query = db(table)
       .select('*')
@@ -157,26 +154,13 @@ async function pullTable(table) {
     if (error) throw error;
     if (!data.length) break;
 
-    // Last-write-wins: a pulled row loses to a newer unsynced local edit.
-    const winners = [];
-    for (const remote of data) {
-      const localStamp = localStamps.get(remote.id);
-      if (localStamp && localStamp > remote.updated_at) continue;
-      winners.push(remote);
-      // Only a row that is actually news counts toward `changed`. The cursor is
-      // gte-inclusive, so every pull re-downloads the rows this device just
-      // pushed — counting those echoes meant a full store refresh after every
-      // set edit, and that refresh is what kept repainting inputs mid-workout.
-      if (!localStamp || remote.updated_at > localStamp) applied += 1;
-      localStamps.set(remote.id, remote.updated_at);
-      if (remote.updated_at > newest) newest = remote.updated_at;
-    }
-    // The stamps above are a snapshot from before this page's network wait, so
-    // an edit made while the response was in flight is invisible to them — and
-    // putManyLocal would put the server's older row straight over it. The
-    // IfNewer variant re-checks inside the write transaction, which closes the
-    // window; the stamp pass stays as the cheap first filter.
-    await local.putManyLocalIfNewer(table, winners);
+    // Last-write-wins, decided per row inside the write transaction, which is
+    // also what counts the news. This used to read every local row of the table
+    // first to compare stamps — thousands of sets, on every pull, which during
+    // a workout is every 15 seconds — and that copy was stale by the time the
+    // response came back anyway.
+    for (const remote of data) if (remote.updated_at > newest) newest = remote.updated_at;
+    applied += await local.putManyLocalIfNewer(table, data);
 
     if (data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
@@ -246,12 +230,23 @@ export function start() {
     if (document.visibilityState === 'visible') sync();
   });
 
+  schedule();
+  sync();
+}
+
+function schedule() {
   if (timer) clearInterval(timer);
   timer = setInterval(() => {
     if (document.visibilityState === 'visible') sync();
-  }, POLL_MS);
+  }, pollMs);
+}
 
-  sync();
+/** Check every 15 seconds while a workout is open, every minute otherwise. */
+export function workoutRunning(open) {
+  const next = open ? WORKOUT_POLL_MS : POLL_MS;
+  if (next === pollMs) return;
+  pollMs = next;
+  if (timer) schedule();
 }
 
 export function stop() {

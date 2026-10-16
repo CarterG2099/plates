@@ -30,6 +30,7 @@ Alpine.data = (name, factory) => { components[name] = factory; return register(n
 
 await import('../docs/js/app.js');
 const local = await import('../docs/js/local.js');
+const sync = await import('../docs/js/sync.js');
 
 const ME = 'me@example.com';
 const STARTED = '2026-10-15T10:00:00.000Z';
@@ -100,4 +101,23 @@ test('a tap on a row holding an older copy of the set goes by what the screen sh
   // The row is green, so a second tap means untick — not tick it again.
   train.toggleDone(rendered);
   assert.equal(train.currentSet(set).completed_at, null);
+});
+
+test('an open workout makes sync check every 15 seconds, and finishing it slows it back down', async () => {
+  await workoutWithOneSet();
+  const delays = [];
+  const set = globalThis.setInterval;
+  globalThis.setInterval = (_, ms) => { delays.push(ms); return delays.length; };
+  try {
+    sync.start();
+    // Every open one, including those the tests above left behind.
+    for (const open of (await local.all('sessions')).filter((x) => !x.ended_at)) {
+      await local.save('sessions', { ...open, ended_at: new Date().toISOString() }, ME);
+    }
+    await Alpine.store('data').refreshTraining();
+    sync.stop();
+  } finally {
+    globalThis.setInterval = set;
+  }
+  assert.deepEqual(delays, [15_000, 60_000]);
 });

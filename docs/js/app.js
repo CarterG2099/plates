@@ -743,6 +743,8 @@ Alpine.store('data', {
     // Same exclusion, so a stall flag describes the sessions before today and
     // does not vanish halfway through the set that would end it.
     raw.stalls = stats.stallMap(raw.index, running?.id ?? null);
+    // A workout can be going on the watch too; check for its sets more often.
+    sync.workoutRunning(Boolean(running));
     this.trainVersion++;
   },
 
