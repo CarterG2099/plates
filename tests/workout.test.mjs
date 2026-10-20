@@ -119,7 +119,7 @@ test('swapping halfway leaves the done sets on the exercise you actually did', a
   assert.deepEqual(kept.map((s) => s.completed_at), ['T1', 'T2'], 'and stays checked');
 });
 
-test('swapping a finished card gives one fresh set rather than doing nothing', async () => {
+test('swapping a finished card gives the default fresh sets rather than doing nothing', async () => {
   const sets = await seedSets([{ id: 'row', name: 'Barbell Row', done: 'T1' }]);
 
   const made = await workout.replaceExercise({
@@ -131,10 +131,10 @@ test('swapping a finished card gives one fresh set rather than doing nothing', a
     existingSets: sets,
   });
 
-  assert.equal(made.length, 1);
+  assert.equal(made.length, workout.DEFAULT_SETS, 'no history, so the picker default applies');
   assert.equal(made[0].exercise_name, 'Dumbbell Row');
-  assert.equal(made[0].completed_at, null, 'a new set is not pre-checked');
-  assert.deepEqual(await cards(), [['Barbell Row', 1], ['Dumbbell Row', 1]]);
+  assert.ok(made.every((s) => s.completed_at === null), 'new sets are not pre-checked');
+  assert.deepEqual(await cards(), [['Barbell Row', 1], ['Dumbbell Row', workout.DEFAULT_SETS]]);
 });
 
 test('swapping a finished card opens the new exercise at its last-time size', async () => {
@@ -1271,10 +1271,11 @@ test('openingSets matches the number of working sets you did last time', () => {
   assert.equal(workout.openingSets([{ reps: 5 }]), 1);
 });
 
-test('openingSets falls back to one when there is no history', () => {
-  assert.equal(workout.openingSets([]), 1, 'a first-time exercise still opens with a row');
-  assert.equal(workout.openingSets(undefined), 1, 'and so does one with no prior entry at all');
-  assert.equal(workout.openingSets(null), 1);
+test('openingSets falls back to three when there is no history', () => {
+  assert.equal(workout.DEFAULT_SETS, 3);
+  assert.equal(workout.openingSets([]), 3, 'a first-time exercise opens with the default');
+  assert.equal(workout.openingSets(undefined), 3, 'and so does one with no prior entry at all');
+  assert.equal(workout.openingSets(null), 3);
 });
 
 /**
@@ -1580,17 +1581,42 @@ test('a typed zero is a value, not a gap', () => {
 
 // ---- exercise notes ----------------------------------------------------------
 
-test('a note on a shared exercise does not claim the row', async () => {
+// Notes are per person. They used to be a column on the shared exercise row,
+// which is how a cue Aana wrote for herself ended up on Carter's card.
+const HER = 'a@x';
+
+test('a note is its own row, owned by whoever wrote it, and never touches the exercise', async () => {
   const shared = { id: 'ex-shared', owner_email: null, name: 'Bench Press (Barbell)' };
   const saved = await workout.setExerciseNotes(shared, 'seat at 4, thumbless grip', ME);
 
   assert.equal(saved.notes, 'seat at 4, thumbless grip');
-  assert.equal(saved.owner_email, null,
-    'owner_email must stay null or the other member loses the row');
+  assert.equal(saved.owner_email, ME);
+  assert.equal(saved.exercise_id, 'ex-shared');
+  assert.equal(await local.get('exercises', 'ex-shared'), undefined, 'the library row is not written');
+});
+
+test('each member sees only their own note for an exercise', async () => {
+  const shared = { id: 'ex-shared', owner_email: null, name: 'Bench Press (Barbell)' };
+  await workout.setExerciseNotes(shared, 'thumbless grip', ME);
+  await workout.setExerciseNotes(shared, '10 lb at my head', HER);
+
+  const notes = await local.all('exercise_notes');
+  assert.equal(workout.exerciseNoteFor(notes, ME, 'ex-shared'), 'thumbless grip');
+  assert.equal(workout.exerciseNoteFor(notes, HER, 'ex-shared'), '10 lb at my head');
+  assert.equal(workout.exerciseNoteFor(notes, ME, 'ex-other'), null);
+});
+
+test('editing a note updates your row rather than adding a second', async () => {
+  const shared = { id: 'ex-shared', owner_email: null, name: 'Bench Press (Barbell)' };
+  const first = await workout.setExerciseNotes(shared, 'seat at 4', ME);
+  const second = await workout.setExerciseNotes(shared, 'seat at 5', ME, await local.all('exercise_notes'));
+
+  assert.equal(second.id, first.id);
+  assert.equal((await local.all('exercise_notes')).length, 1);
 });
 
 test('a blank note clears rather than storing whitespace', async () => {
-  const shared = { id: 'ex-blank', owner_email: null, name: 'Squat (Barbell)', notes: 'old' };
+  const shared = { id: 'ex-blank', owner_email: null, name: 'Squat (Barbell)' };
   const saved = await workout.setExerciseNotes(shared, '   ', ME);
   assert.equal(saved.notes, null);
 });

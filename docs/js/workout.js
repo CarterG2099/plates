@@ -134,12 +134,19 @@ export function groupByExercise(sets) {
 }
 
 /**
+ * Sets to open an exercise with when nothing else says how many: no routine plan
+ * and no history. Three is the working default — a single row meant two taps of
+ * "add set" before almost every first-time exercise could start.
+ */
+export const DEFAULT_SETS = 3;
+
+/**
  * How many sets to open an exercise with when you add it mid-workout.
  *
- * As many as you did last time it appeared, and never fewer than one. Adding an
- * exercise used to give a single blank row, so a four-set exercise meant three
- * taps of "add set" before you could start — while the same exercise arriving
- * from a routine opened with its planned count.
+ * As many as you did last time it appeared, and the default when there is no
+ * last time. Adding an exercise used to give a single blank row, so a four-set
+ * exercise meant three taps of "add set" before you could start — while the
+ * same exercise arriving from a routine opened with its planned count.
  *
  * The rows stay empty on purpose, exactly like the planned ones: last time's
  * numbers show as placeholders per position, and checking a set without typing
@@ -147,7 +154,7 @@ export function groupByExercise(sets) {
  * one, which is the thing the placeholder convention exists to avoid.
  */
 export function openingSets(previous) {
-  return Math.max(1, (previous ?? []).length);
+  return (previous ?? []).length || DEFAULT_SETS;
 }
 
 export async function addSet({ session, exercise, weight, reps, isWarmup, ownerEmail, existingSets }) {
@@ -1079,18 +1086,29 @@ export function effectiveWeight(set, placeholder) {
 /**
  * Write a personal note onto an exercise.
  *
- * The full row is spread so owner_email survives as-is. That is load-bearing:
- * the library rows are owner_email null — shared — and local.save only defaults
- * the owner when the field is absent, so spreading keeps the null and the row
- * stays everyone's. Saving a note must not quietly claim the exercise.
+ * One row per person per exercise, in exercise_notes. The note used to be a
+ * column on the exercise row, and the library rows are shared — so a cue Aana
+ * wrote for herself showed up on Carter's card too. Sets have an owner; so do
+ * notes. Your existing row is updated rather than a second one made, which is
+ * what the unique index on (owner, exercise) expects.
  */
-export async function setExerciseNotes(exercise, notes, ownerEmail) {
-  const saved = await local.save('exercises', {
-    ...exercise,
+export async function setExerciseNotes(exercise, notes, ownerEmail, existingNotes = []) {
+  const mine = ownNote(existingNotes, ownerEmail, exercise.id);
+  const saved = await local.save('exercise_notes', {
+    ...(mine ?? { exercise_id: exercise.id }),
     notes: String(notes ?? '').trim() || null,
   }, ownerEmail);
   sync.nudge();
   return saved;
+}
+
+function ownNote(notes, ownerEmail, exerciseId) {
+  return notes.find((n) => n.exercise_id === exerciseId && n.owner_email === ownerEmail && !n.deleted_at) ?? null;
+}
+
+/** Your note for an exercise, or null. Never anyone else's. */
+export function exerciseNoteFor(notes, ownerEmail, exerciseId) {
+  return ownNote(notes, ownerEmail, exerciseId)?.notes ?? null;
 }
 
 export async function createExercise(fields, ownerEmail) {
