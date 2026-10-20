@@ -137,3 +137,13 @@ test('the loader is in base.css, stills under reduced motion, and runs on the pa
   // The shorthand resets the delay, so each animated part sets the phase after it.
   assert.equal((css.match(/animation-delay: var\(--loader-phase, 0s\);/g) ?? []).length, 3);
 });
+
+// The quick-add row showed "1.5 servings · 130 kcal" — last time's amount next
+// to one serving's calories. Both numbers must come from the same amount.
+test('the quick-add row prices the amount it will log, not one serving', () => {
+  const row = html.match(/<template x-for="item in results"[\s\S]*?<\/template>/)?.[0];
+  assert.ok(row, 'the results row template exists');
+  assert.match(row, /amountLabel\(rowQuantity\(item\)/, 'the amount shown is what + logs');
+  assert.match(row, /Math\.round\(rowKcal\(item\)\)/, 'and the kcal are for that amount');
+  assert.doesNotMatch(row, /Math\.round\(item\.calories\)/, 'per-serving calories never sit next to a different amount');
+});

@@ -1603,8 +1603,22 @@ Alpine.data('logPage', () => ({
   get date() { return Alpine.store('ui').date; },
 
   /** The one-tap path: log at the amount you last used for this food. */
+  /** What the + button logs: last time's amount, else the food's default. */
+  rowQuantity(item) {
+    return item.lastQuantity ?? item.default_qty ?? item.serving_qty ?? 1;
+  },
+
+  /**
+   * Calories for that amount, not per serving. The row read "1.5 servings ·
+   * 130 kcal" with 130 being one serving's worth — two numbers side by side
+   * that did not describe the same thing.
+   */
+  rowKcal(item) {
+    return food.fromQuantity(item, this.rowQuantity(item), 'kcal');
+  },
+
   async quickLog(item) {
-    const quantity = item.lastQuantity ?? item.default_qty ?? item.serving_qty ?? 1;
+    const quantity = this.rowQuantity(item);
     await food.logFood({
       food: item,
       quantity,

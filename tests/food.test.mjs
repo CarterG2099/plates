@@ -600,6 +600,8 @@ test('one serving reads the same amount through every lens', () => {
   assert.equal(food.fromQuantity(YOGHURT, 1, 'measure'), 170);
   assert.equal(food.fromQuantity(YOGHURT, 1, 'imperial'), 6);      // 170 g ≈ 5.996 oz
   assert.equal(food.fromQuantity(YOGHURT, 1, 'kcal'), 150);
+  assert.equal(food.fromQuantity(YOGHURT, 1.5, 'kcal'), 225,
+    'the quick-add row shows this for last time\'s amount, not one serving\'s worth');
 });
 
 test('every lens round-trips back to the quantity that gets stored', () => {

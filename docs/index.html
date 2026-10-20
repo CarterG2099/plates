@@ -746,8 +746,8 @@
                   <b><span x-text="item.name"></span><span
                     class="brand" x-show="item.brand" x-text="` (${item.brand})`"></span></b>
                   <small>
-                    <span x-text="amountLabel(item.lastQuantity ?? item.default_qty ?? item.serving_qty, item.serving_unit)"></span>
-                    <span x-show="item.calories !== null"> · <span x-text="Math.round(item.calories)"></span> kcal</span>
+                    <span x-text="amountLabel(rowQuantity(item), item.serving_unit)"></span>
+                    <span x-show="item.calories !== null"> · <span x-text="Math.round(rowKcal(item))"></span> kcal</span>
                   </small>
                 </button>
                 <!-- Only appears once there's something to take back. -->
