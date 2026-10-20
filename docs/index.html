@@ -1067,10 +1067,17 @@
                   <div class="row">
                     <div class="row-text">
                       <b x-text="item.name"></b>
-                      <small>
-                        <span x-show="item.portion" x-text="item.portion"></span>
-                        <span x-show="item.portion"> · </span>≈<span x-text="Math.round(item.calories)"></span> kcal
-                      </small>
+                      <small x-show="item.portion" x-text="item.portion"></small>
+                      <small x-text="estimateItemLine(item)"></small>
+                    </div>
+                    <!-- The portion above is the model's guess; this says how
+                         many of it you actually had, a quarter at a time. -->
+                    <div class="estimate-portion" role="group" :aria-label="`Portion of ${item.name}`">
+                      <button class="tap" @click="stepEstimateItem(i, -1)"
+                              :aria-label="`Less ${item.name}`">−</button>
+                      <span x-text="portionLabel(item)"></span>
+                      <button class="tap" @click="stepEstimateItem(i, 1)"
+                              :aria-label="`More ${item.name}`">+</button>
                     </div>
                     <button class="tap" @click="removeEstimateItem(i)"
                             :aria-label="`Remove ${item.name}`">×</button>

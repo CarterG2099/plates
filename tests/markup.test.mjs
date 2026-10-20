@@ -147,3 +147,12 @@ test('the quick-add row prices the amount it will log, not one serving', () => {
   assert.match(row, /Math\.round\(rowKcal\(item\)\)/, 'and the kcal are for that amount');
   assert.doesNotMatch(row, /Math\.round\(item\.calories\)/, 'per-serving calories never sit next to a different amount');
 });
+
+test('each estimated food has its own portion stepper, beside its remove button', async () => {
+  const html = await readFile(fileURLToPath(new URL('../docs/index.html', import.meta.url)), 'utf8');
+  const sheet = html.slice(html.indexOf('<!-- Meal estimate'), html.indexOf('<!-- Plate photo, before'));
+  assert.match(sheet, /@click="stepEstimateItem\(i, -1\)"/);
+  assert.match(sheet, /@click="stepEstimateItem\(i, 1\)"/);
+  assert.match(sheet, /x-text="portionLabel\(item\)"/);
+  assert.match(sheet, /x-text="estimateItemLine\(item\)"/);
+});

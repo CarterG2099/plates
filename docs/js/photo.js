@@ -103,11 +103,55 @@ async function downscale(file, maxEdge) {
   };
 }
 
-/** Totals for a set of estimated items, for the sheet's headline figure. */
+// ---- portions ----------------------------------------------------------------
+//
+// The estimate's portion is the model's guess at what was on the plate, and the
+// eater usually knows better: it was half the bowl, or seconds. Each item keeps
+// the model's numbers for one of its portions and a `servings` multiplier, which
+// is also what gets logged as the quantity — so the entry reads "1.5 serving"
+// and can be adjusted again later like any other.
+
+export const PORTION_STEP = 0.25;
+export const PORTION_MIN = 0.25;
+export const PORTION_MAX = 5;
+
+const MACROS = ['calories', 'protein_g', 'carbs_g', 'fat_g'];
+
+export function servingsOf(item) {
+  const n = Number(item?.servings);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/** One quarter-portion up or down, kept between a quarter and five. */
+export function stepPortion(servings, direction) {
+  const next = Math.round((Number(servings) || 1) / PORTION_STEP + direction) * PORTION_STEP;
+  return Math.min(PORTION_MAX, Math.max(PORTION_MIN, next));
+}
+
+/** "×1½", "×¾", "×2". */
+export function portionLabel(servings) {
+  const n = Number(servings) || 1;
+  const whole = Math.floor(n);
+  const part = { 0.25: '¼', 0.5: '½', 0.75: '¾' }[Math.round((n - whole) * 100) / 100] ?? '';
+  return `×${whole || !part ? whole : ''}${part}`;
+}
+
+/** The item's numbers at the portion chosen. A missing macro stays missing. */
+export function scaledItem(item) {
+  const by = servingsOf(item);
+  const out = { ...item };
+  for (const key of MACROS) {
+    out[key] = item[key] == null ? null : Math.round(Number(item[key]) * by);
+  }
+  return out;
+}
+
+/** Totals for a set of estimated items, at their chosen portions, for the headline. */
 export function mealTotals(items) {
   const totals = { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
   for (const item of items ?? []) {
-    for (const key of Object.keys(totals)) totals[key] += Number(item[key]) || 0;
+    const by = servingsOf(item);
+    for (const key of Object.keys(totals)) totals[key] += (Number(item[key]) || 0) * by;
   }
   for (const key of Object.keys(totals)) totals[key] = Math.round(totals[key]);
   return totals;

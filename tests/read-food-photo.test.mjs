@@ -191,3 +191,77 @@ test('the note sheet binds the box and reads on Read it and on Enter', async () 
   assert.match(sheet, /@click="readMealPhoto\(\)"/);
   assert.match(sheet, /:src="mealPhoto\.url"/);
 });
+
+// ---- the reply's shape is binding -----------------------------------------------
+
+// A plate came back with calories on every item and protein, carbs and fat all
+// zero: the reply named the macros differently and the function filled the gaps.
+test('a meal or description reply must carry every macro on every item', () => {
+  const item = prompt.MEAL_SCHEMA.properties.items.items;
+  assert.deepEqual([...item.required].sort(),
+    ['calories', 'carbs_g', 'fat_g', 'name', 'portion', 'protein_g']);
+  for (const key of ['calories', 'protein_g', 'carbs_g', 'fat_g']) assert.equal(item.properties[key].type, 'NUMBER');
+});
+
+test('the function sends that schema for meals and descriptions, not label reads', async () => {
+  const src = await source('../supabase/functions/read-food-photo/index.ts');
+  assert.match(src, /schema: mode === "label" \? null : MEAL_SCHEMA/);
+});
+
+test('a macro missing from the reply stays missing rather than becoming zero', async () => {
+  const src = await source('../supabase/functions/read-food-photo/index.ts');
+  for (const key of ['protein_g', 'carbs_g', 'fat_g']) {
+    assert.match(src, new RegExp(`${key}: num\\(raw\\?\\.${key}\\),`));
+  }
+});
+
+// ---- a stuck reader -----------------------------------------------------------
+
+// A pasted label hung until the platform killed the function at 150 seconds,
+// which reached the app as "Edge Function returned a non-2xx status code".
+const gemini = await import('../supabase/functions/read-food-photo/gemini.ts');
+
+/** A fetch that never answers until its deadline fires, then fails as fetch does. */
+const hangs = (_url, init) => new Promise((_, reject) => {
+  init.signal.addEventListener('abort', () => reject(init.signal.reason));
+});
+const answers = (text) => async () => new Response(JSON.stringify({
+  candidates: [{ content: { parts: [{ text }] } }],
+}));
+
+test('a model that hangs gives way to the next one', async () => {
+  const asked = [];
+  const result = await gemini.askGemini('k', 'p', [], {
+    model: 'first',
+    attemptMs: 20,
+    fetch: (url, init) => {
+      asked.push(url.match(/models\/([^:]+)/)[1]);
+      return asked.length === 1 ? hangs(url, init) : answers('{"ok":true}')();
+    },
+  });
+  assert.deepEqual(result, { text: '{"ok":true}' });
+  assert.deepEqual(asked, ['first', gemini.FALLBACK_MODELS[0]], 'not the stuck model a second time');
+});
+
+test('when every model hangs it gives up inside its budget and says the reader is slow', async () => {
+  let asked = 0;
+  const result = await gemini.askGemini('k', 'p', [], {
+    attemptMs: 30, budgetMs: 80, fetch: (url, init) => { asked += 1; return hangs(url, init); },
+  });
+  assert.match(result.error, /slow/);
+  assert.ok(asked <= 3, `stopped at the budget rather than trying all five models (${asked})`);
+});
+
+test('the budget leaves the platform\'s 150 seconds room to answer', () => {
+  assert.ok(gemini.BUDGET_MS <= 120_000);
+  assert.ok(gemini.ATTEMPT_MS < gemini.BUDGET_MS);
+});
+
+test('the schema goes in the request when given, and not otherwise', async () => {
+  const bodies = [];
+  const fetch = async (_url, init) => { bodies.push(JSON.parse(init.body)); return answers('{}')(); };
+  await gemini.askGemini('k', 'p', [], { schema: prompt.MEAL_SCHEMA, fetch });
+  await gemini.askGemini('k', 'p', [], { fetch });
+  assert.deepEqual(bodies[0].generationConfig.responseSchema, prompt.MEAL_SCHEMA);
+  assert.equal('responseSchema' in bodies[1].generationConfig, false);
+});

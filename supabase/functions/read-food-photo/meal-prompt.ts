@@ -1,6 +1,39 @@
 // The meal prompt, apart from the plumbing so tests can import the same source
 // Deno runs (see tests/read-food-photo.test.mjs).
 
+/**
+ * The shape Gemini must answer a meal or a description in.
+ *
+ * The prompt spells the keys out too, but a prompt is a request: without the
+ * schema a reply came back with calories on every item and the macros under
+ * other names, which read as zero protein, carbs and fat for a whole plate.
+ * A response schema makes the keys and types binding.
+ */
+export const MEAL_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    items: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" },
+          portion: { type: "STRING" },
+          calories: { type: "NUMBER" },
+          protein_g: { type: "NUMBER" },
+          carbs_g: { type: "NUMBER" },
+          fat_g: { type: "NUMBER" },
+        },
+        required: ["name", "portion", "calories", "protein_g", "carbs_g", "fat_g"],
+      },
+    },
+    confidence: { type: "STRING", enum: ["low", "medium", "high"] },
+    note: { type: "STRING", nullable: true },
+    unreadable: { type: "BOOLEAN" },
+  },
+  required: ["items", "confidence", "note", "unreadable"],
+};
+
 // Long enough for "made with Greek yogurt instead of sour cream, from Cafe Rio,
 // no rice"; short enough that a pasted essay can't crowd out the instructions.
 export const NOTE_MAX = 300;

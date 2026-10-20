@@ -10,25 +10,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { installBrowser } from './helpers/browser.mjs';
+import { loadApp } from './helpers/app.mjs';
 import { reset } from './helpers/fake-idb.mjs';
 
-installBrowser();
-
-// The rest of the browser Alpine itself touches on import. Nothing here mounts
-// a DOM; the stores and the Train component are driven directly.
-globalThis.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
-globalThis.Element = window.Element = class {};
-window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
-globalThis.history = window.history = { state: null, replaceState() {}, pushState() {}, back() {} };
-
-const Alpine = (await import('../docs/js/vendor/alpine.esm.js')).default;
-Alpine.start = () => {};
-const components = {};
-const register = Alpine.data;
-Alpine.data = (name, factory) => { components[name] = factory; return register(name, factory); };
-
-await import('../docs/js/app.js');
+const { Alpine, components } = await loadApp();
 const local = await import('../docs/js/local.js');
 const sync = await import('../docs/js/sync.js');
 

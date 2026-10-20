@@ -2019,6 +2019,20 @@ Alpine.data('logPage', () => ({
     this.mealTerm = '';
   },
 
+  /** Portion up or down by a quarter: the guess was half the bowl, or seconds. */
+  stepEstimateItem(index, direction) {
+    const item = this.estimate.items[index];
+    item.servings = photo.stepPortion(photo.servingsOf(item), direction);
+  },
+
+  estimateItemLine(item) {
+    const s = photo.scaledItem(item);
+    const g = (v) => (v == null ? '—' : v);
+    return `≈${s.calories} kcal · P${g(s.protein_g)} C${g(s.carbs_g)} F${g(s.fat_g)}`;
+  },
+
+  portionLabel(item) { return photo.portionLabel(photo.servingsOf(item)); },
+
   removeEstimateItem(index) {
     this.estimate.items.splice(index, 1);
     if (!this.estimate.items.length) this.estimate = null;
@@ -2046,6 +2060,8 @@ Alpine.data('logPage', () => ({
   async logEstimate() {
     let logged = 0;
 
+    // The model's numbers are one of its portions; the multiplier is the
+    // quantity, so the entry scales the same way any logged food does.
     for (const item of this.estimate.items) {
       await food.logFood({
         food: {
@@ -2061,7 +2077,7 @@ Alpine.data('logPage', () => ({
           fiber_g: null,
           sodium_mg: null,
         },
-        quantity: 1,
+        quantity: photo.servingsOf(item),
         unit: 'serving',
         ownerEmail: this.email,
         date: this.date,

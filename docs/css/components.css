@@ -520,6 +520,23 @@
   margin: 0;
 }
 
+/* − ×1½ + beside each estimated food. The label is fixed-width so the buttons
+   don't shift under your thumb as it goes from ×1 to ×1¼. */
+.estimate-portion {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+}
+
+.estimate-portion span {
+  min-width: 2.75em;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Enough to confirm it's the right plate, not so much it pushes Read it off a
    phone screen once the keyboard is up. */
 .meal-photo-thumb {

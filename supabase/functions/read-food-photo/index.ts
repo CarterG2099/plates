@@ -25,9 +25,8 @@
 // Members only: we check plates.is_member() with the caller's JWT. The Gemini
 // key lives in the GEMINI_API_KEY function secret and never reaches the browser.
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { cleanDescription, cleanNote, describePrompt, mealPrompt } from "./meal-prompt.ts";
-
-const MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
+import { MEAL_SCHEMA, cleanDescription, cleanNote, describePrompt, mealPrompt } from "./meal-prompt.ts";
+import { askGemini } from "./gemini.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -73,85 +72,6 @@ function num(value: unknown): number | null {
 function text(value: unknown): string | null {
   const s = String(value ?? "").trim();
   return s && s.toLowerCase() !== "null" ? s : null;
-}
-
-/**
- * Ask Gemini, falling through models when the free tier is busy.
- *
- * Lifted from import-photo, which learned this the hard way: shared flash
- * capacity is deprioritised under load and 503s, so one model is not enough.
- */
-async function askGemini(
-  apiKey: string,
-  prompt: string,
-  images: { imageBase64: string; mimeType: string }[],
-): Promise<{ text: string } | { error: string; status: number }> {
-  const payload = {
-    contents: [{
-      parts: [
-        { text: prompt },
-        ...images.map((i) => ({ inline_data: { mime_type: i.mimeType, data: i.imageBase64 } })),
-      ],
-    }],
-    generationConfig: { responseMimeType: "application/json", temperature: 0 },
-  };
-
-  const MODELS = [...new Set([
-    MODEL, "gemini-2.5-flash", "gemini-2.5-flash-lite",
-    "gemini-3.5-flash", "gemini-3.5-flash-lite",
-  ])];
-
-  let resp: Response | null = null;
-  let lastStatus = 0;
-  let lastDetail = "";
-
-  for (const model of MODELS) {
-    let hardError = false;
-    for (let attempt = 0; attempt < 2 && !resp; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 500 * attempt));
-
-      let r: Response;
-      try {
-        r = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
-        );
-      } catch (_) {
-        lastStatus = 0;
-        lastDetail = "network error";
-        continue;
-      }
-
-      if (r.ok) { resp = r; break; }
-      lastStatus = r.status;
-      lastDetail = (await r.text()).slice(0, 300);
-      if (r.status === 503) continue;                  // overloaded — retry this model
-      if (r.status === 404 || r.status === 429) break; // try the next model
-      hardError = true;
-      break;                                            // bad request etc. — stop
-    }
-    if (resp || hardError) break;
-  }
-
-  if (!resp) {
-    console.error("Gemini HTTP", lastStatus, lastDetail);
-    return {
-      error: lastStatus === 503
-        ? "The reader is busy right now — try again in a moment."
-        : `Reader error (${lastStatus}): ${lastDetail}`,
-      status: lastStatus,
-    };
-  }
-
-  const data = await resp.json();
-  const out = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  if (!out) {
-    const reason = data?.promptFeedback?.blockReason
-      ?? data?.candidates?.[0]?.finishReason
-      ?? "empty response";
-    return { error: `The reader returned nothing (${reason}).`, status: 502 };
-  }
-  return { text: out };
 }
 
 Deno.serve(async (req) => {
@@ -203,7 +123,10 @@ Deno.serve(async (req) => {
   // 200 with an `error` field, not a 5xx: supabase-js hides the response body on
   // a non-2xx, so a status code here would reach the user as "Edge Function
   // returned a non-2xx status code" and lose the message that explains it.
-  const answer = await askGemini(apiKey, prompt, images);
+  const answer = await askGemini(apiKey, prompt, images, {
+    schema: mode === "label" ? null : MEAL_SCHEMA,
+    model: Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest",
+  });
   if ("error" in answer) return json({ error: answer.error });
 
   let parsed: Record<string, unknown>;
@@ -258,9 +181,11 @@ Deno.serve(async (req) => {
       name: text(raw?.name) ?? "Unnamed",
       portion: text(raw?.portion),
       calories: num(raw?.calories) ?? 0,
-      protein_g: num(raw?.protein_g) ?? 0,
-      carbs_g: num(raw?.carbs_g) ?? 0,
-      fat_g: num(raw?.fat_g) ?? 0,
+      // Missing stays missing. Defaulted to 0, an answer without macros logged
+      // a plate as having no protein at all, and nothing on screen said so.
+      protein_g: num(raw?.protein_g),
+      carbs_g: num(raw?.carbs_g),
+      fat_g: num(raw?.fat_g),
     }))
     .filter((i: { name: string; calories: number }) => i.name !== "Unnamed" || i.calories > 0);
 
