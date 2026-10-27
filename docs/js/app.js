@@ -1343,6 +1343,10 @@ Alpine.data('todayPage', () => ({
     return food.scaleEntry(this.edit.entry, this.editQuantity, this.edit.item, { fillGaps: true });
   },
 
+  /** The same bars and tag as the amount sheet, for an entry already logged. */
+  get editShare() { return food.calorieShare(this.editMacros); },
+  get editHighProtein() { return food.isHighProtein(this.editMacros); },
+
   async saveEdit() {
     const { entry, item } = this.edit;
     await food.updateEntry({ entry, quantity: this.editQuantity, food: item });

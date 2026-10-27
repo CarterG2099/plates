@@ -80,3 +80,32 @@ test('the tag sits under the food\'s name in the amount sheet', async () => {
   const sheet = html.slice(html.indexOf('<!-- Quantity sheet'), html.indexOf('confirmSheet()'));
   assert.match(sheet, /<span class="tag-high-protein" x-show="sheetHighProtein">High protein<\/span>/);
 });
+
+// The same food once it is logged: tapping the entry on Today opens the edit
+// sheet, which reads the entry's own snapshot rather than the food.
+const LOGGED_TURKEY = {
+  id: 'e', food_id: null, description: 'Turkey breast (Green Farm)', quantity: 2, unit: 'serving',
+  calories: 90, protein_g: 15.6, carbs_g: 0.6, fat_g: 2.4,
+};
+
+test('a logged entry\'s sheet shows the same bars and tag as before it was logged', () => {
+  Alpine.store('auth').session = { user: { email: 'me@example.com' } };
+  const today = Alpine.reactive(components.todayPage());
+  assert.deepEqual(today.editShare, { protein_g: 0, carbs_g: 0, fat_g: 0 }, 'closed');
+  assert.equal(today.editHighProtein, false, 'closed');
+
+  today.openEdit(LOGGED_TURKEY);
+  assert.deepEqual(today.editShare, { protein_g: 72, carbs_g: 3, fat_g: 25 });
+  assert.equal(today.editHighProtein, true);
+
+  today.closeEdit();
+  today.openEdit({ ...LOGGED_TURKEY, id: 'pb', description: 'Peanut butter', protein_g: 7, carbs_g: 7, fat_g: 16 });
+  assert.equal(today.editHighProtein, false);
+});
+
+test('the logged entry\'s sheet draws the bars and the tag', async () => {
+  const html = await readFile(fileURLToPath(new URL('../docs/index.html', import.meta.url)), 'utf8');
+  const sheet = html.slice(html.indexOf('<!-- Edit a logged amount'), html.indexOf('saveEdit()'));
+  assert.match(sheet, /<span class="tag-high-protein" x-show="editHighProtein">High protein<\/span>/);
+  assert.match(sheet, /<span class="macro-bar"[^>]*><i\s+:style="`background: \$\{m\.color\}; width: \$\{editShare\[m\.key\]\}%`"><\/i><\/span>/);
+});

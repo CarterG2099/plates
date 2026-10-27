@@ -403,7 +403,10 @@
             <div class="sheet" x-init="$swipe($el, () =&gt; { closeEdit() })">
               <div class="grabber"></div>
 
-              <div style="font-weight: 600;" x-text="edit.entry.description"></div>
+              <div>
+                <div style="font-weight: 600;" x-text="edit.entry.description"></div>
+                <span class="tag-high-protein" x-show="editHighProtein">High protein</span>
+              </div>
 
               <!-- A lens, not a second unit: whichever chip is lit, the entry
                    is stored and shown the way it was logged. -->
@@ -463,8 +466,9 @@
                   <div class="macro">
                     <span class="dot" :style="`background: ${m.color}`"></span>
                     <span class="macro-name" x-text="m.name"></span>
-                    <span class="macro-val" style="margin-left: auto;"
-                          x-text="editMacros[m.key] ?? '—'"></span>
+                    <span class="macro-bar" :aria-label="`${editShare[m.key]}% of calories`"><i
+                      :style="`background: ${m.color}; width: ${editShare[m.key]}%`"></i></span>
+                    <span class="macro-val" x-text="editMacros[m.key] ?? '—'"></span>
                   </div>
                 </template>
               </div>
