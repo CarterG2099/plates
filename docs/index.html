@@ -1288,8 +1288,11 @@
                   <div class="macro">
                     <span class="dot" :style="`background: ${m.color}`"></span>
                     <span class="macro-name" x-text="m.name"></span>
-                    <span class="macro-val" style="margin-left: auto;"
-                          x-text="sheetMacros[m.key] ?? '—'"></span>
+                    <!-- Width is the share of this food's calories, not of the
+                         day's target: what kind of food it is, at a glance. -->
+                    <span class="macro-bar" :aria-label="`${sheetShare[m.key]}% of calories`"><i
+                      :style="`background: ${m.color}; width: ${sheetShare[m.key]}%`"></i></span>
+                    <span class="macro-val" x-text="sheetMacros[m.key] ?? '—'"></span>
                   </div>
                 </template>
               </div>

@@ -1214,6 +1214,26 @@ export function remainingAsFoods(remainingKcal, rankedFoods, limit = 2) {
 
 const numeric = (v) => (v === '' || v == null ? null : Number(v));
 
+/**
+ * How much of a food's energy each macro supplies, as whole percentages.
+ *
+ * Measured against the energy the three macros carry (4, 4 and 9 kcal a gram)
+ * rather than the label's calorie line: labels round, and fibre and alcohol
+ * sit in the label figure without being any of the three, so dividing by it
+ * gives bars that don't add up. These always do, give or take rounding.
+ */
+export function calorieShare({ protein_g, carbs_g, fat_g } = {}) {
+  const kcal = {
+    protein_g: (Number(protein_g) || 0) * 4,
+    carbs_g: (Number(carbs_g) || 0) * 4,
+    fat_g: (Number(fat_g) || 0) * 9,
+  };
+  const total = kcal.protein_g + kcal.carbs_g + kcal.fat_g;
+  const out = {};
+  for (const key of Object.keys(kcal)) out[key] = total ? Math.round((kcal[key] / total) * 100) : 0;
+  return out;
+}
+
 /** Calories implied by a macro split, for sanity-checking against the target. */
 export function caloriesFromMacros({ protein_target_g, carbs_target_g, fat_target_g }) {
   const p = Number(protein_target_g) || 0;
