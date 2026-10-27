@@ -1234,6 +1234,14 @@ export function calorieShare({ protein_g, carbs_g, fat_g } = {}) {
   return out;
 }
 
+/** Carter's bar for a high-protein food: 40% or more of its calories from protein. */
+export const HIGH_PROTEIN_SHARE = 40;
+
+/** Whether a food clears that bar, judged by the same share its protein bar draws. */
+export function isHighProtein(macros) {
+  return calorieShare(macros).protein_g >= HIGH_PROTEIN_SHARE;
+}
+
 /** Calories implied by a macro split, for sanity-checking against the target. */
 export function caloriesFromMacros({ protein_target_g, carbs_target_g, fat_target_g }) {
   const p = Number(protein_target_g) || 0;

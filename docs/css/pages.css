@@ -344,6 +344,20 @@ button.macro {
   color: var(--color-text-muted);
 }
 
+/* A label, not a button: the protein colour, no border to tap. */
+.tag-high-protein {
+  display: inline-block;
+  margin-top: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--color-protein);
+}
+
 .chip.is-active {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);

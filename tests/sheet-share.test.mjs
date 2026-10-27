@@ -52,3 +52,31 @@ test('each macro row in the amount sheet draws its share', async () => {
   const sheet = html.slice(html.indexOf('<!-- Quantity sheet'), html.indexOf('confirmSheet()'));
   assert.match(sheet, /<span class="macro-bar"[^>]*><i\s+:style="`background: \$\{m\.color\}; width: \$\{sheetShare\[m\.key\]\}%`"><\/i><\/span>/);
 });
+
+test('a food is high protein at 40% of its calories from protein, not below', () => {
+  assert.equal(food.isHighProtein(TURKEY), true);
+  // 10 g protein, 15 g carbs: 40 of 100 kcal.
+  assert.equal(food.isHighProtein({ protein_g: 10, carbs_g: 15, fat_g: 0 }), true);
+  // 10 g protein, 16 g carbs: 38%.
+  assert.equal(food.isHighProtein({ protein_g: 10, carbs_g: 16, fat_g: 0 }), false);
+  // Peanut butter: plenty of grams of protein, but fat carries the calories.
+  assert.equal(food.isHighProtein({ protein_g: 7, carbs_g: 7, fat_g: 16 }), false);
+  assert.equal(food.isHighProtein({}), false);
+});
+
+test('the amount sheet tags a high-protein food and leaves others alone', () => {
+  Alpine.store('auth').session = { user: { email: 'me@example.com' } };
+  const log = Alpine.reactive(components.logPage());
+  assert.equal(log.sheetHighProtein, false, 'closed');
+  log.openSheet(TURKEY);
+  assert.equal(log.sheetHighProtein, true);
+  log.closeSheet();
+  log.openSheet({ ...TURKEY, id: 'pb', name: 'Peanut butter', protein_g: 7, carbs_g: 7, fat_g: 16 });
+  assert.equal(log.sheetHighProtein, false);
+});
+
+test('the tag sits under the food\'s name in the amount sheet', async () => {
+  const html = await readFile(fileURLToPath(new URL('../docs/index.html', import.meta.url)), 'utf8');
+  const sheet = html.slice(html.indexOf('<!-- Quantity sheet'), html.indexOf('confirmSheet()'));
+  assert.match(sheet, /<span class="tag-high-protein" x-show="sheetHighProtein">High protein<\/span>/);
+});

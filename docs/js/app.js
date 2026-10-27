@@ -1768,6 +1768,7 @@ Alpine.data('logPage', () => ({
 
   /** Each macro's share of the food's calories, for the bars beside them. */
   get sheetShare() { return food.calorieShare(this.sheetMacros); },
+  get sheetHighProtein() { return food.isHighProtein(this.sheetMacros); },
 
   /** @param planned  true adds it to the day's plan instead of the day. */
   async confirmSheet(planned = false) {
