@@ -83,6 +83,16 @@ export function searchRecipes(recipes, term) {
   });
 }
 
+/**
+ * Your own recipes ahead of everyone else's, each group still by title. Yours
+ * includes one saved from someone else: saving copies it under your email.
+ */
+export function mineFirst(recipes, email) {
+  const me = (email ?? '').toLowerCase();
+  const mine = (r) => Boolean(me) && (r.created_by ?? '').toLowerCase() === me;
+  return [...recipes.filter(mine), ...recipes.filter((r) => !mine(r))];
+}
+
 /** The recipe's page in the other app — where nutrition gets added or fixed. */
 export function recipeUrl(recipe, { edit = false } = {}) {
   return `https://recipes.cartergividen.com/${edit ? 'edit' : 'recipe'}.html?id=${recipe.id}`;

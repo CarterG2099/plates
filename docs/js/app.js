@@ -1847,7 +1847,7 @@ Alpine.data('logPage', () => ({
     this.loadRecipes();
   },
 
-  get recipeRows() { return recipes.searchRecipes(this.recipeBook.list, this.term); },
+  get recipeRows() { return recipes.mineFirst(recipes.searchRecipes(this.recipeBook.list, this.term), this.email); },
   recipeHasNutrition(r) { return recipes.hasNutrition(r); },
   recipeEditUrl(r) { return recipes.recipeUrl(r, { edit: true }); },
   recipeMissing(r) { return recipes.missingMacros(r); },

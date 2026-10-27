@@ -111,3 +111,30 @@ test('logging a recipe draft stamps recipe_id onto the entry', async () => {
   assert.equal(entry.unit, 'serving');
   assert.equal(entry.description, "Grandma's Banana Bread · Recipe");
 });
+
+// ---- order ----------------------------------------------------------------------
+
+const BOOK = [
+  { id: 1, title: 'Apple Crisp', created_by: 'mgividen@gmail.com' },
+  { id: 2, title: 'Banana Bread', created_by: 'CGividen20@gmail.com' },   // saved from mom's
+  { id: 3, title: 'Chili', created_by: null },
+  { id: 4, title: 'Dal', created_by: 'cgividen20@gmail.com' },
+];
+
+test('mineFirst puts my recipes, saved ones included, ahead of the rest, each still by title', () => {
+  assert.deepEqual(recipes.mineFirst(BOOK, 'Cgividen20@Gmail.com').map((r) => r.id), [2, 4, 1, 3]);
+});
+
+test('mineFirst leaves the order alone when nobody is signed in', () => {
+  assert.deepEqual(recipes.mineFirst(BOOK, null).map((r) => r.id), [1, 2, 3, 4]);
+});
+
+test('the Recipes list on the add screen shows mine first, and a search keeps that order', async () => {
+  const { Alpine, components } = await import('./helpers/app.mjs').then((m) => m.loadApp());
+  Alpine.store('auth').session = { user: { email: 'cgividen20@gmail.com' } };
+  const log = Alpine.reactive(components.logPage());
+  log.recipeBook.list = BOOK;
+  assert.deepEqual(log.recipeRows.map((r) => r.id), [2, 4, 1, 3]);
+  log.term = 'a';   // every title but Chili
+  assert.deepEqual(log.recipeRows.map((r) => r.id), [2, 4, 1]);
+});
