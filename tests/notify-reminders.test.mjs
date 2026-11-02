@@ -172,6 +172,19 @@ test('the morning line for someone who has never trained', () => {
   assert.match(compose(s, { name: null, weight: null, reps: null, when: null }, () => 0), /today is a good day to start/);
 });
 
+// Any member gets these, not only Carter and Aana, so no line may name either.
+test('no morning line names a member', () => {
+  const s = { dayStreak: 3, weekStreak: 3, daysSince: 4, everTrained: true };
+  const last = { name: 'Squat', weight: 225, reps: 5, when: 'Monday' };
+  for (const roll of [0.1, 0.5, 0.9]) {
+    for (let i = 0; i < 100; i++) {
+      const values = [roll, i / 100];
+      const line = compose(s, last, () => values.shift());
+      assert.doesNotMatch(line, /Aana|Carter/, line);
+    }
+  }
+});
+
 test('morning streaks still count yesterday on the morning after', () => {
   const s = streaks(['2026-10-28T23:00:00Z', '2026-10-27T23:00:00Z'], '2026-10-29', d.ZONE);
   assert.equal(s.dayStreak, 2);

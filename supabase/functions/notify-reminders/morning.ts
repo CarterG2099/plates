@@ -155,7 +155,6 @@ const HOME = [
   "The strongest version of you is the one your family gets.",
   "Nobody at home needs you to be perfect. Consistent is plenty.",
   "Look after the body. There are people depending on it.",
-  "You and Aana are on the same routines. Go get yours.",
   "The habit you keep is the one the people around you copy.",
   "Thirty years from now, the training is why you can still keep up.",
   "An hour today buys a lot of hours later on.",

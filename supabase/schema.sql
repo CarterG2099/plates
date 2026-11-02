@@ -830,3 +830,22 @@ insert into plates.reminders (id, owner_email, kind, at_time, days, enabled)
   select gen_random_uuid(), m.email, 'evening', '20:30', '{0,1,2,3,4,5,6}', coalesce(p.evening_nudge, false)
   from plates.members m left join plates.notification_prefs p on p.owner_email = m.email
   on conflict do nothing;
+
+-- ---- the photo PIN hash is your own (added 2026-11-02) --------------------------
+-- members_read shows every member every member row, which is right for names and
+-- wrong for the hash: four digits fall to 10,000 guesses offline. Policies filter
+-- rows, not columns, so a column grant closes it, and my_photo_pin_hash() hands
+-- back only your own. Comes after the schema-wide grant above, which it narrows.
+revoke select on plates.members from authenticated, anon;
+grant select (email, display_name, weight_unit, is_admin, created_at, sex)
+  on plates.members to authenticated;
+
+create or replace function plates.my_photo_pin_hash()
+  returns table (email text, photo_pin_hash text)
+  language sql security definer stable set search_path = ''
+as $$
+  select m.email, m.photo_pin_hash from plates.members m
+  where plates.is_member() and lower(m.email) = lower(coalesce(auth.email(), ''));
+$$;
+revoke execute on function plates.my_photo_pin_hash() from public, anon;
+grant execute on function plates.my_photo_pin_hash() to authenticated;

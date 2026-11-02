@@ -90,15 +90,14 @@ test('the photo file inputs live outside the lock-gated markup', async () => {
     'the camera input hands off to the real camera app for full quality');
 });
 
-// The regression: loadMembership selects named columns, and photo_pin_hash was
-// not among them — the hash saved fine and never came back down, so every
-// session asked for a brand-new PIN.
-test('membership loads the PIN hash back down', async () => {
+// The hash comes down through my_photo_pin_hash() rather than the members list,
+// which every member can read — see membership.test.mjs for it arriving.
+test('the members list does not ask for anyone\'s PIN hash', async () => {
   const fs = await import('node:fs');
   const source = fs.readFileSync('docs/js/supabase.js', 'utf8');
   const select = source.match(/db\('members'\)\.select\('([^']+)'\)/)?.[1] ?? '';
-  assert.ok(select.includes('photo_pin_hash'),
-    `members select must carry photo_pin_hash, got: ${select}`);
+  assert.ok(select && !select.includes('photo_pin_hash'),
+    `members select must not carry photo_pin_hash, got: ${select}`);
 });
 
 // ---- the rows ------------------------------------------------------------------

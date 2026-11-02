@@ -48,18 +48,28 @@ export async function getSession() {
  * not being exposed, and that should say so instead of looking like a rejection.
  */
 export async function loadMembership() {
-  // photo_pin_hash rides along or the progress-photo lock asks for a brand-new
-  // PIN every session — the hash saved fine, it just never came back down.
-  const { data, error } = await db('members').select('email, display_name, weight_unit, is_admin, photo_pin_hash, sex');
+  const { data, error } = await db('members').select('email, display_name, weight_unit, is_admin, sex');
 
   if (error) {
     return { isMember: false, members: [], error };
   }
 
+  // The PIN hash comes separately, and only your own: the column is closed to
+  // the members list, where any member could read everyone's and try all
+  // 10,000 PINs. It must still come down, or the progress-photo lock asks for
+  // a brand-new PIN every session.
+  const { data: mine, error: pinError } = await supabase.schema('plates').rpc('my_photo_pin_hash');
+  if (pinError) {
+    return { isMember: false, members: [], error: pinError };
+  }
+  const own = mine?.[0];
+  const withPin = (data ?? []).map((m) =>
+    own && m.email?.toLowerCase() === own.email?.toLowerCase() ? { ...m, photo_pin_hash: own.photo_pin_hash } : m);
+
   // RLS returns only grants this account is party to. A failure here leaves
   // `sharing` unset, which partnerOf() treats as the old any-other-member rule.
   const { data: grants, error: grantsError } = await db('share_grants').select('grantor_email, grantee_email');
-  const members = grantsError ? (data ?? []) : markSharing(data ?? [], grants ?? []);
+  const members = grantsError ? withPin : markSharing(withPin, grants ?? []);
 
   return { isMember: (data?.length ?? 0) > 0, members, error: null };
 }
