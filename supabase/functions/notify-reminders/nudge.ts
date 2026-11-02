@@ -1,5 +1,5 @@
 // Whether tonight's day deserves a nudge, as a pure function so the test can
-// try every case without a database (see tests/notify-evening.test.mjs).
+// try every case without a database (see tests/notify-reminders.test.mjs).
 
 /**
  * The fraction of the calorie target below which a day at 8:30pm looks

@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v198';
+const CACHE_VERSION = 'plates-v199';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -62,6 +62,7 @@ const SHELL = [
   '/js/import-hevy.js',
   '/js/stats.js',
   '/js/push.js',
+  '/js/reminders.js',
   '/js/watch.js',
   '/js/recipes.js',
   '/js/vendor/alpine.esm.js',
@@ -231,13 +232,30 @@ self.addEventListener('push', (event) => {
     // the same session does not become two things to dismiss.
     tag: data.tag || 'plates',
     renotify: true,
-    data: { url: '/#train' },
+    // A meds reminder's Taken button. The token in `taken` is the only
+    // authority the button carries: the worker has no sign-in to send.
+    actions: Array.isArray(data.actions) ? data.actions : [],
+    data: { url: data.url || '/#train', taken: data.taken ?? null },
   }));
 });
 
 /** Focus the tab that is already open rather than opening a second one. */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+
+  // Taken is answered here, without opening the app.
+  const taken = event.notification.data?.taken;
+  if (event.action === 'taken' && taken?.url && taken?.token) {
+    event.waitUntil(fetch(taken.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: taken.token }),
+    }).then((r) => { if (!r.ok) throw new Error(String(r.status)); })
+      // Not recorded, so open the app, where the same reminder has a button.
+      .catch(() => self.clients.openWindow('/#today')));
+    return;
+  }
+
   const target = event.notification.data?.url || '/';
 
   event.waitUntil((async () => {

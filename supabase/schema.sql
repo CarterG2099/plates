@@ -706,3 +706,127 @@ create table if not exists plates.watch_pairings (
 alter table plates.watch_pairings enable row level security;
 revoke all on plates.watch_pairings from anon, authenticated;
 create index if not exists watch_pairings_code_hash on plates.watch_pairings (code_hash);
+
+-- ---- reminders (added 2026-10-31) ------------------------------------------------
+-- Each member's own push reminders: food ("log lunch"), meds, and the morning
+-- and evening ones that used to be fixed-time switches in notification_prefs.
+-- One cron job (plates-reminders, every minute) calls notify-reminders, which
+-- sends whatever is due in Denver time — so the DST pairs the old jobs needed
+-- are gone. Private to the owner: Aana does not see Carter's meds or he hers.
+--
+-- days uses JS's numbering, 0 = Sunday. quiet_if_logged_min is food only: stay
+-- silent when something was logged that many minutes before the reminder,
+-- 0 = always fire. morning and evening are one each per member, made by
+-- ensure_default_reminders(), and can be moved or switched off but not deleted.
+create table if not exists plates.reminders (
+  id                  uuid primary key,
+  owner_email         text not null default auth.email(),
+  kind                text not null check (kind in ('food', 'meds', 'morning', 'evening')),
+  label               text not null default '' check (char_length(label) <= 60),
+  at_time             time not null,
+  days                smallint[] not null default '{0,1,2,3,4,5,6}'
+                        check (days <@ '{0,1,2,3,4,5,6}'::smallint[]),
+  quiet_if_logged_min smallint check (quiet_if_logged_min between 0 and 720),
+  enabled             boolean not null default true,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  deleted_at          timestamptz
+);
+create unique index if not exists reminders_one_fixed_kind
+  on plates.reminders (owner_email, kind) where kind in ('morning', 'evening');
+alter table plates.reminders enable row level security;
+-- Members add food and meds reminders; the fixed two come from
+-- ensure_default_reminders(). Any of their own can be edited, and only kind is
+-- off limits (column grant). Deleting is soft, and not for the fixed two.
+drop policy if exists reminders_read on plates.reminders;
+drop policy if exists reminders_add on plates.reminders;
+drop policy if exists reminders_edit on plates.reminders;
+create policy reminders_read on plates.reminders for select
+  using (plates.is_member() and owner_email = auth.email());
+create policy reminders_add on plates.reminders for insert
+  with check (plates.is_member() and owner_email = auth.email() and kind in ('food', 'meds'));
+create policy reminders_edit on plates.reminders for update
+  using (plates.is_member() and owner_email = auth.email())
+  with check (plates.is_member() and owner_email = auth.email()
+              and (deleted_at is null or kind in ('food', 'meds')));
+revoke all on plates.reminders from anon, authenticated;
+grant select, insert on plates.reminders to authenticated;
+grant update (label, at_time, days, quiet_if_logged_min, enabled, updated_at, deleted_at)
+  on plates.reminders to authenticated;
+
+-- What was sent, per reminder per local day, and for meds when it was taken —
+-- which makes this the meds log. Written by notify-reminders (service role);
+-- members read their own and mark taken through set_reminder_taken(). token_hash
+-- lets the notification's Taken button work without a sign-in: the push
+-- carries the token, reminder-taken hashes it and finds the row.
+create table if not exists plates.reminder_sends (
+  reminder_id   uuid not null references plates.reminders (id) on delete cascade,
+  owner_email   text not null,
+  local_date    date not null,
+  sends         smallint not null default 0,
+  first_sent_at timestamptz,
+  last_sent_at  timestamptz,
+  skipped       boolean not null default false,
+  taken_at      timestamptz,
+  token_hash    text,
+  primary key (reminder_id, local_date)
+);
+create index if not exists reminder_sends_token on plates.reminder_sends (token_hash);
+alter table plates.reminder_sends enable row level security;
+drop policy if exists reminder_sends_read on plates.reminder_sends;
+create policy reminder_sends_read on plates.reminder_sends for select
+  using (plates.is_member() and owner_email = auth.email());
+revoke all on plates.reminder_sends from anon, authenticated;
+grant select on plates.reminder_sends to authenticated;
+
+-- Taken (or not, for a mis-tap) today, from the app. Also before the reminder
+-- went off: an early dose leaves a row with sends = 0 and taken_at set, which
+-- the function reads as nothing left to send.
+create or replace function plates.set_reminder_taken(p_reminder uuid, p_day date, p_taken boolean)
+  returns timestamptz
+  language plpgsql security definer set search_path = ''
+as $$
+declare
+  stamp timestamptz := case when p_taken then now() end;
+begin
+  if not plates.is_member() or not exists (
+    select 1 from plates.reminders
+    where id = p_reminder and owner_email = auth.email() and kind = 'meds'
+  ) then
+    raise exception 'not your reminder';
+  end if;
+  insert into plates.reminder_sends (reminder_id, owner_email, local_date, taken_at)
+    values (p_reminder, auth.email(), p_day, stamp)
+    on conflict (reminder_id, local_date) do update set taken_at = stamp;
+  return stamp;
+end;
+$$;
+revoke execute on function plates.set_reminder_taken(uuid, date, boolean) from public, anon;
+grant execute on function plates.set_reminder_taken(uuid, date, boolean) to authenticated;
+
+-- The morning and evening reminders, made on first open for anyone without
+-- them. Morning keeps its old shape: 6:30, no Sunday.
+create or replace function plates.ensure_default_reminders()
+  returns void
+  language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not plates.is_member() then return; end if;
+  insert into plates.reminders (id, owner_email, kind, at_time, days, enabled)
+    values (gen_random_uuid(), auth.email(), 'morning', '06:30', '{1,2,3,4,5,6}', false),
+           (gen_random_uuid(), auth.email(), 'evening', '20:30', '{0,1,2,3,4,5,6}', false)
+    on conflict do nothing;
+end;
+$$;
+revoke execute on function plates.ensure_default_reminders() from public, anon;
+grant execute on function plates.ensure_default_reminders() to authenticated;
+
+-- Existing members carry their old switches over.
+insert into plates.reminders (id, owner_email, kind, at_time, days, enabled)
+  select gen_random_uuid(), m.email, 'morning', '06:30', '{1,2,3,4,5,6}', coalesce(p.morning_quotes, false)
+  from plates.members m left join plates.notification_prefs p on p.owner_email = m.email
+  on conflict do nothing;
+insert into plates.reminders (id, owner_email, kind, at_time, days, enabled)
+  select gen_random_uuid(), m.email, 'evening', '20:30', '{0,1,2,3,4,5,6}', coalesce(p.evening_nudge, false)
+  from plates.members m left join plates.notification_prefs p on p.owner_email = m.email
+  on conflict do nothing;

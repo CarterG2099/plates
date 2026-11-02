@@ -80,7 +80,9 @@ test('create needs a signed-in member and retires the old code', async () => {
 
 test('the pairing table is closed to the API', async () => {
   const schema = await source('../supabase/schema.sql');
-  const block = schema.slice(schema.indexOf('create table if not exists plates.watch_pairings'));
+  const start = schema.indexOf('create table if not exists plates.watch_pairings');
+  const end = schema.indexOf('\n-- ---- ', start);
+  const block = schema.slice(start, end === -1 ? undefined : end);
   assert.match(block, /alter table plates\.watch_pairings enable row level security/);
   assert.match(block, /revoke all on plates\.watch_pairings from anon, authenticated/);
   assert.doesNotMatch(block, /create policy/, 'no policy: only the service role reads it');

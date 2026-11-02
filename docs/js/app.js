@@ -24,6 +24,7 @@ import * as motion from './motion.js';
 import { backStack, topBackdrop } from './back.js';
 import * as stats from './stats.js';
 import * as push from './push.js';
+import * as reminders from './reminders.js';
 import * as watch from './watch.js';
 
 /** Exactly, so a round-trip through miles does not drift the stored metres. */
@@ -882,8 +883,8 @@ Alpine.store('ui', {
   // Two separate things, and the sheet keeps them separate. Notifications is
   // whether this browser has a push subscription at all — permission lives in
   // the browser, not the database, and cannot be re-requested once denied.
-  // Morning motivation is a row in Postgres that an Edge Function reads at
-  // 6:30, and it is meaningless while the first is off.
+  // Reminders are rows in Postgres that an Edge Function reads every minute,
+  // and they are meaningless while the first is off.
 
   settingsOpen: false,
   notifications: 'unknown',   // unknown | unsupported | off | on | blocked
@@ -894,6 +895,7 @@ Alpine.store('ui', {
     this.settingsOpen = true;
     this.watchCode = null;
     this.loadSettings();
+    this.loadReminders();
   },
 
   async loadSettings() {
@@ -928,33 +930,109 @@ Alpine.store('ui', {
     }
   },
 
-  async toggleMorning() {
-    const next = !this.prefs.morning_quotes;
-    this.prefs = { ...this.prefs, morning_quotes: next };   // optimistic
-    this.prefsBusy = true;
+  // ---- reminders -------------------------------------------------------------
+  //
+  // The list is this person's own; reminderDraft is the one open in the
+  // reminder sheet, a copy, so Cancel leaves the list as it was.
+
+  reminderList: [],
+  reminderToday: {},          // reminder id → today's send row (sends, taken_at)
+  reminderDraft: null,
+  reminderBusy: false,
+  reminderError: '',
+
+  async loadReminders() {
     try {
-      this.prefs = await push.savePrefs(Alpine.store('auth').email, { morning_quotes: next });
-      this.flash(next ? 'Morning motivation on' : 'Morning motivation off');
+      this.reminderList = await reminders.load();
+      this.reminderToday = await reminders.loadToday();
+      this.reminderError = '';
     } catch (e) {
-      this.prefs = { ...this.prefs, morning_quotes: !next };  // put it back
-      this.flash(describeError(e));
-    } finally {
-      this.prefsBusy = false;
+      this.reminderError = describeError(e);
     }
   },
 
-  async toggleEvening() {
-    const next = !this.prefs.evening_nudge;
-    this.prefs = { ...this.prefs, evening_nudge: next };   // optimistic
-    this.prefsBusy = true;
+  reminderTitle(r) { return reminders.title(r); },
+  reminderDetail(r) { return reminders.detail(r); },
+  dayNames: reminders.DAY_NAMES,
+
+  /** "Taken 8:02am", for a med marked today, or ''. */
+  takenLabel(r) {
+    const at = this.reminderToday[r.id]?.taken_at;
+    if (!at) return '';
+    const d = new Date(at);
+    return `Taken ${reminders.timeLabel(`${d.getHours()}:${d.getMinutes()}`)}`;
+  },
+
+  newReminder(kind) {
+    this.reminderDraft = reminders.blank(kind);
+    this.reminderError = '';
+  },
+
+  editReminder(r) {
+    this.reminderDraft = { ...r, at_time: String(r.at_time).slice(0, 5), days: [...r.days] };
+    this.reminderError = '';
+  },
+
+  toggleReminderDay(day) {
+    const days = this.reminderDraft.days;
+    this.reminderDraft.days = days.includes(day) ? days.filter((d) => d !== day) : [...days, day];
+  },
+
+  get reminderProblem() { return this.reminderDraft ? reminders.problem(this.reminderDraft) : ''; },
+
+  async saveReminder() {
+    if (this.reminderProblem) return;
+    this.reminderBusy = true;
     try {
-      this.prefs = await push.savePrefs(Alpine.store('auth').email, { evening_nudge: next });
-      this.flash(next ? 'Evening check-in on' : 'Evening check-in off');
+      const saved = await reminders.save(this.reminderDraft);
+      this.reminderList = reminders.sorted([...this.reminderList.filter((r) => r.id !== saved.id), saved]);
+      this.reminderDraft = null;
+      this.flash('Reminder saved');
     } catch (e) {
-      this.prefs = { ...this.prefs, evening_nudge: !next };  // put it back
-      this.flash(describeError(e));
+      this.reminderError = describeError(e);
     } finally {
-      this.prefsBusy = false;
+      this.reminderBusy = false;
+    }
+  },
+
+  /** The switch on a row: saves straight away, and puts it back on failure. */
+  async toggleReminder(r) {
+    const next = !r.enabled;
+    this.reminderList = this.reminderList.map((x) => (x.id === r.id ? { ...x, enabled: next } : x));
+    try {
+      await reminders.save({ ...r, enabled: next });
+      this.flash(`${reminders.title(r)} ${next ? 'on' : 'off'}`);
+    } catch (e) {
+      this.reminderList = this.reminderList.map((x) => (x.id === r.id ? { ...x, enabled: !next } : x));
+      this.flash(describeError(e));
+    }
+  },
+
+  async deleteReminder() {
+    const { id } = this.reminderDraft;
+    this.reminderBusy = true;
+    try {
+      await reminders.remove(id);
+      this.reminderList = this.reminderList.filter((r) => r.id !== id);
+      this.reminderDraft = null;
+      this.flash('Reminder deleted');
+    } catch (e) {
+      this.reminderError = describeError(e);
+    } finally {
+      this.reminderBusy = false;
+    }
+  },
+
+  /** Taken today, from the list — for a dose taken without the notification. */
+  async toggleTaken(r) {
+    const was = this.reminderToday[r.id] ?? null;
+    const taking = !was?.taken_at;
+    try {
+      const at = await reminders.setTaken(r.id, taking);
+      this.reminderToday = { ...this.reminderToday, [r.id]: { ...was, taken_at: at } };
+      this.flash(taking ? `${reminders.title(r)} taken` : 'Unmarked');
+    } catch (e) {
+      this.flash(describeError(e));
     }
   },
 
