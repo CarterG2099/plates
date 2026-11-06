@@ -2,11 +2,11 @@
 // plumbing so tests can import the same source Deno runs (see
 // tests/plan-week.test.mjs).
 
-export const MEALS = ["breakfast", "lunch", "dinner", "snack"] as const;
-type Meal = typeof MEALS[number];
+/** Recipes cooked in one Sunday session. */
+export const MAX_BATCHES = 2;
 
-/** Per slot, so a week can't be asked for a hundred lunches. */
-export const MAX_PER_MEAL = 14;
+/** Portions one week's prep can be asked for. */
+export const MAX_PORTIONS = 42;
 
 /** Recipes per ingredients request: a week's worth with room for swaps. */
 export const MAX_RECIPES = 30;
@@ -23,20 +23,19 @@ export const UNITS = [
 export const PLAN_SCHEMA = {
   type: "OBJECT",
   properties: {
-    meals: {
+    picks: {
       type: "ARRAY",
       items: {
         type: "OBJECT",
         properties: {
-          meal: { type: "STRING", enum: [...MEALS] },
           recipe_id: { type: "INTEGER" },
           reason: { type: "STRING" },
         },
-        required: ["meal", "recipe_id", "reason"],
+        required: ["recipe_id", "reason"],
       },
     },
   },
-  required: ["meals"],
+  required: ["picks"],
 };
 
 export const INGREDIENTS_SCHEMA = {
@@ -69,15 +68,11 @@ export const INGREDIENTS_SCHEMA = {
   required: ["recipes"],
 };
 
-/** How many of each meal, as whole numbers in range; zeros dropped. */
-export function cleanCounts(value: unknown): Partial<Record<Meal, number>> {
-  const counts: Partial<Record<Meal, number>> = {};
-  const raw = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
-  for (const meal of MEALS) {
-    const n = Math.round(Number(raw[meal]));
-    if (n > 0) counts[meal] = Math.min(n, MAX_PER_MEAL);
-  }
-  return counts;
+/** The prep being asked for: how many recipes, how many portions, which to leave out. */
+export function cleanPrepRequest(body: Record<string, unknown> | null) {
+  const batches = Math.min(MAX_BATCHES, Math.max(1, Math.round(Number(body?.batches)) || 1));
+  const portions = Math.min(MAX_PORTIONS, Math.max(1, Math.round(Number(body?.portions)) || 10));
+  return { batches, portions, exclude: cleanRecipeIds(body?.exclude) };
 }
 
 /** Recipe ids as positive integers, deduplicated and capped. */
@@ -103,16 +98,13 @@ export interface Goal {
   protein_target_g: number | null;
 }
 
-const describeCounts = (counts: Partial<Record<Meal, number>>) =>
-  MEALS.filter((m) => counts[m]).map((m) => `${counts[m]} × ${m}`).join(", ");
-
 /**
- * The planning prompt. The recipes go in as data, one JSON object a line, and
- * the model answers with ids only — titles it can misspell, ids it cannot
- * invent past the check in cleanPlan.
+ * The suggestion prompt. The recipes go in as data, one JSON object a line,
+ * and the model answers with ids only — titles it can misspell, ids it cannot
+ * invent past the check in cleanPicks.
  */
 export function planPrompt(
-  counts: Partial<Record<Meal, number>>,
+  request: { batches: number; portions: number; exclude: number[] },
   recipes: RecipeSummary[],
   goal: Goal | null,
   recent: string[],
@@ -125,50 +117,48 @@ export function planPrompt(
   const ate = recent.length
     ? `Eaten often in the last two weeks (vary away from these): ${recent.join("; ")}.\n`
     : "";
+  const skip = request.exclude.length
+    ? `Do not pick these ids, they are already chosen or turned down: ${request.exclude.join(", ")}.\n`
+    : "";
 
-  return "You are planning a household's meals for one week, choosing only from " +
-    "their own recipe collection below.\n\n" +
-    `Fill exactly these slots: ${describeCounts(counts)}.\n\n` +
+  return "A household cooks once on Sunday and eats it all week: dinners for two, " +
+    "sometimes lunches. Breakfast-for-dinner counts as dinner.\n\n" +
+    `Pick ${request.batches} recipe${request.batches === 1 ? "" : "s"} from their ` +
+    `collection below to batch-cook ${request.portions} portions in total.\n\n` +
     "Rules:\n" +
     "- Use only recipe ids from the list. Never invent a recipe.\n" +
+    "- Only real meals. Not dressings, sauces, dips, sides, desserts, snacks, " +
+    "drinks, baking, or anything that isn't food. Judge by title and tags.\n" +
+    "- It must keep well in the fridge for several days and reheat or eat cold.\n" +
     "- Prefer recipes with \"mine\": true — those are the household's own.\n" +
-    "- Fit the slot: breakfast-like recipes for breakfast, mains for lunch and " +
-    "dinner, small things for snacks. Judge by title and tags.\n" +
-    "- Don't repeat a recipe within the week unless there are fewer suitable " +
-    "recipes than slots; then spread the repeats out.\n" +
-    target + ate +
-    "- reason is one short sentence on why this pick, e.g. \"High protein, and " +
-    "you haven't had it this fortnight.\"\n\n" +
-    "Return ONLY JSON: {\"meals\": [{\"meal\": slot, \"recipe_id\": number, " +
-    "\"reason\": string}]}, one entry per slot filled.\n\n" +
+    "- With two picks, make them different from each other.\n" +
+    skip + target + ate +
+    "- reason is one short sentence on why it suits this week's prep.\n\n" +
+    "Return ONLY JSON: {\"picks\": [{\"recipe_id\": number, \"reason\": string}]}.\n\n" +
     "Recipes (per serving):\n" +
     recipes.map((r) => JSON.stringify(r)).join("\n");
 }
 
 /**
- * The model's plan, kept to what was asked: known recipe ids, requested slots,
- * no more of each than requested. In meal order.
+ * The model's picks, kept to what was asked: known recipe ids, none excluded,
+ * no repeats, no more than requested.
  */
-export function cleanPlan(
+export function cleanPicks(
   parsed: unknown,
-  counts: Partial<Record<Meal, number>>,
+  request: { batches: number; exclude: number[] },
   recipeIds: Set<number>,
-): Array<{ meal: Meal; recipe_id: number; reason: string }> {
-  const raw = (parsed as { meals?: unknown })?.meals;
-  const meals = Array.isArray(raw) ? raw : [];
-  const used: Partial<Record<Meal, number>> = {};
-  const out: Array<{ meal: Meal; recipe_id: number; reason: string }> = [];
-
-  for (const m of meals as Array<Record<string, unknown>>) {
-    const meal = m?.meal as Meal;
-    const id = Number(m?.recipe_id);
-    if (!MEALS.includes(meal) || !recipeIds.has(id)) continue;
-    if ((used[meal] ?? 0) >= (counts[meal] ?? 0)) continue;
-    used[meal] = (used[meal] ?? 0) + 1;
-    out.push({ meal, recipe_id: id, reason: String(m?.reason ?? "").trim().slice(0, 200) });
+): Array<{ recipe_id: number; reason: string }> {
+  const raw = (parsed as { picks?: unknown })?.picks;
+  const out: Array<{ recipe_id: number; reason: string }> = [];
+  const seen = new Set(request.exclude);
+  for (const p of (Array.isArray(raw) ? raw : []) as Array<Record<string, unknown>>) {
+    const id = Number(p?.recipe_id);
+    if (!recipeIds.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ recipe_id: id, reason: String(p?.reason ?? "").trim().slice(0, 200) });
+    if (out.length >= request.batches) break;
   }
-
-  return out.sort((a, b) => MEALS.indexOf(a.meal) - MEALS.indexOf(b.meal));
+  return out;
 }
 
 /** The ingredients prompt: each recipe's lines, verbatim, to be read not rewritten. */

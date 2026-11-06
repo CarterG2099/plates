@@ -2257,139 +2257,200 @@
       </main>
       </template>
 
-      <!-- Plan: the household's week, its shopping list, and the Walmart cart.
-           x-if like Stats, so its getters only run while it is open. -->
+      <!-- Plan: Sunday meal prep — pick the batch, shop for it, eat it down
+           through the week. x-if like Stats, so its getters only run while it
+           is open. -->
       <template x-if="$store.ui.view === 'plan'">
       <main class="app-main" x-data="planPage">
 
-        <!-- Making a week: how many of each meal, then a draft to edit. -->
-        <div class="card" x-show="!draft">
-          <div class="card-label" x-text="plan ? 'New week' : 'Plan your week'"></div>
-          <template x-for="meal in mealNames" :key="meal">
-            <div class="plan-count">
-              <span class="plan-count-name" x-text="meal"></span>
-              <button class="chip" @click="step(meal, -1)" :disabled="!counts[meal]"
-                      :aria-label="`One fewer ${meal}`">−</button>
-              <span class="plan-count-n" x-text="counts[meal]"></span>
-              <button class="chip" @click="step(meal, 1)" :aria-label="`One more ${meal}`">+</button>
+        <!-- Choosing: portions, then one or two recipes to cook. -->
+        <template x-if="mode === 'prep'">
+          <div class="plan-stack">
+            <section class="card" aria-label="Portions to cook">
+              <div class="readout-head">
+                <div>
+                  <div class="readout-total" x-text="portions"></div>
+                  <div class="readout-of">portions to cook</div>
+                </div>
+                <div class="plan-breakdown" x-text="portionsBreakdown"></div>
+              </div>
+              <div class="plan-steppers">
+                <div class="plan-count">
+                  <span class="plan-count-name">Dinners</span>
+                  <button class="chip" @click="stepDinners(-1)" aria-label="Fewer dinners">−</button>
+                  <span class="plan-count-n" x-text="dinners"></span>
+                  <button class="chip" @click="stepDinners(1)" aria-label="More dinners">+</button>
+                </div>
+                <div class="plan-count">
+                  <span class="plan-count-name">Lunches too</span>
+                  <button class="chip" @click="stepLunches(-1)" aria-label="Fewer lunches">−</button>
+                  <span class="plan-count-n" x-text="lunches"></span>
+                  <button class="chip" @click="stepLunches(1)" aria-label="More lunches">+</button>
+                </div>
+                <small class="plan-hint" x-text="people > 1 ? 'For both of you · breakfast-for-dinner counts' : 'Breakfast-for-dinner counts'"></small>
+              </div>
+            </section>
+
+            <div class="plan-head">
+              <span class="card-label">Cooking this Sunday</span>
+              <div class="plan-seg" role="group" aria-label="How many recipes">
+                <button :class="count === 1 && 'is-active'" @click="setCount(1)">1 recipe</button>
+                <button :class="count === 2 && 'is-active'" @click="setCount(2)">2 recipes</button>
+              </div>
             </div>
-          </template>
-          <div class="plan-count">
-            <span class="plan-count-name">Servings each</span>
-            <button class="chip" @click="servings = Math.max(1, servings - 1)" aria-label="Fewer servings">−</button>
-            <span class="plan-count-n" x-text="servings"></span>
-            <button class="chip" @click="servings = Math.min(12, servings + 1)" aria-label="More servings">+</button>
+
+            <template x-for="(b, i) in batches" :key="b.recipe_id">
+              <article class="card plan-batch">
+                <div class="plan-batch-head">
+                  <div class="plan-batch-title">
+                    <h2 x-text="b.title"></h2>
+                    <div class="plan-tags">
+                      <span class="plan-tag" x-show="isMine(b)">Yours</span>
+                      <span class="tag-high-protein" x-show="isHighProtein(b)">High protein</span>
+                    </div>
+                  </div>
+                  <div class="plan-batch-n">
+                    <b x-text="b.portions"></b>
+                    <small>portions</small>
+                  </div>
+                </div>
+                <div class="plan-scale" x-text="scaleLine(b)"></div>
+                <template x-if="hasMacros(b)">
+                  <div class="plan-macros">
+                    <div class="plan-macro-line">
+                      <span x-text="`${Math.round(b.calories)} kcal / portion`"></span>
+                      <span x-text="macroLine(b)"></span>
+                    </div>
+                    <div class="plan-macro-bar" aria-hidden="true">
+                      <i class="is-protein" :style="`flex: ${share(b).protein_g} 1 0`"></i>
+                      <i class="is-carbs" :style="`flex: ${share(b).carbs_g} 1 0`"></i>
+                      <i class="is-fat" :style="`flex: ${share(b).fat_g} 1 0`"></i>
+                    </div>
+                  </div>
+                </template>
+                <small class="plan-hint" x-show="!hasMacros(b)">No nutrition on this recipe yet</small>
+                <small class="plan-reason" x-show="b.reason" x-text="b.reason"></small>
+                <div class="plan-batch-foot">
+                  <button class="btn" @click="openSwap(i)" :disabled="busy">Swap</button>
+                </div>
+              </article>
+            </template>
+
+            <p class="empty" x-show="busy === 'suggesting'">Finding recipes…</p>
+            <p class="notice notice-error" x-show="error" x-text="error"></p>
+            <button class="btn btn-block" x-show="!busy && batches.length < count" @click="suggest()">Suggest recipes</button>
+
+            <button class="btn btn-primary btn-block" @click="makeList()"
+                    :disabled="busy || !batches.length"
+                    x-text="busy === 'saving' ? 'Making the list…' : `Shopping list · ${portions} portions`"></button>
+            <button class="btn btn-block" x-show="planning" @click="cancelPlanning()" :disabled="busy">Back to this week</button>
           </div>
-          <button class="btn btn-primary btn-block" @click="makeDraft()"
-                  :disabled="busy || !slotCount"
-                  x-text="busy === 'planning' ? 'Planning…' : 'Plan meals'"></button>
-        </div>
+        </template>
 
-        <div class="card" x-show="draft">
-          <div class="card-label">Draft — nothing saved yet</div>
-          <template x-for="(m, i) in draft || []" :key="i">
-            <div class="plan-meal">
-              <div class="plan-meal-head">
-                <span class="plan-meal-slot" x-text="m.meal"></span>
-                <b x-text="titleOf(m.recipe_id)"></b>
-              </div>
-              <small class="plan-meal-why" x-text="m.reason"></small>
-              <div class="chips">
-                <button class="chip" @click="stepServings(i, -1)" aria-label="Fewer servings">−</button>
-                <span class="plan-count-n" x-text="`${m.servings} serving${m.servings === 1 ? '' : 's'}`"></span>
-                <button class="chip" @click="stepServings(i, 1)" aria-label="More servings">+</button>
-                <select class="chip" aria-label="Swap for another recipe"
-                        @change="swap(i, $event.target.value); $event.target.value = ''">
-                  <option value="">Swap…</option>
-                  <template x-for="r in recipeList" :key="r.id">
-                    <option :value="r.id" x-text="r.title"></option>
-                  </template>
-                </select>
-                <button class="chip" @click="removeMeal(i)">Remove</button>
-              </div>
+        <!-- The shopping list: tick what you have, the rest goes to Walmart. -->
+        <template x-if="mode === 'list'">
+          <div class="plan-stack">
+            <div class="plan-bar">
+              <button class="tap" @click="showList = false" aria-label="Back to the week">‹</button>
+              <span class="card-label">Shopping list</span>
             </div>
-          </template>
-          <p class="empty" x-show="draft && !draft.length">No meals left in this draft.</p>
-          <button class="btn btn-primary btn-block" @click="accept()"
-                  :disabled="busy || !(draft && draft.length)"
-                  x-text="busy === 'accepting' ? 'Making the list…' : 'Use this week'"></button>
-          <button class="btn btn-block" @click="discardDraft()" :disabled="busy">Discard</button>
-        </div>
-
-        <p class="notice notice-error" x-show="error" x-text="error"></p>
-
-        <!-- The accepted week. -->
-        <template x-if="plan && !draft">
-          <div>
-            <div class="card">
-              <div class="card-label">This week</div>
-              <template x-for="(m, i) in plan.meals" :key="i">
-                <div class="plan-meal-head">
-                  <span class="plan-meal-slot" x-text="m.meal"></span>
-                  <span x-text="m.title"></span>
-                  <small x-text="`× ${m.servings}`"></small>
+            <section class="card">
+              <div class="readout-head">
+                <div>
+                  <div class="readout-total" x-text="toBuyCount"></div>
+                  <div class="readout-of">to buy</div>
                 </div>
-              </template>
-            </div>
+                <div class="plan-breakdown" x-text="plan.meals.map((b) => b.title).join('\n') + (haveCount ? `\n${haveCount} already have` : '')"></div>
+              </div>
+            </section>
+            <small class="plan-hint">Tick what you already have. The rest goes in the cart.</small>
 
-            <div class="card">
-              <div class="card-label">Shopping list</div>
-
-              <a class="btn btn-primary btn-block" x-show="cart.url" :href="cart.url"
-                 target="_blank" rel="noopener"
-                 x-text="`Add ${cart.count} item${cart.count === 1 ? '' : 's'} to Walmart cart`"></a>
-              <p class="setting-meta" x-show="cart.skipped.length"
-                 x-text="`Not in the cart: ${cart.skipped.join(', ')}`"></p>
-
-              <template x-for="item in toBuy" :key="item.id">
-                <div class="setting plan-item">
+            <div class="plan-list">
+              <template x-for="item in items" :key="item.id">
+                <div class="plan-item" :class="{ 'is-had': item.have, 'is-unmapped': !item.have && !usualOf(item) }">
                   <input type="checkbox" :checked="item.have" @change="toggleHave(item)"
-                         :aria-label="`Have ${item.label}`">
-                  <button class="setting-text" @click="openUsual(item)">
-                    <b x-text="item.label"></b>
-                    <small x-text="[amount(item), usualOf(item).label + (usualOf(item).default_qty > 1 ? ` × ${usualOf(item).default_qty}` : '')].filter(Boolean).join(' · ')"></small>
-                  </button>
-                </div>
-              </template>
-
-              <div class="card-label plan-sub" x-show="unmapped.length">Needs a Walmart product</div>
-              <template x-for="item in unmapped" :key="item.id">
-                <div class="setting plan-item is-unmapped">
-                  <input type="checkbox" :checked="item.have" @change="toggleHave(item)"
-                         :aria-label="`Have ${item.label}`">
-                  <button class="setting-text" @click="openUsual(item)">
-                    <b x-text="item.label"></b>
-                    <small x-text="[amount(item), 'tap to paste a Walmart link'].filter(Boolean).join(' · ')"></small>
-                  </button>
-                </div>
-              </template>
-
-              <div class="card-label plan-sub" x-show="had.length">Already have</div>
-              <template x-for="item in had" :key="item.id">
-                <div class="setting plan-item is-had">
-                  <input type="checkbox" :checked="item.have" @change="toggleHave(item)"
-                         :aria-label="`Have ${item.label}`">
-                  <span class="setting-text">
+                         :aria-label="`Already have ${item.label}`">
+                  <span class="plan-item-text">
                     <b x-text="item.label"></b>
                     <small x-text="amount(item)"></small>
                   </span>
+                  <button class="plan-item-tag" @click="openUsual(item)" :disabled="item.have"
+                          x-text="productTag(item)"
+                          :aria-label="usualOf(item) ? `Change the Walmart product for ${item.label}` : `Add a Walmart product for ${item.label}`"></button>
                 </div>
               </template>
               <p class="empty" x-show="!items.length">These recipes have no ingredients listed.</p>
             </div>
+
+            <p class="plan-skipped" x-show="cart.skipped.length"
+               x-text="`Not in the cart, no product yet: ${cart.skipped.join(', ')}. Tap one to paste a Walmart link.`"></p>
+            <a class="btn btn-primary btn-block" x-show="cart.url" :href="cart.url" target="_blank" rel="noopener"
+               x-text="`Add ${cart.count} to Walmart cart`"></a>
           </div>
         </template>
 
-        <!-- Every mapping, to change a brand or drop one. -->
-        <div class="card" x-show="usuals.length">
-          <div class="card-label">Walmart usuals</div>
-          <template x-for="u in usuals" :key="u.id">
-            <button class="setting setting-text plan-usual" @click="openUsualRow(u)">
-              <b x-text="u.ingredient_key"></b>
-              <small x-text="`${u.label || 'Item ' + u.walmart_item_id} × ${u.default_qty}`"></small>
-            </button>
-          </template>
-        </div>
+        <!-- The week as it goes: portions left, one tap to log one. -->
+        <template x-if="mode === 'week'">
+          <div class="plan-stack">
+            <section class="card" aria-label="Portions left">
+              <div class="readout-head">
+                <div>
+                  <div class="readout-total"><span x-text="totalLeft"></span><small class="plan-of" x-text="` / ${totalPortions}`"></small></div>
+                  <div class="readout-of">portions left</div>
+                </div>
+                <div class="plan-breakdown" x-text="`Prepped for the week of\n${plan.week_of}`"></div>
+              </div>
+              <div class="plan-pips" aria-hidden="true">
+                <template x-for="(full, i) in pips" :key="i">
+                  <i :class="full && 'is-left'"></i>
+                </template>
+              </div>
+            </section>
+
+            <template x-for="b in left" :key="b.recipe_id">
+              <article class="card plan-batch">
+                <div class="plan-batch-head">
+                  <div class="plan-batch-title"><h2 x-text="b.title"></h2></div>
+                  <div class="plan-batch-n">
+                    <b x-text="b.left"></b>
+                    <small>left</small>
+                  </div>
+                </div>
+                <small class="plan-scale" x-show="b.eaten" x-text="whoAte(b)"></small>
+                <button class="btn btn-primary" @click="logPortion(b)" :disabled="!b.left">Log a portion</button>
+              </article>
+            </template>
+            <small class="plan-hint">Logging a portion adds it to Today with the recipe's macros and counts it down here.</small>
+
+            <button class="btn btn-block" @click="showList = true">Shopping list</button>
+            <button class="btn btn-block" @click="planNext()">Plan next Sunday</button>
+          </div>
+        </template>
+
+        <!-- Swap one batch's recipe: yours first, or let Plates suggest. -->
+        <template x-if="swapIndex !== null">
+          <div class="sheet-backdrop" @click.self="closeSwap()">
+            <div class="sheet" x-init="$swipe($el, () => closeSwap())">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2 x-text="`Instead of ${batches[swapIndex] ? batches[swapIndex].title : 'this'}`"></h2>
+                <button class="tap" @click="closeSwap()" aria-label="Close">×</button>
+              </div>
+              <div class="search">
+                <input type="search" x-model="swapTerm" placeholder="Search your recipes" aria-label="Search your recipes">
+              </div>
+              <div class="plan-swap-list">
+                <template x-for="r in swapRows" :key="r.id">
+                  <button class="setting setting-text" @click="chooseSwap(r.id)">
+                    <b x-text="r.title"></b>
+                    <small x-text="[(r.created_by || '').toLowerCase() === email.toLowerCase() ? 'Yours' : '', r.calories != null ? `${Math.round(r.calories)} kcal` : 'no nutrition yet'].filter(Boolean).join(' · ')"></small>
+                  </button>
+                </template>
+              </div>
+              <button class="btn btn-block" @click="suggestSwap()">Let Plates suggest one</button>
+            </div>
+          </div>
+        </template>
 
         <template x-if="usual">
           <div class="sheet-backdrop" @click.self="usual = null">

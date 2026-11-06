@@ -161,14 +161,74 @@ test('the plan on screen is the latest accepted, ignoring discarded ones', () =>
   assert.equal(g.currentPlan([]), null);
 });
 
-// ---- saving -------------------------------------------------------------------
+// ---- portions -----------------------------------------------------------------
+
+test('portions are every dinner and lunch, for everyone eating', () => {
+  assert.equal(g.portionCount({ dinners: 5, lunches: 0, people: 2 }), 10);
+  assert.equal(g.portionCount({ dinners: 5, lunches: 3, people: 2 }), 16);
+  assert.equal(g.portionCount({ dinners: 4, lunches: 0, people: 1 }), 4);
+});
+
+test('portions split as evenly as they go, the odd one to the first batch', () => {
+  assert.deepEqual(g.splitPortions(10, 2), [5, 5]);
+  assert.deepEqual(g.splitPortions(11, 2), [6, 5]);
+  assert.deepEqual(g.splitPortions(7, 1), [7]);
+  assert.deepEqual(g.splitPortions(7, 0), []);
+});
+
+const BRISKET = { id: 5, title: 'Texas Style Smoked Beef Brisket', servings_count: '18', calories: '955', protein_g: '56', carbs_g: '1', fat_g: '79', fiber_g: null };
+
+test('a batch carries its share, what the recipe makes, and its macros as they stand', () => {
+  const [a, b] = g.batchesFor([{ recipe_id: 1, reason: 'Yours.' }, { recipe_id: 5 }], 11,
+    new Map([...RECIPES, [5, BRISKET]]));
+  assert.deepEqual([a.title, a.portions, a.makes, a.reason], ['Peanut Chicken', 6, 4, 'Yours.']);
+  assert.equal(a.calories, null, 'unknown stays unknown');
+  assert.deepEqual([b.portions, b.makes, b.calories, b.protein_g, b.fiber_g], [5, 18, 955, 56, null]);
+});
+
+test('the scale line says how much of the recipe to cook', () => {
+  assert.equal(g.scaleLine({ portions: 5, makes: 4 }), 'Makes 4 → cook ×1¼');
+  assert.equal(g.scaleLine({ portions: 4, makes: 4 }), 'Makes 4 → cook ×1');
+  assert.equal(g.scaleLine({ portions: 5, makes: 18 }), 'Makes 18 → cook ×0.28');
+  assert.equal(g.scaleLine({ portions: 5, makes: null }), 'Servings not listed · cook enough for 5');
+});
 
 const ME = 'cgividen20@gmail.com';
 const AANA = 'aanabraithwaite@gmail.com';
 
-test('accepting saves the plan and its list locally, staples already ticked', async () => {
+test('portions left count down by what either of you logged from the recipe since the plan', () => {
+  const plan = { accepted_at: '2026-11-09T10:00:00Z', meals: [
+    { recipe_id: 1, title: 'Salad', portions: 5 },
+    { recipe_id: 2, title: 'Bowl', portions: 5 },
+  ] };
+  const log = [
+    { recipe_id: 1, owner_email: ME, quantity: 1, logged_at: '2026-11-10T19:00:00Z' },
+    { recipe_id: 1, owner_email: ME, quantity: 1, logged_at: '2026-11-11T19:00:00Z' },
+    { recipe_id: 1, owner_email: AANA, quantity: 1, logged_at: '2026-11-11T19:00:00Z' },
+    { recipe_id: 1, owner_email: ME, quantity: 1, logged_at: '2026-11-02T19:00:00Z' },        // last week's
+    { recipe_id: 1, owner_email: ME, quantity: 1, logged_at: '2026-11-12T19:00:00Z', deleted_at: 'x' },
+    { recipe_id: 1, owner_email: ME, quantity: 1, logged_at: '2026-11-13T19:00:00Z', is_planned: true },
+    { recipe_id: 2, owner_email: AANA, quantity: 2, logged_at: '2026-11-12T19:00:00Z' },
+    { recipe_id: 9, owner_email: ME, quantity: 1, logged_at: '2026-11-12T19:00:00Z' },
+  ];
+  const [salad, bowl] = g.portionsLeft(plan, log);
+  assert.deepEqual([salad.eaten, salad.left, salad.byOwner], [3, 2, { [ME]: 2, [AANA]: 1 }]);
+  assert.deepEqual([bowl.eaten, bowl.left], [2, 3]);
+  assert.deepEqual(g.portionsLeft(null, log), []);
+});
+
+test('a portion never goes below zero left', () => {
+  const plan = { accepted_at: '2026-11-09T10:00:00Z', meals: [{ recipe_id: 1, portions: 1 }] };
+  const log = [1, 2].map(() => ({ recipe_id: 1, owner_email: ME, quantity: 1, logged_at: '2026-11-10T00:00:00Z' }));
+  assert.equal(g.portionsLeft(plan, log)[0].left, 0);
+});
+
+// ---- saving -------------------------------------------------------------------
+
+test('accepting saves the batches and their list locally, staples already ticked', async () => {
+  const batches = g.batchesFor([{ recipe_id: 1 }], 4, RECIPES);
   const plan = await g.acceptPlan({
-    meals: [{ meal: 'dinner', recipe_id: 1, title: 'Peanut Chicken', servings: 2, reason: 'x', extra: 'dropped' }],
+    batches,
     lines: [
       { key: 'kale', label: 'curly kale', qty: 3, unit: 'cup', staple: false, recipes: ['Peanut Chicken'] },
       { key: 'salt', label: 'salt', qty: 0.25, unit: 'tsp', staple: true, recipes: ['Peanut Chicken'] },
@@ -177,7 +237,8 @@ test('accepting saves the plan and its list locally, staples already ticked', as
     now: new Date(2026, 10, 5, 12),
   });
   assert.equal(plan.week_of, '2026-11-02');
-  assert.deepEqual(Object.keys(plan.meals[0]).sort(), ['meal', 'reason', 'recipe_id', 'servings', 'title']);
+  assert.equal(plan.meals[0].portions, 4);
+  assert.equal(plan.meals[0].title, 'Peanut Chicken');
 
   const items = (await local.all('shopping_items')).filter((i) => i.plan_id === plan.id);
   assert.equal(items.length, 2);
@@ -185,6 +246,19 @@ test('accepting saves the plan and its list locally, staples already ticked', as
   assert.equal(items.find((i) => i.ingredient_key === 'kale').have, false);
   const queued = (await local.outbox()).map((e) => e.table);
   assert.ok(queued.includes('meal_plans') && queued.includes('shopping_items'), 'queued for sync');
+});
+
+test('logging a portion is one serving with the batch\'s macros, stamped with the recipe', async () => {
+  const [batch] = g.batchesFor([{ recipe_id: 5 }], 5, new Map([[5, BRISKET]]));
+  const entry = await g.logPortion(batch, AANA);
+  assert.equal(entry.owner_email, AANA);
+  assert.equal(entry.recipe_id, 5);
+  assert.equal(entry.quantity, 1);
+  assert.equal(entry.calories, 955);
+  assert.equal(entry.protein_g, 56);
+  assert.equal(entry.fiber_g, null, 'unknown fibre stays unknown');
+  assert.equal(entry.is_planned, false);
+  assert.match(entry.description, /Texas Style Smoked Beef Brisket · Meal prep/);
 });
 
 test('ticking an item off keeps its owner when the other of you does it', async () => {
@@ -230,92 +304,158 @@ function withPlanWeek(answers, fn) {
   };
 }
 
-function planPage() {
+function planPage(members = [{ email: ME, sharing: true }, { email: AANA, sharing: true, display_name: 'Aana' }]) {
   Alpine.store('auth').session = { user: { email: ME } };
-  Alpine.store('auth').members = [
-    { email: ME, sharing: true },
-    { email: AANA, sharing: true },
-  ];
+  Alpine.store('auth').members = members;
   const page = Alpine.reactive(components.planPage());
-  page.recipeList = [...RECIPES.values()];
+  page.recipeList = [...RECIPES.values(), { ...BRISKET, id: 5, created_by: ME }];
   return page;
 }
 
-test('the tab starts at five dinners, a serving each for the two of you', () => {
+test('the tab starts at five dinners for the two of you, two recipes', () => {
   const page = planPage();
   page.loadRecipes = async () => {};
+  page.suggest = async () => {};
   page.init();
-  assert.deepEqual({ ...page.counts }, { breakfast: 0, lunch: 0, dinner: 5, snack: 0 });
-  assert.equal(page.servings, 2);
+  assert.equal(page.portions, 10);
+  assert.equal(page.count, 2);
+  assert.equal(page.portionsBreakdown, '5 dinners × 2');
+  page.stepLunches(3);
+  assert.equal(page.portions, 16);
+  assert.equal(page.portionsBreakdown, '5 dinners × 2\n3 lunches × 2');
 
-  Alpine.store('auth').members = [{ email: ME, sharing: true }];
-  page.init();
-  assert.equal(page.servings, 1, 'on your own, one');
+  const alone = planPage([{ email: ME, sharing: true }]);
+  alone.loadRecipes = async () => {};
+  alone.suggest = async () => {};
+  alone.init();
+  assert.equal(alone.portions, 5, 'on your own, one each');
 });
 
-test('a draft is asked for with the counts, edited, and only saved on accept', withPlanWeek({
-  plan: { meals: [
-    { meal: 'dinner', recipe_id: 1, reason: 'High protein.' },
-    { meal: 'dinner', recipe_id: 2, reason: 'Quick.' },
-  ] },
+test('suggestions fill the batches, a swap replaces one, and only the list saves anything', withPlanWeek({
+  plan: { picks: [{ recipe_id: 1, reason: 'Yours.' }, { recipe_id: 2, reason: 'Quick.' }] },
   ingredients: { recipes: {
     1: [{ key: 'chicken breast', name: 'chicken breast', qty: 1, unit: 'lb', staple: false }],
     3: [{ key: 'carrot', name: 'carrot', qty: 3, unit: null, staple: false }],
   } },
 }, async (calls) => {
   const page = planPage();
-  page.servings = 2;
+  page.people = 2;
   const plansBefore = (await local.all('meal_plans')).length;
 
-  await page.makeDraft();
-  assert.deepEqual(calls[0], { name: 'plan-week', body: { mode: 'plan', counts: page.counts } });
-  assert.equal(page.draft.length, 2);
-  assert.equal(page.draft[0].servings, 2);
-  assert.equal((await local.all('meal_plans')).length, plansBefore, 'a draft saves nothing');
+  await page.suggest();
+  assert.deepEqual(calls[0], { name: 'plan-week', body: { mode: 'plan', batches: 2, portions: 10, exclude: [] } });
+  assert.deepEqual(page.batches.map((b) => [b.recipe_id, b.portions]), [[1, 5], [2, 5]]);
+  assert.equal((await local.all('meal_plans')).length, plansBefore, 'suggesting saves nothing');
 
-  page.swap(1, '3');
-  page.stepServings(0, 2);          // 4 servings of a 4-serving recipe: the whole thing
-  assert.equal(page.draft[1].recipe_id, 3);
+  page.openSwap(1);
+  assert.ok(!page.swapRows.some((r) => r.id === 1 || r.id === 2), 'what is already cooking is not offered');
+  page.chooseSwap(3);
+  assert.equal(page.swapIndex, null);
+  assert.deepEqual(page.batches.map((b) => b.recipe_id), [1, 3]);
 
-  await page.accept();
+  await page.makeList();
   assert.deepEqual(calls[1].body, { mode: 'ingredients', recipe_ids: [1, 3] });
-  assert.equal(page.draft, null);
-
-  const plan = page.plan;
-  assert.deepEqual(plan.meals.map((m) => m.title), ['Peanut Chicken', 'Mystery Stew']);
-  assert.deepEqual(page.items.map((i) => [i.label, i.qty, i.unit]),
-    [['carrot', 3, null], ['chicken breast', 1, 'lb']]);
+  assert.equal(page.mode, 'list');
+  assert.deepEqual(page.plan.meals.map((b) => [b.title, b.portions]), [['Peanut Chicken', 5], ['Mystery Stew', 5]]);
+  // 1 lb for a recipe that makes 4, cooked for 5: 1¼ lb. Mystery Stew doesn't say, so whole.
+  assert.deepEqual(page.items.map((i) => [i.label, i.qty, i.unit]), [['carrot', 3, null], ['chicken breast', 1.25, 'lb']]);
 }));
 
-test('a failed plan says why and leaves no draft', withPlanWeek({ plan: { error: 'The reader is slow right now — try again in a moment.' } },
+test('one recipe drops the second; going back to two asks for one more, leaving out the first', withPlanWeek({
+  plan: { picks: [{ recipe_id: 2, reason: '' }] },
+}, async (calls) => {
+  const page = planPage();
+  page.picks = [{ recipe_id: 1, reason: '' }, { recipe_id: 3, reason: '' }];
+  page.setCount(1);
+  assert.deepEqual(page.batches.map((b) => [b.recipe_id, b.portions]), [[1, page.portions]]);
+  assert.equal(calls.length, 0);
+
+  await page.setCount(2);
+  assert.deepEqual(calls[0].body, { mode: 'plan', batches: 1, portions: page.portions, exclude: [1] });
+  assert.deepEqual(page.picks.map((p) => p.recipe_id), [1, 2]);
+}));
+
+test('"let Plates suggest one" replaces just that batch, excluding what is chosen', withPlanWeek({
+  plan: { picks: [{ recipe_id: 5, reason: 'High protein.' }] },
+}, async (calls) => {
+  const page = planPage();
+  page.picks = [{ recipe_id: 1, reason: '' }, { recipe_id: 2, reason: '' }];
+  page.openSwap(0);
+  await page.suggestSwap();
+  assert.deepEqual(calls[0].body.exclude, [1, 2]);
+  assert.equal(calls[0].body.batches, 1);
+  assert.deepEqual(page.picks.map((p) => p.recipe_id), [5, 2]);
+  // 56 g protein of 955 kcal is 24% from protein: not the 40% that High protein means.
+  assert.equal(page.isHighProtein(page.batches[0]), false);
+  assert.equal(page.isHighProtein({ calories: 245, protein_g: 40, carbs_g: 10, fat_g: 5 }), true);
+  assert.equal(page.isHighProtein({ calories: null, protein_g: null }), false, 'no nutrition, no tag');
+  assert.equal(page.isMine(page.batches[0]), true);
+}));
+
+test('a failed suggestion says why and saves nothing', withPlanWeek({ plan: { error: 'The reader is slow right now — try again in a moment.' } },
   async () => {
     const page = planPage();
-    await page.makeDraft();
-    assert.equal(page.draft, null);
+    await page.suggest();
+    assert.deepEqual(page.picks, []);
     assert.match(page.error, /slow right now/);
     assert.equal(page.busy, '');
   }));
 
-test('the list splits into mapped, needing a product, and already had; the cart follows', async () => {
+test('the week counts portions down as either of you logs one, and says who had what', async () => {
   const page = planPage();
   const plan = await g.acceptPlan({
-    meals: [{ meal: 'dinner', recipe_id: 1, title: 'Peanut Chicken', servings: 2 }],
+    batches: g.batchesFor([{ recipe_id: 5 }], 3, new Map([[5, BRISKET]])),
+    lines: [], email: ME, now: new Date(Date.now() + 120_000),
+  });
+  await Alpine.store('data').refreshCore();
+  assert.equal(page.plan.id, plan.id);
+  assert.equal(page.mode, 'week');
+  assert.equal(page.totalLeft, 3);
+
+  await local.save('food_log', { recipe_id: 5, quantity: 1, logged_at: new Date(Date.now() + 180_000).toISOString(), is_planned: false }, AANA);
+  await page.logPortion(page.left[0]);
+  // logPortion stamps now, before the plan's future accepted_at in this test, so count Aana's only.
+  await local.save('food_log', { recipe_id: 5, quantity: 1, logged_at: new Date(Date.now() + 180_000).toISOString(), is_planned: false }, ME);
+  await Alpine.store('data').refreshCore();
+  assert.equal(page.totalLeft, 1);
+  assert.deepEqual(page.pips, [false, false, true]);
+  assert.equal(page.whoAte(page.left[0]), 'You had 1 · Aana had 1');
+});
+
+test('planning next Sunday keeps this week on hand until the new list is made', async () => {
+  const page = planPage();
+  page.suggest = async () => {};
+  await Alpine.store('data').refreshCore();
+  assert.equal(page.mode, 'week');
+  page.planNext();
+  assert.equal(page.mode, 'prep');
+  page.cancelPlanning();
+  assert.equal(page.mode, 'week');
+  page.showList = true;
+  assert.equal(page.mode, 'list');
+});
+
+test('the list puts what to buy first, tags each row with its product, and the cart follows', async () => {
+  const page = planPage();
+  const plan = await g.acceptPlan({
+    batches: g.batchesFor([{ recipe_id: 1 }], 4, RECIPES),
     lines: [
       { key: 'milk', label: 'milk', qty: 1, unit: 'cup', staple: false, recipes: [] },
       { key: 'zz-unmapped', label: 'curly kale', qty: 6, unit: 'cup', staple: false, recipes: [] },
       { key: 'salt', label: 'salt', qty: null, unit: null, staple: true, recipes: [] },
     ],
     email: ME,
-    now: new Date(Date.now() + 60_000),   // newest, so it is the plan on screen
+    now: new Date(Date.now() + 240_000),   // newest, so it is the plan on screen
   });
-  await g.saveUsual({ key: 'milk', link: '10804537', label: 'GV milk', qty: 1 }, ME);
+  await g.saveUsual({ key: 'milk', link: '10804537', label: 'GV milk', qty: 2 }, ME);
   await Alpine.store('data').refreshCore();
 
   assert.equal(page.plan.id, plan.id);
-  assert.deepEqual(page.toBuy.map((i) => i.label), ['milk']);
-  assert.deepEqual(page.unmapped.map((i) => i.label), ['curly kale']);
-  assert.deepEqual(page.had.map((i) => i.label), ['salt']);
-  assert.match(page.cart.url, /items=\d+/);
+  assert.deepEqual(page.items.map((i) => i.label), ['curly kale', 'milk', 'salt']);
+  assert.deepEqual(page.items.map((i) => page.productTag(i)), ['No product', 'Walmart ×2', 'Have']);
+  assert.equal(page.toBuyCount, 2);
+  assert.equal(page.haveCount, 1);
+  assert.equal(page.cart.url, 'https://www.walmart.com/sc/cart/addToCart?items=10804537|2');
   assert.deepEqual(page.cart.skipped, ['curly kale']);
 });
 
@@ -347,8 +487,14 @@ test('Plan is a tab, mounted only while open, and swipeable', async () => {
 });
 
 test('the cart button is a plain link to the built URL, opened outside the app', () => {
-  assert.match(html, /<a class="btn btn-primary btn-block" x-show="cart\.url" :href="cart\.url"\s+target="_blank"/);
-  assert.match(html, /x-text="`Not in the cart: \$\{cart\.skipped\.join\(', '\)\}`"/);
+  assert.match(html, /<a class="btn btn-primary btn-block" x-show="cart\.url" :href="cart\.url" target="_blank"/);
+  assert.match(html, /x-text="`Not in the cart, no product yet: \$\{cart\.skipped\.join\(', '\)\}/);
+});
+
+test('the three screens are chosen by mode, and a portion is logged from the week', () => {
+  for (const mode of ['prep', 'list', 'week']) assert.match(html, new RegExp(`<template x-if="mode === '${mode}'">`));
+  assert.match(html, /@click="logPortion\(b\)" :disabled="!b\.left">Log a portion<\/button>/);
+  assert.match(html, /@click="setCount\(1\)">1 recipe<\/button>/);
 });
 
 test('the three tables are stored locally, synced, and the module is precached', async () => {

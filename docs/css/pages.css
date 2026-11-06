@@ -2340,48 +2340,145 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
 .protein-flag { color: var(--color-warning); }
 
 /* ---- Plan ------------------------------------------------------------------ */
+/* Sunday meal prep. Built from Today's readout and the shared card, so the
+   numbers read in the same mono as calories do. */
 
-.plan-count {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) 0;
+.plan-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.plan-breakdown {
+  text-align: right;
+  white-space: pre-line;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--color-text-muted);
 }
-.plan-count-name { flex: 1; text-transform: capitalize; }
+
+.plan-steppers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.plan-count { display: flex; align-items: center; gap: var(--space-2); }
+.plan-count-name { flex: 1; }
 .plan-count-n {
   min-width: 2ch;
   text-align: center;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
-.plan-count + .btn { margin-top: var(--space-3); }
+.plan-hint, .plan-reason { color: var(--color-text-dim); font-size: var(--text-sm); }
+.plan-reason { color: var(--color-text-muted); }
 
-.plan-meal {
-  display: grid;
-  gap: var(--space-1);
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--color-border);
-}
-.plan-meal-head {
+.plan-head, .plan-bar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-1) 0;
+  padding: var(--space-1) 2px 0;
 }
-.plan-meal-slot {
-  min-width: 9ch;
+.plan-bar { justify-content: flex-start; }
+
+.plan-seg {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+.plan-seg button {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .08em;
+  color: var(--color-text-muted);
+}
+.plan-seg button.is-active { background: var(--color-primary); color: #fff; }
+
+.plan-batch-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); }
+.plan-batch-title { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.plan-batch-title h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; line-height: 1.25; }
+.plan-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.plan-tags .tag-high-protein { margin-top: 0; }
+.plan-tag {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
-.plan-meal-why { color: var(--color-text-muted); }
-.plan-meal .chips { align-items: center; }
+.plan-batch-n { flex: none; text-align: right; display: flex; flex-direction: column; }
+.plan-batch-n b {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.035em;
+  line-height: 1;
+}
+.plan-batch-n small, .plan-of {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+.plan-of { font-size: var(--text-base); letter-spacing: 0; text-transform: none; color: var(--color-text-muted); }
+.plan-scale { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-muted); }
 
-.plan-sub { margin-top: var(--space-4); }
-.plan-item input[type="checkbox"] { flex: none; width: 22px; height: 22px; }
-.plan-item.is-unmapped b { color: var(--color-warning, var(--color-text)); }
-.plan-item.is-had { opacity: .55; }
-.plan-item.is-had b { text-decoration: line-through; }
-.plan-usual { width: 100%; text-align: left; }
+.plan-macros { display: flex; flex-direction: column; gap: var(--space-2); }
+.plan-macro-line {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.plan-macro-line span + span { color: var(--color-text-muted); }
+.plan-macro-bar { display: flex; gap: 3px; height: 5px; }
+.plan-macro-bar i { display: block; min-width: 3px; border-radius: var(--radius-pill); }
+.plan-macro-bar .is-protein { background: var(--color-protein); }
+.plan-macro-bar .is-carbs { background: var(--color-carbs); }
+.plan-macro-bar .is-fat { background: var(--color-fat); }
+.plan-batch-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.plan-list { display: flex; flex-direction: column; }
+.plan-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 2px;
+  border-bottom: 1px solid var(--color-surface-raised);
+}
+.plan-item input[type="checkbox"] { flex: none; width: 22px; height: 22px; accent-color: var(--color-success); }
+.plan-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.plan-item-text small { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-dim); }
+.plan-item-tag {
+  flex: none;
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.plan-item.is-unmapped .plan-item-tag { color: var(--color-warning); }
+.plan-item.is-had b { color: var(--color-text-dim); text-decoration: line-through; font-weight: 400; }
+.plan-item.is-had .plan-item-tag { color: var(--color-text-dim); }
+.plan-skipped { margin: 0; font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.6; color: var(--color-warning); }
+
+.plan-pips { display: flex; gap: 4px; }
+.plan-pips i { flex: 1; height: 6px; border-radius: var(--radius-pill); background: var(--color-border); }
+.plan-pips i.is-left { background: var(--color-success); }
+
+.plan-swap-list { display: flex; flex-direction: column; gap: var(--space-2); max-height: 50vh; overflow-y: auto; }
+.plan-swap-list .setting { width: 100%; text-align: left; }

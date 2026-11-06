@@ -1,13 +1,15 @@
 /**
- * grocery.js — the week's meals, the shopping list they make, and the link that
- * puts that list in a Walmart cart.
+ * grocery.js — Sunday meal prep: one or two recipes cooked in a batch big
+ * enough for the week, the shopping list they make, the link that puts that
+ * list in a Walmart cart, and the portions left as the week goes.
  *
  * One plan for the household. The three tables are read and written the way the
  * logs are read — by the owner and whoever they share with — so either of you
  * can tick things off the same list.
  *
- * The plan itself comes from the plan-week function, as an unsaved draft: the
- * model picks meals, and only accepting one writes anything. After that the
+ * The week is counted in portions, not days: dinners (and sometimes lunches)
+ * times the people eating. The plan-week function suggests the recipes as an
+ * unsaved draft; only taking it to the shopping list writes anything. After that the
  * list and the usuals are local-first like everything else.
  *
  * Walmart has no cart API. Its add-to-cart link takes item numbers, so each
@@ -18,12 +20,13 @@
 import { supabase } from './supabase.js';
 import * as local from './local.js';
 import * as sync from './sync.js';
-import { toDateOnly } from './food.js';
+import { toDateOnly, logFood } from './food.js';
 
-export const MEALS = ['breakfast', 'lunch', 'dinner', 'snack'];
+/** A week of Sunday prep: five dinners each, no lunches, until changed. */
+export const DEFAULT_PREP = { dinners: 5, lunches: 0 };
 
-/** Five dinners: what the plan screen starts from. */
-export const DEFAULT_COUNTS = { breakfast: 0, lunch: 0, dinner: 5, snack: 0 };
+/** Batches cooked on a Sunday: one or two recipes. */
+export const MAX_BATCHES = 2;
 
 /**
  * Walmart's add-to-cart link. Not documented by Walmart — it came from a
@@ -178,11 +181,54 @@ export function cartLink(items, usuals) {
 
 // ---- the plan -----------------------------------------------------------------
 
-/** The Monday of the week a date falls in, as a date-only string. */
-export function weekOf(date = new Date()) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return toDateOnly(d);
+/** Portions to cook: every dinner and lunch, for everyone eating. */
+export function portionCount({ dinners, lunches, people }) {
+  return Math.max(0, (Number(dinners) || 0) + (Number(lunches) || 0)) * Math.max(1, Number(people) || 1);
+}
+
+/** Portions shared as evenly as they go, the odd ones to the first batches. */
+export function splitPortions(total, batches) {
+  if (batches < 1) return [];
+  const base = Math.floor(total / batches);
+  return Array.from({ length: batches }, (_, i) => base + (i < total - base * batches ? 1 : 0));
+}
+
+const RECIPE_MACROS = ['calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'sodium_mg'];
+
+/**
+ * The batches for these picks: each recipe, its share of the portions, and
+ * its per-serving macros as they stand now — a portion is one of the recipe's
+ * servings, and the plan keeps its own copy so an edited recipe can't change
+ * what a portion logged on Thursday weighed in at.
+ */
+export function batchesFor(picks, total, recipesById) {
+  const shares = splitPortions(total, picks.length);
+  return picks.map((pick, i) => {
+    const recipe = recipesById.get(pick.recipe_id) ?? {};
+    const batch = {
+      recipe_id: pick.recipe_id,
+      title: recipe.title ?? pick.title ?? 'Recipe',
+      portions: shares[i],
+      makes: recipeYield(recipe),
+      reason: pick.reason ?? '',
+    };
+    for (const m of RECIPE_MACROS) {
+      const v = recipe[m];
+      batch[m] = v == null || v === '' ? null : Number(v);
+    }
+    return batch;
+  });
+}
+
+/** "Makes 4 → cook ×1¼", or what to do when the recipe doesn't say what it makes. */
+export function scaleLine(batch) {
+  if (!batch.makes) return `Servings not listed · cook enough for ${batch.portions}`;
+  const scale = batch.portions / batch.makes;
+  const quarter = Math.round(scale * 4) / 4;
+  const shown = Math.abs(quarter - scale) < 0.01 && quarter > 0
+    ? amountLabel(quarter, null)
+    : String(Math.round(scale * 100) / 100);
+  return `Makes ${batch.makes} → cook ×${shown}`;
 }
 
 /** The plan on screen: the most recently accepted one either of you can see. */
@@ -195,8 +241,36 @@ export function currentPlan(plans) {
   return best;
 }
 
+/** The Monday of the week a date falls in, as a date-only string. */
+export function weekOf(date = new Date()) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return toDateOnly(d);
+}
+
+/**
+ * How much of each batch is left. A portion eaten is a log entry for that
+ * recipe since the plan was made — by either of you, which is the point of a
+ * shared prep — counted by its quantity in servings.
+ */
+export function portionsLeft(plan, log) {
+  if (!plan) return [];
+  return plan.meals.map((batch) => {
+    const byOwner = {};
+    let eaten = 0;
+    for (const e of log) {
+      if (e.deleted_at || e.is_planned || e.recipe_id !== batch.recipe_id) continue;
+      if (e.logged_at < plan.accepted_at) continue;
+      const n = Number(e.quantity) || 1;
+      eaten += n;
+      byOwner[e.owner_email] = (byOwner[e.owner_email] ?? 0) + n;
+    }
+    return { ...batch, eaten, left: Math.max(0, batch.portions - eaten), byOwner };
+  });
+}
+
 async function ask(body) {
-  if (!navigator.onLine) throw new Error('Planning the week needs a connection.');
+  if (!navigator.onLine) throw new Error('Suggesting recipes needs a connection.');
   const { data, error } = await supabase.functions.invoke('plan-week', { body });
   // The function answers a readable failure as 200 with `error`, as read-food-photo does.
   if (error) throw new Error(error.message ?? String(error));
@@ -204,10 +278,10 @@ async function ask(body) {
   return data;
 }
 
-/** A draft week: [{meal, recipe_id, reason}]. Nothing is saved. */
-export async function draftWeek(counts) {
-  const data = await ask({ mode: 'plan', counts });
-  return data.meals ?? [];
+/** Recipes to batch-cook: [{recipe_id, reason}]. Nothing is saved. */
+export async function suggestRecipes({ batches, portions, exclude = [] }) {
+  const data = await ask({ mode: 'plan', batches, portions, exclude });
+  return data.picks ?? [];
 }
 
 /** Each recipe's ingredients as shopping entries, by recipe id. */
@@ -217,13 +291,14 @@ export async function readIngredients(recipeIds) {
 }
 
 /**
- * Save an accepted plan and its list. Pantry staples start ticked as already
- * had — salt and oil on every week's list would bury what actually needs buying.
+ * Save the week's batches and their list. Pantry staples start ticked as
+ * already had — salt and oil on every week's list would bury what actually
+ * needs buying.
  */
-export async function acceptPlan({ meals, lines, email, now = new Date() }) {
+export async function acceptPlan({ batches, lines, email, now = new Date() }) {
   const plan = await local.save('meal_plans', {
     week_of: weekOf(now),
-    meals: meals.map(({ meal, recipe_id, title, servings, reason }) => ({ meal, recipe_id, title, servings, reason })),
+    meals: batches,
     accepted_at: now.toISOString(),
   }, email);
 
@@ -240,6 +315,16 @@ export async function acceptPlan({ meals, lines, email, now = new Date() }) {
   }
   sync.nudge();
   return plan;
+}
+
+/**
+ * One prepped portion, logged now: the recipe's macros as the plan copied
+ * them, one serving, stamped with the recipe so the count goes down.
+ */
+export function logPortion(batch, email) {
+  const portion = { name: batch.title, brand: 'Meal prep', recipe_id: batch.recipe_id, serving_qty: 1, serving_unit: 'serving' };
+  for (const m of RECIPE_MACROS) portion[m] = batch[m] ?? null;
+  return logFood({ food: portion, quantity: 1, unit: 'serving', ownerEmail: email, date: new Date() });
 }
 
 /** Tick or untick. The row keeps its owner when the other of you does it. */

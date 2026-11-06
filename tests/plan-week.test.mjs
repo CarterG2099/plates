@@ -14,11 +14,12 @@ import { fileURLToPath } from 'node:url';
 const p = await import('../supabase/functions/plan-week/plan-prompt.ts');
 const read = (path) => readFile(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
 
-test('counts are whole, in range, and only for real meals', () => {
-  assert.deepEqual(p.cleanCounts({ dinner: 5, lunch: '2', snack: 0, brunch: 3 }), { dinner: 5, lunch: 2 });
-  assert.deepEqual(p.cleanCounts({ dinner: 400 }), { dinner: p.MAX_PER_MEAL });
-  assert.deepEqual(p.cleanCounts({ dinner: -2, breakfast: 1.6 }), { breakfast: 2 });
-  assert.deepEqual(p.cleanCounts(null), {});
+test('a prep request is one or two recipes, a sane number of portions, and ids to leave out', () => {
+  assert.deepEqual(p.cleanPrepRequest({ batches: 2, portions: 10, exclude: [3, 'x', 3] }),
+    { batches: 2, portions: 10, exclude: [3] });
+  assert.deepEqual(p.cleanPrepRequest({ batches: 9, portions: 900 }), { batches: p.MAX_BATCHES, portions: p.MAX_PORTIONS, exclude: [] });
+  assert.deepEqual(p.cleanPrepRequest({ batches: 0, portions: -4 }), { batches: 1, portions: 1, exclude: [] });
+  assert.deepEqual(p.cleanPrepRequest(null), { batches: 1, portions: 10, exclude: [] });
 });
 
 test('recipe ids are positive integers, once each, capped', () => {
@@ -32,37 +33,41 @@ const RECIPES = [
   { id: 9, title: 'Overnight Oats', tags: ['breakfast'], mine: false, calories: 380, protein_g: 20, carbs_g: 50, fat_g: 9 },
 ];
 
-test('the plan prompt asks for exactly the slots, with the recipes as data', () => {
-  const text = p.planPrompt({ dinner: 5, breakfast: 2 }, RECIPES,
+test('the prompt asks for a Sunday batch of real meals, with the recipes as data', () => {
+  const text = p.planPrompt({ batches: 2, portions: 10, exclude: [] }, RECIPES,
     { calorie_target: 2400, protein_target_g: 190 }, ['Greek yogurt (6×)']);
-  assert.match(text, /Fill exactly these slots: 2 × breakfast, 5 × dinner\./);
+  assert.match(text, /cooks once on Sunday and eats it all week/);
+  assert.match(text, /Pick 2 recipes from their collection below to batch-cook 10 portions in total\./);
+  assert.match(text, /Not dressings, sauces, dips, sides, desserts, snacks/);
+  assert.match(text, /Breakfast-for-dinner counts as dinner/);
   assert.match(text, /2400 kcal, 190 g protein/);
   assert.match(text, /Greek yogurt \(6×\)/);
   assert.ok(text.includes(JSON.stringify(RECIPES[0])), 'each recipe as one JSON line');
-  assert.match(text, /Prefer recipes with "mine": true/);
 });
 
-test('with no goal and no history, those lines are left out rather than filled with nothing', () => {
-  const text = p.planPrompt({ dinner: 5 }, RECIPES, null, []);
+test('one recipe reads as one, and the excluded ids are named', () => {
+  const text = p.planPrompt({ batches: 1, portions: 5, exclude: [7, 9] }, RECIPES, null, []);
+  assert.match(text, /Pick 1 recipe from/);
+  assert.match(text, /Do not pick these ids, they are already chosen or turned down: 7, 9\./);
   assert.doesNotMatch(text, /targets|Eaten often/);
 });
 
-test('the plan keeps known recipes, requested slots, and no more of each than asked', () => {
-  const answer = { meals: [
-    { meal: 'dinner', recipe_id: 7, reason: 'High protein.' },
-    { meal: 'breakfast', recipe_id: 9, reason: 'Quick.' },
-    { meal: 'dinner', recipe_id: 404, reason: 'Invented.' },
-    { meal: 'lunch', recipe_id: 7, reason: 'Not asked for.' },
-    { meal: 'dinner', recipe_id: 9, reason: 'Second dinner.' },
-    { meal: 'dinner', recipe_id: 7, reason: 'One too many.' },
+test('the picks keep known recipes, none excluded, no repeats, no more than asked', () => {
+  const answer = { picks: [
+    { recipe_id: 404, reason: 'Invented.' },
+    { recipe_id: 7, reason: 'Excluded.' },
+    { recipe_id: 9, reason: 'Good.' },
+    { recipe_id: 9, reason: 'Again.' },
+    { recipe_id: 11, reason: 'Second.' },
+    { recipe_id: 12, reason: 'One too many.' },
   ] };
-  const kept = p.cleanPlan(answer, { dinner: 2, breakfast: 1 }, new Set([7, 9]));
-  assert.deepEqual(kept.map((m) => [m.meal, m.recipe_id]), [['breakfast', 9], ['dinner', 7], ['dinner', 9]]);
+  const kept = p.cleanPicks(answer, { batches: 2, exclude: [7] }, new Set([7, 9, 11, 12]));
+  assert.deepEqual(kept, [{ recipe_id: 9, reason: 'Good.' }, { recipe_id: 11, reason: 'Second.' }]);
 });
 
-test('an answer with no meals is an empty plan, not a crash', () => {
-  assert.deepEqual(p.cleanPlan({}, { dinner: 5 }, new Set([7])), []);
-  assert.deepEqual(p.cleanPlan(null, { dinner: 5 }, new Set([7])), []);
+test('an answer with no picks is an empty list, not a crash', () => {
+  assert.deepEqual(p.cleanPicks({}, { batches: 2, exclude: [] }, new Set([7])), []);
+  assert.deepEqual(p.cleanPicks(null, { batches: 2, exclude: [] }, new Set([7])), []);
 });
 
 test('the ingredients prompt carries every line verbatim and the fixed units', () => {
@@ -95,7 +100,7 @@ test('ingredients are keyed by name, units outside the list dropped, and missing
 test('the response schemas bind the units and ids the client relies on', () => {
   const ing = p.INGREDIENTS_SCHEMA.properties.recipes.items.properties.ingredients.items.properties;
   assert.deepEqual(ing.unit.enum, p.UNITS);
-  assert.equal(p.PLAN_SCHEMA.properties.meals.items.properties.recipe_id.type, 'INTEGER');
+  assert.equal(p.PLAN_SCHEMA.properties.picks.items.properties.recipe_id.type, 'INTEGER');
 });
 
 // ---- the function --------------------------------------------------------------

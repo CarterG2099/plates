@@ -1,16 +1,17 @@
-// plan-week — a draft week of meals from the household's recipes, and each
-// recipe's ingredients as shopping-list entries.
+// plan-week — recipes to batch-cook on Sunday for the week, and each recipe's
+// ingredients as shopping-list entries.
 //
 // Two modes, one function because they share the plumbing:
 //
-//   plan         — picks recipes for the requested slots (5 dinners, say) from
-//                  public.recipes, leaning on the household's own recipes, the
-//                  main eater's goal and what was eaten lately. Ids only.
+//   plan         — picks one or two recipes for a Sunday batch cook of N
+//                  portions from public.recipes, leaning on the household's
+//                  own recipes, the main eater's goal and what was eaten
+//                  lately. Ids only; `exclude` keeps out the ones already
+//                  chosen or turned down, which is how a swap asks for one.
 //   ingredients  — the free-text ingredient lines of the given recipes, as
 //                  {name, qty, unit, staple}, for the client to add up.
 //
-// The client asks for ingredients separately, after the draft is settled, so
-// swapping a meal only asks about the one new recipe.
+// The client asks for ingredients separately, once the recipes are settled.
 //
 // Like read-food-photo, it never writes: the plan is a draft until accepted in
 // the app. Members only, checked with the caller's JWT, which also scopes the
@@ -21,7 +22,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // independent bundles, so a path out of this directory does not resolve.
 import { askGemini } from "./gemini.ts";
 import {
-  cleanCounts, cleanIngredients, cleanPlan, cleanRecipeIds, INGREDIENTS_SCHEMA,
+  cleanIngredients, cleanPicks, cleanPrepRequest, cleanRecipeIds, INGREDIENTS_SCHEMA,
   ingredientsPrompt, PLAN_SCHEMA, planPrompt,
 } from "./plan-prompt.ts";
 
@@ -89,8 +90,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  const counts = cleanCounts(body?.counts);
-  if (!Object.keys(counts).length) return json({ error: "Pick at least one meal to plan." }, 400);
+  const request = cleanPrepRequest(body);
 
   const { data: { user } } = await supabase.auth.getUser();
   const me = (user?.email ?? "").toLowerCase();
@@ -136,16 +136,16 @@ Deno.serve(async (req) => {
   }
   const recent = [...tally].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([name, n]) => `${name} (${n}×)`);
 
-  const answer = await askGemini(apiKey, planPrompt(counts, recipes, goal, recent), [], { schema: PLAN_SCHEMA, model });
+  const answer = await askGemini(apiKey, planPrompt(request, recipes, goal, recent), [], { schema: PLAN_SCHEMA, model });
   if ("error" in answer) return json({ error: answer.error });
 
-  let meals;
+  let picks;
   try {
-    meals = cleanPlan(JSON.parse(stripFences(answer.text)), counts, new Set(recipes.map((r) => r.id)));
+    picks = cleanPicks(JSON.parse(stripFences(answer.text)), request, new Set(recipes.map((r) => r.id)));
   } catch (e) {
     console.error("plan parse", String(e));
-    return json({ error: "Couldn't make a plan — try again." });
+    return json({ error: "Couldn't suggest recipes — try again." });
   }
-  if (!meals.length) return json({ error: "Couldn't make a plan from these recipes — try again." });
-  return json({ meals });
+  if (!picks.length) return json({ error: "No other recipe suits a prep this week — pick one yourself." });
+  return json({ picks });
 });

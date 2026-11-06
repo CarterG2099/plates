@@ -4110,120 +4110,230 @@ const tracksPointer = (event) =>
   event.pointerType === 'mouse' || event.type === 'pointerdown' || event.buttons > 0;
 
 /**
- * The Plan tab: a draft week from plan-week, the shopping list it makes once
- * accepted, and the Walmart cart link. Shared by the household — see grocery.js.
- * The draft lives only here until accepted; nothing is saved before that.
+ * The Plan tab: Sunday meal prep. Pick one or two recipes and how many
+ * portions to cook, take that to a shopping list and the Walmart cart, then
+ * count the portions down through the week. Shared by the household — see
+ * grocery.js. The recipes stay a draft here until "Shopping list" saves them.
  */
 Alpine.data('planPage', () => ({
   get email() { return Alpine.store('auth').email; },
 
-  counts: { ...grocery.DEFAULT_COUNTS },
-  /** Servings per meal: one each for the household, until changed. */
-  servings: null,
-  draft: null,          // [{meal, recipe_id, reason, servings}] — unsaved
-  busy: '',             // '' | 'planning' | 'accepting'
+  dinners: grocery.DEFAULT_PREP.dinners,
+  lunches: grocery.DEFAULT_PREP.lunches,
+  people: 1,
+  count: grocery.MAX_BATCHES,
+  picks: [],            // [{recipe_id, reason}] — unsaved
+  planning: false,      // planning next week while this week's prep still shows
+  showList: false,
+  busy: '',             // '' | 'suggesting' | 'saving'
   error: '',
-  recipeList: [],       // every recipe, yours first, for titles and swaps
+  recipeList: [],       // every recipe, yours first
+  swapIndex: null,      // the batch the swap sheet is replacing
+  swapTerm: '',
   usual: null,          // the mapping sheet: {key, label, link, qty, existing}
   usualError: '',
 
   init() {
-    const partner = partnerOf(Alpine.store('auth').members, this.email);
-    this.servings = partner ? 2 : 1;
+    this.people = partnerOf(Alpine.store('auth').members, this.email) ? 2 : 1;
     this.loadRecipes();
+    if (!this.plan) this.suggest();
   },
 
   async loadRecipes() {
     try {
       this.recipeList = recipes.mineFirst(await recipes.fetchRecipes(), this.email);
-    } catch { /* offline: titles come from the saved plan, and planning says why */ }
+    } catch { /* offline: titles come from the saved plan, and suggesting says why */ }
   },
-
-  get mealNames() { return grocery.MEALS; },
-
-  step(meal, by) {
-    this.counts[meal] = Math.max(0, Math.min(14, (this.counts[meal] ?? 0) + by));
-  },
-
-  get slotCount() { return grocery.MEALS.reduce((n, m) => n + (this.counts[m] ?? 0), 0); },
 
   get plan() { return grocery.currentPlan(snapshot().mealPlans); },
+
+  /** Which screen: choosing recipes, the shopping list, or the week as it goes. */
+  get mode() {
+    if (this.planning || !this.plan) return 'prep';
+    return this.showList ? 'list' : 'week';
+  },
+
+  // ---- choosing ----------------------------------------------------------------
+
+  get portions() {
+    return grocery.portionCount({ dinners: this.dinners, lunches: this.lunches, people: this.people });
+  },
+
+  get portionsBreakdown() {
+    const per = this.people > 1 ? ` × ${this.people}` : '';
+    return [`${this.dinners} dinners${per}`, this.lunches ? `${this.lunches} lunches${per}` : ''].filter(Boolean).join('\n');
+  },
+
+  stepDinners(by) { this.dinners = Math.max(1, Math.min(7, this.dinners + by)); },
+  stepLunches(by) { this.lunches = Math.max(0, Math.min(7, this.lunches + by)); },
+
+  get recipesById() { return new Map(this.recipeList.map((r) => [r.id, r])); },
+
+  get batches() { return grocery.batchesFor(this.picks.slice(0, this.count), this.portions, this.recipesById); },
+
+  scaleLine(batch) { return grocery.scaleLine(batch); },
+  hasMacros(batch) { return batch.calories != null; },
+  isMine(batch) { return (this.recipesById.get(batch.recipe_id)?.created_by ?? '').toLowerCase() === this.email.toLowerCase(); },
+  isHighProtein(batch) { return batch.calories != null && food.isHighProtein(batch); },
+  share(batch) { return food.calorieShare(batch); },
+  macroLine(batch) {
+    return ['protein_g', 'carbs_g', 'fat_g']
+      .map((m, i) => (batch[m] == null ? null : `${Math.round(batch[m])}${'PCF'[i]}`))
+      .filter(Boolean).join(' · ');
+  },
+
+  /** Fill the empty batches with suggestions, keeping any already chosen. */
+  async suggest() {
+    const missing = this.count - this.picks.length;
+    if (missing <= 0) return;
+    this.error = '';
+    this.busy = 'suggesting';
+    try {
+      const more = await grocery.suggestRecipes({
+        batches: missing, portions: this.portions, exclude: this.picks.map((p) => p.recipe_id),
+      });
+      this.picks = [...this.picks, ...more].slice(0, this.count);
+    } catch (e) {
+      this.error = e.message ?? String(e);
+    } finally {
+      this.busy = '';
+    }
+  },
+
+  setCount(n) {
+    this.count = n;
+    if (this.picks.length > n) this.picks = this.picks.slice(0, n);
+    return this.suggest();
+  },
+
+  openSwap(index) { this.swapIndex = index; this.swapTerm = ''; },
+  closeSwap() { this.swapIndex = null; },
+
+  /** Your recipes first, the ones already cooking this week left out. */
+  get swapRows() {
+    const chosen = new Set(this.picks.map((p) => p.recipe_id));
+    return recipes.searchRecipes(this.recipeList, this.swapTerm).filter((r) => !chosen.has(r.id));
+  },
+
+  chooseSwap(recipeId) {
+    const picks = [...this.picks];
+    picks[this.swapIndex] = { recipe_id: recipeId, reason: '' };
+    this.picks = picks;
+    this.closeSwap();
+  },
+
+  /** "Let Plates suggest one": a different recipe for this batch. */
+  async suggestSwap() {
+    const index = this.swapIndex;
+    this.closeSwap();
+    this.error = '';
+    this.busy = 'suggesting';
+    try {
+      const [pick] = await grocery.suggestRecipes({
+        batches: 1, portions: this.batches[index]?.portions ?? this.portions,
+        exclude: this.picks.map((p) => p.recipe_id),
+      });
+      if (pick) {
+        const picks = [...this.picks];
+        picks[index] = pick;
+        this.picks = picks;
+      }
+    } catch (e) {
+      this.error = e.message ?? String(e);
+    } finally {
+      this.busy = '';
+    }
+  },
+
+  /** Read the recipes' ingredients, add them up, save the prep and its list. */
+  async makeList() {
+    const batches = this.batches;
+    if (!batches.length) return;
+    this.error = '';
+    this.busy = 'saving';
+    try {
+      const ingredients = await grocery.readIngredients(batches.map((b) => b.recipe_id));
+      const lines = grocery.combine(batches.map((b) => ({ recipe_id: b.recipe_id, servings: b.portions })),
+        ingredients, this.recipesById);
+      await grocery.acceptPlan({ batches, lines, email: this.email });
+      await Alpine.store('data').refreshCore();
+      this.planning = false;
+      this.picks = [];
+      this.showList = true;
+    } catch (e) {
+      this.error = e.message ?? String(e);
+    } finally {
+      this.busy = '';
+    }
+  },
+
+  planNext() {
+    this.planning = true;
+    this.showList = false;
+    this.picks = [];
+    this.suggest();
+  },
+
+  cancelPlanning() { this.planning = false; this.picks = []; this.error = ''; },
+
+  // ---- the week ------------------------------------------------------------------
+
+  get left() { return grocery.portionsLeft(this.plan, snapshot().log); },
+  get totalPortions() { return this.left.reduce((n, b) => n + b.portions, 0); },
+  get totalLeft() { return this.left.reduce((n, b) => n + b.left, 0); },
+
+  /** One pip per portion, the eaten ones first. */
+  get pips() {
+    return Array.from({ length: this.totalPortions }, (_, i) => i >= this.totalPortions - this.totalLeft);
+  },
+
+  /** "You had 2 · Aana had 1". */
+  whoAte(batch) {
+    const me = this.email.toLowerCase();
+    const members = Alpine.store('auth').members;
+    return Object.entries(batch.byOwner)
+      .sort(([a], [b]) => Number(b.toLowerCase() === me) - Number(a.toLowerCase() === me))
+      .map(([owner, n]) => {
+        const who = owner.toLowerCase() === me
+          ? 'You'
+          : members.find((m) => m.email?.toLowerCase() === owner.toLowerCase())?.display_name || 'Them';
+        return `${who} had ${n}`;
+      })
+      .join(' · ');
+  },
+
+  async logPortion(batch) {
+    await grocery.logPortion(batch, this.email);
+    await Alpine.store('data').refreshCore();
+    Alpine.store('ui').flash(`Logged a portion of ${batch.title}`);
+  },
+
+  // ---- the list -------------------------------------------------------------------
 
   get items() {
     const plan = this.plan;
     if (!plan) return [];
     return snapshot().shoppingItems
       .filter((i) => i.plan_id === plan.id)
-      .sort((a, b) => a.label.localeCompare(b.label));
+      .sort((a, b) => Number(a.have) - Number(b.have) || a.label.localeCompare(b.label));
   },
 
   get usuals() { return snapshot().walmartItems; },
 
   usualOf(item) { return grocery.usualFor(item.ingredient_key, this.usuals); },
 
-  /** Still to buy, and mapped to a product. */
-  get toBuy() { return this.items.filter((i) => !i.have && this.usualOf(i)); },
-  /** Still to buy, with no product yet: left out of the cart until it has one. */
-  get unmapped() { return this.items.filter((i) => !i.have && !this.usualOf(i)); },
-  get had() { return this.items.filter((i) => i.have); },
+  get toBuyCount() { return this.items.filter((i) => !i.have).length; },
+  get haveCount() { return this.items.filter((i) => i.have).length; },
 
   get cart() { return grocery.cartLink(this.items, this.usuals); },
 
   amount(item) { return grocery.amountLabel(item.qty, item.unit); },
 
-  titleOf(id) {
-    return this.recipeList.find((r) => r.id === id)?.title
-      ?? this.plan?.meals.find((m) => m.recipe_id === id)?.title
-      ?? 'Recipe';
-  },
-
-  async makeDraft() {
-    this.error = '';
-    this.busy = 'planning';
-    try {
-      const meals = await grocery.draftWeek(this.counts);
-      this.draft = meals.map((m) => ({ ...m, servings: this.servings }));
-    } catch (e) {
-      this.error = e.message ?? String(e);
-    } finally {
-      this.busy = '';
-    }
-  },
-
-  swap(index, recipeId) {
-    const id = Number(recipeId);
-    if (!id) return;
-    this.draft[index] = { ...this.draft[index], recipe_id: id, reason: 'Your pick.' };
-  },
-
-  removeMeal(index) { this.draft.splice(index, 1); },
-
-  stepServings(index, by) {
-    const meal = this.draft[index];
-    meal.servings = Math.max(1, Math.min(12, meal.servings + by));
-  },
-
-  discardDraft() { this.draft = null; this.error = ''; },
-
-  /** Read the chosen recipes' ingredients, add them up, and save the plan and list. */
-  async accept() {
-    if (!this.draft?.length) return;
-    this.error = '';
-    this.busy = 'accepting';
-    try {
-      const ids = [...new Set(this.draft.map((m) => m.recipe_id))];
-      const ingredients = await grocery.readIngredients(ids);
-      const byId = new Map(this.recipeList.map((r) => [r.id, r]));
-      const meals = this.draft.map((m) => ({ ...m, title: this.titleOf(m.recipe_id) }));
-      const lines = grocery.combine(meals, ingredients, byId);
-      await grocery.acceptPlan({ meals, lines, email: this.email });
-      await Alpine.store('data').refreshCore();
-      this.draft = null;
-    } catch (e) {
-      this.error = e.message ?? String(e);
-    } finally {
-      this.busy = '';
-    }
+  /** The tag on the right of a row: had, the product's quantity, or the gap. */
+  productTag(item) {
+    if (item.have) return 'Have';
+    const usual = this.usualOf(item);
+    return usual ? `Walmart ×${usual.default_qty}` : 'No product';
   },
 
   async toggleHave(item) {
@@ -4231,7 +4341,7 @@ Alpine.data('planPage', () => ({
     await Alpine.store('data').refreshCore();
   },
 
-  // ---- usuals ------------------------------------------------------------------
+  // ---- usuals ---------------------------------------------------------------------
 
   openUsual(item) {
     const existing = this.usualOf(item);
@@ -4243,11 +4353,6 @@ Alpine.data('planPage', () => ({
       qty: existing?.default_qty ?? 1,
       existing,
     };
-  },
-
-  openUsualRow(row) {
-    this.usualError = '';
-    this.usual = { key: row.ingredient_key, label: row.label, link: row.walmart_item_id, qty: row.default_qty, existing: row };
   },
 
   async saveUsual() {
