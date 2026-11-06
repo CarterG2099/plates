@@ -2257,6 +2257,170 @@
       </main>
       </template>
 
+      <!-- Plan: the household's week, its shopping list, and the Walmart cart.
+           x-if like Stats, so its getters only run while it is open. -->
+      <template x-if="$store.ui.view === 'plan'">
+      <main class="app-main" x-data="planPage">
+
+        <!-- Making a week: how many of each meal, then a draft to edit. -->
+        <div class="card" x-show="!draft">
+          <div class="card-label" x-text="plan ? 'New week' : 'Plan your week'"></div>
+          <template x-for="meal in mealNames" :key="meal">
+            <div class="plan-count">
+              <span class="plan-count-name" x-text="meal"></span>
+              <button class="chip" @click="step(meal, -1)" :disabled="!counts[meal]"
+                      :aria-label="`One fewer ${meal}`">−</button>
+              <span class="plan-count-n" x-text="counts[meal]"></span>
+              <button class="chip" @click="step(meal, 1)" :aria-label="`One more ${meal}`">+</button>
+            </div>
+          </template>
+          <div class="plan-count">
+            <span class="plan-count-name">Servings each</span>
+            <button class="chip" @click="servings = Math.max(1, servings - 1)" aria-label="Fewer servings">−</button>
+            <span class="plan-count-n" x-text="servings"></span>
+            <button class="chip" @click="servings = Math.min(12, servings + 1)" aria-label="More servings">+</button>
+          </div>
+          <button class="btn btn-primary btn-block" @click="makeDraft()"
+                  :disabled="busy || !slotCount"
+                  x-text="busy === 'planning' ? 'Planning…' : 'Plan meals'"></button>
+        </div>
+
+        <div class="card" x-show="draft">
+          <div class="card-label">Draft — nothing saved yet</div>
+          <template x-for="(m, i) in draft || []" :key="i">
+            <div class="plan-meal">
+              <div class="plan-meal-head">
+                <span class="plan-meal-slot" x-text="m.meal"></span>
+                <b x-text="titleOf(m.recipe_id)"></b>
+              </div>
+              <small class="plan-meal-why" x-text="m.reason"></small>
+              <div class="chips">
+                <button class="chip" @click="stepServings(i, -1)" aria-label="Fewer servings">−</button>
+                <span class="plan-count-n" x-text="`${m.servings} serving${m.servings === 1 ? '' : 's'}`"></span>
+                <button class="chip" @click="stepServings(i, 1)" aria-label="More servings">+</button>
+                <select class="chip" aria-label="Swap for another recipe"
+                        @change="swap(i, $event.target.value); $event.target.value = ''">
+                  <option value="">Swap…</option>
+                  <template x-for="r in recipeList" :key="r.id">
+                    <option :value="r.id" x-text="r.title"></option>
+                  </template>
+                </select>
+                <button class="chip" @click="removeMeal(i)">Remove</button>
+              </div>
+            </div>
+          </template>
+          <p class="empty" x-show="draft && !draft.length">No meals left in this draft.</p>
+          <button class="btn btn-primary btn-block" @click="accept()"
+                  :disabled="busy || !(draft && draft.length)"
+                  x-text="busy === 'accepting' ? 'Making the list…' : 'Use this week'"></button>
+          <button class="btn btn-block" @click="discardDraft()" :disabled="busy">Discard</button>
+        </div>
+
+        <p class="notice notice-error" x-show="error" x-text="error"></p>
+
+        <!-- The accepted week. -->
+        <template x-if="plan && !draft">
+          <div>
+            <div class="card">
+              <div class="card-label">This week</div>
+              <template x-for="(m, i) in plan.meals" :key="i">
+                <div class="plan-meal-head">
+                  <span class="plan-meal-slot" x-text="m.meal"></span>
+                  <span x-text="m.title"></span>
+                  <small x-text="`× ${m.servings}`"></small>
+                </div>
+              </template>
+            </div>
+
+            <div class="card">
+              <div class="card-label">Shopping list</div>
+
+              <a class="btn btn-primary btn-block" x-show="cart.url" :href="cart.url"
+                 target="_blank" rel="noopener"
+                 x-text="`Add ${cart.count} item${cart.count === 1 ? '' : 's'} to Walmart cart`"></a>
+              <p class="setting-meta" x-show="cart.skipped.length"
+                 x-text="`Not in the cart: ${cart.skipped.join(', ')}`"></p>
+
+              <template x-for="item in toBuy" :key="item.id">
+                <div class="setting plan-item">
+                  <input type="checkbox" :checked="item.have" @change="toggleHave(item)"
+                         :aria-label="`Have ${item.label}`">
+                  <button class="setting-text" @click="openUsual(item)">
+                    <b x-text="item.label"></b>
+                    <small x-text="[amount(item), usualOf(item).label + (usualOf(item).default_qty > 1 ? ` × ${usualOf(item).default_qty}` : '')].filter(Boolean).join(' · ')"></small>
+                  </button>
+                </div>
+              </template>
+
+              <div class="card-label plan-sub" x-show="unmapped.length">Needs a Walmart product</div>
+              <template x-for="item in unmapped" :key="item.id">
+                <div class="setting plan-item is-unmapped">
+                  <input type="checkbox" :checked="item.have" @change="toggleHave(item)"
+                         :aria-label="`Have ${item.label}`">
+                  <button class="setting-text" @click="openUsual(item)">
+                    <b x-text="item.label"></b>
+                    <small x-text="[amount(item), 'tap to paste a Walmart link'].filter(Boolean).join(' · ')"></small>
+                  </button>
+                </div>
+              </template>
+
+              <div class="card-label plan-sub" x-show="had.length">Already have</div>
+              <template x-for="item in had" :key="item.id">
+                <div class="setting plan-item is-had">
+                  <input type="checkbox" :checked="item.have" @change="toggleHave(item)"
+                         :aria-label="`Have ${item.label}`">
+                  <span class="setting-text">
+                    <b x-text="item.label"></b>
+                    <small x-text="amount(item)"></small>
+                  </span>
+                </div>
+              </template>
+              <p class="empty" x-show="!items.length">These recipes have no ingredients listed.</p>
+            </div>
+          </div>
+        </template>
+
+        <!-- Every mapping, to change a brand or drop one. -->
+        <div class="card" x-show="usuals.length">
+          <div class="card-label">Walmart usuals</div>
+          <template x-for="u in usuals" :key="u.id">
+            <button class="setting setting-text plan-usual" @click="openUsualRow(u)">
+              <b x-text="u.ingredient_key"></b>
+              <small x-text="`${u.label || 'Item ' + u.walmart_item_id} × ${u.default_qty}`"></small>
+            </button>
+          </template>
+        </div>
+
+        <template x-if="usual">
+          <div class="sheet-backdrop" @click.self="usual = null">
+            <div class="sheet" x-init="$swipe($el, () => { usual = null })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2 x-text="usual.key"></h2>
+                <button class="tap" @click="usual = null" aria-label="Close">×</button>
+              </div>
+              <div class="field">
+                <label for="usual-link">Walmart product link</label>
+                <input id="usual-link" type="url" inputmode="url" x-model="usual.link"
+                       placeholder="https://www.walmart.com/ip/…/12345678">
+              </div>
+              <div class="field">
+                <label for="usual-label">Name on the list</label>
+                <input id="usual-label" type="text" maxlength="80" x-model="usual.label">
+              </div>
+              <div class="field">
+                <label for="usual-qty">How many to buy</label>
+                <input id="usual-qty" type="number" inputmode="numeric" min="1" max="99" x-model.number="usual.qty">
+              </div>
+              <p class="notice notice-error" x-show="usualError" x-text="usualError"></p>
+              <button class="btn btn-primary btn-block" @click="saveUsual()">Save</button>
+              <button class="btn btn-block" x-show="usual.existing" @click="removeUsual()">Forget this product</button>
+            </div>
+          </div>
+        </template>
+      </main>
+      </template>
+
       <template x-if="$store.ui.view === 'stats'">
       <main class="app-main" x-data="statsPage">
 
@@ -3196,6 +3360,7 @@
 
       <nav class="tabbar">
         <button :class="$store.ui.view === 'today' && 'is-active'" @click="$store.ui.go('today')">Today</button>
+        <button :class="$store.ui.view === 'plan' && 'is-active'" @click="$store.ui.go('plan')">Plan</button>
         <button :class="$store.ui.view === 'train' && 'is-active'" @click="$store.ui.go('train')">Train</button>
         <button :class="$store.ui.view === 'stats' && 'is-active'" @click="$store.ui.go('stats')">Stats</button>
       </nav>

@@ -849,3 +849,73 @@ as $$
 $$;
 revoke execute on function plates.my_photo_pin_hash() from public, anon;
 grant execute on function plates.my_photo_pin_hash() to authenticated;
+
+-- ---- meal plan, shopping list, Walmart usuals (added 2026-11-05) -----------------
+-- One plan for the household. Read like the logs — the owner plus anyone they
+-- share with, through can_read() — and written the same way, because either of
+-- you ticks things off the same list or fixes a product mapping. A row keeps
+-- its owner when the other person edits it. Insert takes the same check as
+-- update, not is_owner(): sync writes every change as an upsert, and Postgres
+-- holds an upsert to the insert policy even when it lands as an update — so
+-- an owner-only insert stopped Aana ticking Carter's list. Deletes are soft,
+-- so there is no delete policy.
+--
+-- meal_plans.meals is [{meal, recipe_id, title, servings, reason}], copied when
+-- the plan is accepted: recipes live in public.recipes and may change or go.
+-- walmart_items maps an ingredient (its normalised name) to the Walmart item
+-- number the add-to-cart link takes, and how many to buy.
+create table if not exists plates.meal_plans (
+  id          uuid primary key,
+  owner_email text not null default auth.email(),
+  week_of     date not null,
+  meals       jsonb not null default '[]',
+  accepted_at timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+
+create table if not exists plates.shopping_items (
+  id             uuid primary key,
+  owner_email    text not null default auth.email(),
+  plan_id        uuid not null,
+  ingredient_key text not null,
+  label          text not null,
+  qty            numeric,
+  unit           text,
+  recipes        text[] not null default '{}',
+  have           boolean not null default false,
+  updated_at     timestamptz not null default now(),
+  deleted_at     timestamptz
+);
+create index if not exists shopping_items_plan on plates.shopping_items (plan_id);
+
+create table if not exists plates.walmart_items (
+  id              uuid primary key,
+  owner_email     text not null default auth.email(),
+  ingredient_key  text not null,
+  walmart_item_id text not null check (walmart_item_id ~ '^[0-9]+$'),
+  label           text not null default '',
+  default_qty     smallint not null default 1 check (default_qty between 1 and 99),
+  updated_at      timestamptz not null default now(),
+  deleted_at      timestamptz
+);
+
+do $$
+declare t text;
+begin
+  foreach t in array array['meal_plans', 'shopping_items', 'walmart_items'] loop
+    execute format('alter table plates.%I enable row level security', t);
+    execute format('drop policy if exists %1$s_read   on plates.%1$I', t);
+    execute format('drop policy if exists %1$s_write  on plates.%1$I', t);
+    execute format('drop policy if exists %1$s_update on plates.%1$I', t);
+    execute format(
+      'create policy %1$s_read on plates.%1$I for select using (plates.can_read(owner_email))', t);
+    execute format(
+      'create policy %1$s_write on plates.%1$I for insert with check (plates.can_read(owner_email))', t);
+    execute format(
+      'create policy %1$s_update on plates.%1$I for update using (plates.can_read(owner_email)) with check (plates.can_read(owner_email))', t);
+    execute format('revoke all on plates.%I from anon, authenticated', t);
+    execute format('grant select, insert, update on plates.%I to authenticated', t);
+    execute format('grant select, insert, update, delete on plates.%I to service_role', t);
+  end loop;
+end $$;

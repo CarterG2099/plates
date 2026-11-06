@@ -1,5 +1,6 @@
 // The Gemini call, apart from the request handling so tests can drive it with
-// a fake fetch (see tests/read-food-photo.test.mjs).
+// a fake fetch (see tests/read-food-photo.test.mjs). A byte-identical copy
+// lives in plan-week; tests/plan-week.test.mjs keeps them the same.
 
 /** One model's turn, before it counts as stuck and the next model gets a go. */
 export const ATTEMPT_MS = 40_000;

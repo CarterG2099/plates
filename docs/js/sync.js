@@ -28,6 +28,9 @@ const PULL_ORDER = [
   'exercise_notes',
   'progress_photos',
   'day_marks',
+  'meal_plans',
+  'shopping_items',
+  'walmart_items',
 ];
 
 const PAGE_SIZE = 1000;
@@ -80,6 +83,8 @@ const NOT_NULL_DEFAULTS = {
   routines: { notes: null, position: 0 },
   meal_combos: { items: [] },
   day_templates: { items: [] },
+  meal_plans: { meals: [] },
+  shopping_items: { recipes: [], have: false },
 };
 
 function fillDefaults(table, row) {

@@ -14,6 +14,7 @@ import * as sync from './sync.js';
 import * as food from './food.js';
 import { lookupBarcode, draftsFromProducts } from './lookup.js';
 import * as recipes from './recipes.js';
+import * as grocery from './grocery.js';
 import * as scanner from './scanner.js';
 import * as photo from './photo.js';
 import * as progress from './progress.js';
@@ -609,6 +610,7 @@ const raw = {
   goals: [], foods: [], log: [], combos: [], templates: [], weightLog: [], dayMarks: [],
   exercises: [], routines: [], routineExercises: [], sessions: [], sessionSets: [],
   progressPhotos: [],
+  mealPlans: [], shoppingItems: [], walmartItems: [],
   index: workout.buildIndex([], [], ''),
   prior: new Map(),
   stalls: new Map(),   // exercise key → stats.stallFor(), see refreshTraining
@@ -664,7 +666,8 @@ Alpine.store('data', {
 
   /** What Today needs: small, and read first so the app paints immediately. */
   async refreshCore() {
-    const [goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks] = await Promise.all([
+    const [goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks,
+      mealPlans, shoppingItems, walmartItems] = await Promise.all([
       local.all('goals'),
       local.all('foods'),
       local.all('food_log'),
@@ -673,9 +676,13 @@ Alpine.store('data', {
       local.all('weight_log'),
       local.all('progress_photos'),
       local.all('day_marks'),
+      local.all('meal_plans'),
+      local.all('shopping_items'),
+      local.all('walmart_items'),
     ]);
 
-    Object.assign(raw, { goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks });
+    Object.assign(raw, { goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks,
+      mealPlans, shoppingItems, walmartItems });
     this.ready = true;
     this.version++;
   },
@@ -4102,6 +4109,168 @@ Alpine.data('trainPage', () => ({
 const tracksPointer = (event) =>
   event.pointerType === 'mouse' || event.type === 'pointerdown' || event.buttons > 0;
 
+/**
+ * The Plan tab: a draft week from plan-week, the shopping list it makes once
+ * accepted, and the Walmart cart link. Shared by the household — see grocery.js.
+ * The draft lives only here until accepted; nothing is saved before that.
+ */
+Alpine.data('planPage', () => ({
+  get email() { return Alpine.store('auth').email; },
+
+  counts: { ...grocery.DEFAULT_COUNTS },
+  /** Servings per meal: one each for the household, until changed. */
+  servings: null,
+  draft: null,          // [{meal, recipe_id, reason, servings}] — unsaved
+  busy: '',             // '' | 'planning' | 'accepting'
+  error: '',
+  recipeList: [],       // every recipe, yours first, for titles and swaps
+  usual: null,          // the mapping sheet: {key, label, link, qty, existing}
+  usualError: '',
+
+  init() {
+    const partner = partnerOf(Alpine.store('auth').members, this.email);
+    this.servings = partner ? 2 : 1;
+    this.loadRecipes();
+  },
+
+  async loadRecipes() {
+    try {
+      this.recipeList = recipes.mineFirst(await recipes.fetchRecipes(), this.email);
+    } catch { /* offline: titles come from the saved plan, and planning says why */ }
+  },
+
+  get mealNames() { return grocery.MEALS; },
+
+  step(meal, by) {
+    this.counts[meal] = Math.max(0, Math.min(14, (this.counts[meal] ?? 0) + by));
+  },
+
+  get slotCount() { return grocery.MEALS.reduce((n, m) => n + (this.counts[m] ?? 0), 0); },
+
+  get plan() { return grocery.currentPlan(snapshot().mealPlans); },
+
+  get items() {
+    const plan = this.plan;
+    if (!plan) return [];
+    return snapshot().shoppingItems
+      .filter((i) => i.plan_id === plan.id)
+      .sort((a, b) => a.label.localeCompare(b.label));
+  },
+
+  get usuals() { return snapshot().walmartItems; },
+
+  usualOf(item) { return grocery.usualFor(item.ingredient_key, this.usuals); },
+
+  /** Still to buy, and mapped to a product. */
+  get toBuy() { return this.items.filter((i) => !i.have && this.usualOf(i)); },
+  /** Still to buy, with no product yet: left out of the cart until it has one. */
+  get unmapped() { return this.items.filter((i) => !i.have && !this.usualOf(i)); },
+  get had() { return this.items.filter((i) => i.have); },
+
+  get cart() { return grocery.cartLink(this.items, this.usuals); },
+
+  amount(item) { return grocery.amountLabel(item.qty, item.unit); },
+
+  titleOf(id) {
+    return this.recipeList.find((r) => r.id === id)?.title
+      ?? this.plan?.meals.find((m) => m.recipe_id === id)?.title
+      ?? 'Recipe';
+  },
+
+  async makeDraft() {
+    this.error = '';
+    this.busy = 'planning';
+    try {
+      const meals = await grocery.draftWeek(this.counts);
+      this.draft = meals.map((m) => ({ ...m, servings: this.servings }));
+    } catch (e) {
+      this.error = e.message ?? String(e);
+    } finally {
+      this.busy = '';
+    }
+  },
+
+  swap(index, recipeId) {
+    const id = Number(recipeId);
+    if (!id) return;
+    this.draft[index] = { ...this.draft[index], recipe_id: id, reason: 'Your pick.' };
+  },
+
+  removeMeal(index) { this.draft.splice(index, 1); },
+
+  stepServings(index, by) {
+    const meal = this.draft[index];
+    meal.servings = Math.max(1, Math.min(12, meal.servings + by));
+  },
+
+  discardDraft() { this.draft = null; this.error = ''; },
+
+  /** Read the chosen recipes' ingredients, add them up, and save the plan and list. */
+  async accept() {
+    if (!this.draft?.length) return;
+    this.error = '';
+    this.busy = 'accepting';
+    try {
+      const ids = [...new Set(this.draft.map((m) => m.recipe_id))];
+      const ingredients = await grocery.readIngredients(ids);
+      const byId = new Map(this.recipeList.map((r) => [r.id, r]));
+      const meals = this.draft.map((m) => ({ ...m, title: this.titleOf(m.recipe_id) }));
+      const lines = grocery.combine(meals, ingredients, byId);
+      await grocery.acceptPlan({ meals, lines, email: this.email });
+      await Alpine.store('data').refreshCore();
+      this.draft = null;
+    } catch (e) {
+      this.error = e.message ?? String(e);
+    } finally {
+      this.busy = '';
+    }
+  },
+
+  async toggleHave(item) {
+    await grocery.setHave(item, !item.have);
+    await Alpine.store('data').refreshCore();
+  },
+
+  // ---- usuals ------------------------------------------------------------------
+
+  openUsual(item) {
+    const existing = this.usualOf(item);
+    this.usualError = '';
+    this.usual = {
+      key: item.ingredient_key,
+      label: existing?.label || item.label,
+      link: existing ? existing.walmart_item_id : '',
+      qty: existing?.default_qty ?? 1,
+      existing,
+    };
+  },
+
+  openUsualRow(row) {
+    this.usualError = '';
+    this.usual = { key: row.ingredient_key, label: row.label, link: row.walmart_item_id, qty: row.default_qty, existing: row };
+  },
+
+  async saveUsual() {
+    this.usualError = '';
+    try {
+      const u = this.usual;
+      await grocery.saveUsual({ id: u.existing?.id, key: u.key, link: u.link, label: u.label, qty: u.qty },
+        this.email, u.existing);
+      await Alpine.store('data').refreshCore();
+      this.usual = null;
+    } catch (e) {
+      this.usualError = e.message ?? String(e);
+    }
+  },
+
+  async removeUsual() {
+    if (!this.usual?.existing) return;
+    await grocery.removeUsual(this.usual.existing.id);
+    await Alpine.store('data').refreshCore();
+    this.usual = null;
+  },
+}));
+
 Alpine.data('statsPage', () => ({
   weighing: false,
   newWeight: '',
@@ -4988,7 +5157,7 @@ function trackKeyboardInset() {
  * physical without paying for that.
  */
 function swipeNav() {
-  const TABS = ['today', 'train', 'stats'];
+  const TABS = ['today', 'plan', 'train', 'stats'];
   const DISTANCE = 60;    // px before a drag counts as a swipe
   const SLOPE = 1.2;      // and how much more sideways than up-and-down it must be
   const DECIDE = 8;       // px before there is enough of a gesture to judge
