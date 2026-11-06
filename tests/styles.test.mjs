@@ -221,3 +221,17 @@ test('app.js publishes keyboard-up and the viewport top that the CSS reads', asy
   assert.match(app, /\(Boolean\(touch\?\.matches\) && typing\(\)\)/);
   assert.match(app, /setProperty\('--viewport-top'/);
 });
+
+// Adding Plan made four tabs on a grid fixed at repeat(3, 1fr), and the fourth
+// wrapped onto a second row of the bar.
+test('the tab bar is one row, however many tabs it has', async () => {
+  const html = await readFile(fileURLToPath(new URL('../docs/index.html', import.meta.url)), 'utf8');
+  const nav = html.match(/<nav class="tabbar">([\s\S]*?)<\/nav>/)[1];
+  const tabs = (nav.match(/<button/g) ?? []).length;
+  assert.ok(tabs >= 4, `expected the Plan tab among ${tabs}`);
+
+  const rule = pages.match(/\.tabbar \{([^}]*)\}/)[1];
+  const fixed = rule.match(/grid-template-columns:\s*repeat\((\d+)/);
+  if (fixed) assert.equal(Number(fixed[1]), tabs, 'a fixed column count must match the tabs');
+  else assert.match(rule, /grid-auto-flow:\s*column/);
+});

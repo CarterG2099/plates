@@ -7,7 +7,10 @@
   bottom: 0;
   flex: none;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* One column per tab, however many there are: a fixed repeat(3) put the
+     fourth, Plan, on a second row. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   border-top: 1px solid var(--color-border);
   background: var(--color-ink);
   padding-bottom: var(--inset-bottom);
