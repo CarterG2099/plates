@@ -115,6 +115,41 @@ test('a dose marked and then un-marked before its time still gets its reminder',
   assert.equal(due(meds, unmarked, EIGHT), 'first');
 });
 
+// ---- keep reminding until checked off ------------------------------------------
+
+test('a persistent reminder comes back every 15 minutes, with no cap, until checked off', () => {
+  const food = reminder({ persistent: true });
+  assert.equal(due(food, sentAt(1, LUNCH), minutesAfter(LUNCH, d.PERSIST_EVERY_MIN - 1)), null);
+  assert.equal(due(food, sentAt(1, LUNCH), minutesAfter(LUNCH, d.PERSIST_EVERY_MIN)), 'nag');
+  assert.equal(due(food, sentAt(20, LUNCH), minutesAfter(LUNCH, 15)), 'nag', 'no cap');
+
+  const pills = reminder({ kind: 'meds', at_time: '08:00:00', persistent: true });
+  assert.equal(due(pills, sentAt(1, EIGHT), minutesAfter(EIGHT, 15)), 'nag', 'sooner than a plain med');
+  assert.equal(due(pills, sentAt(d.MAX_NAGS + 5, EIGHT), minutesAfter(EIGHT, 15)), 'nag', 'past where a plain med gives up');
+});
+
+test('checked off, or decided quiet, a persistent one stops too', () => {
+  const food = reminder({ persistent: true });
+  const done = { sends: 4, last_sent_at: LUNCH, skipped: false, taken_at: minutesAfter(LUNCH, 2) };
+  assert.equal(due(food, done, minutesAfter(LUNCH, 30)), null);
+  const quiet = { sends: 0, last_sent_at: null, skipped: true, taken_at: null };
+  assert.equal(due(food, quiet, minutesAfter(LUNCH, 30)), null);
+});
+
+test('a food nag says to tap Done', () => {
+  assert.equal(d.foodMessage('Lunch', true), 'Still need to log Lunch? Tap Done once you have.');
+  assert.equal(d.foodMessage('', true), 'Still need to log what you ate? Tap Done once you have.');
+});
+
+test('anything that can be checked off carries a token, and its button says Taken or Done', async () => {
+  const src = await readFile(fileURLToPath(new URL('../supabase/functions/notify-reminders/index.ts', import.meta.url)), 'utf8');
+  assert.match(src, /const token = r\.kind === "meds" \|\| r\.persistent \?/);
+  assert.match(src, /const checkOff = \(r: Row\) => \(r\.kind === "meds" \? "Taken" : "Done"\);/);
+  assert.match(src, /actions: \[\{ action: "taken", title: checkOff\(r\) \}\]/);
+  assert.match(src, /deleted_at, persistent"\)/, 'the column is read');
+  assert.match(src, /if \(r\.kind === "food" && due === "nag"\) \{\s*\/\/[^\n]*\n\s*body = foodMessage\(r\.label, true\);/);
+});
+
 // ---- food: quiet when just logged -----------------------------------------------
 
 const NOW = new Date(LUNCH);
@@ -217,7 +252,7 @@ test('only eaten food keeps a food reminder quiet, and only that member\'s', asy
 
 test('a meds push carries a Taken button and the token for it, and keeps only the hash', async () => {
   const src = await source('../supabase/functions/notify-reminders/index.ts');
-  assert.match(src, /actions: \[\{ action: "taken", title: "Taken" \}\], taken: \{ url: takenUrl, token \}/);
+  assert.match(src, /actions: \[\{ action: "taken", title: checkOff\(r\) \}\], taken: \{ url: takenUrl, token \}/);
   assert.match(src, /token_hash: token \? await sha256\(token\) : null/);
 });
 

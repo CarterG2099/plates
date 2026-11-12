@@ -919,3 +919,30 @@ begin
     execute format('grant select, insert, update, delete on plates.%I to service_role', t);
   end loop;
 end $$;
+
+-- ---- keep reminding until checked off (added 2026-11-12) --------------------------
+-- A food or med reminder switched to persistent comes back every 15 minutes,
+-- uncapped, until checked off for the day — Taken for a med, Done for food — in
+-- the app or from the notification. Food reminders can now be checked off too.
+alter table plates.reminders add column if not exists persistent boolean not null default false;
+grant update (persistent) on plates.reminders to authenticated;
+
+create or replace function plates.set_reminder_taken(p_reminder uuid, p_day date, p_taken boolean)
+  returns timestamptz
+  language plpgsql security definer set search_path = ''
+as $$
+declare
+  stamp timestamptz := case when p_taken then now() end;
+begin
+  if not plates.is_member() or not exists (
+    select 1 from plates.reminders
+    where id = p_reminder and owner_email = auth.email() and kind in ('food', 'meds')
+  ) then
+    raise exception 'not your reminder';
+  end if;
+  insert into plates.reminder_sends (reminder_id, owner_email, local_date, taken_at)
+    values (p_reminder, auth.email(), p_day, stamp)
+    on conflict (reminder_id, local_date) do update set taken_at = stamp;
+  return stamp;
+end;
+$$;

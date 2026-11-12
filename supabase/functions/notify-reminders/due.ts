@@ -16,6 +16,13 @@ export const NAG_EVERY_MIN = 30;
 /** …this many more times, and then left alone for the day. */
 export const MAX_NAGS = 3;
 
+/**
+ * A reminder switched to "keep reminding" comes back this often, with no cap,
+ * until it is checked off — in the app or from the notification. The day is
+ * the limit: tomorrow is a new row.
+ */
+export const PERSIST_EVERY_MIN = 15;
+
 /** A food reminder stays quiet when something was logged this recently. */
 export const DEFAULT_QUIET_MIN = 60;
 
@@ -45,6 +52,7 @@ export interface Reminder {
   days: number[];
   enabled: boolean;
   deleted_at: string | null;
+  persistent?: boolean;
 }
 
 /** Today's row in reminder_sends, or null when there isn't one yet. */
@@ -61,10 +69,13 @@ const minutesOf = (time: string) => {
 };
 
 /**
- * "first" for today's first send, "nag" for a med asked about again, or null.
+ * "first" for today's first send, "nag" for one asked about again, or null.
  *
  * Taken and skipped are both final for the day. A row with no sends and a
  * taken time is a dose marked in the app before the reminder went off.
+ *
+ * Asked again: a med every 30 minutes, three times at most; anything set to
+ * keep reminding every 15 minutes, for as long as the day lasts.
  */
 export function whatIsDue(
   r: Reminder,
@@ -81,9 +92,10 @@ export function whatIsDue(
     return late >= 0 && late < CATCH_UP_MIN ? "first" : null;
   }
 
-  if (r.kind !== "meds" || send.sends > MAX_NAGS || !send.last_sent_at) return null;
+  if (!send.last_sent_at) return null;
+  if (!r.persistent && (r.kind !== "meds" || send.sends > MAX_NAGS)) return null;
   const since = (now.getTime() - Date.parse(send.last_sent_at)) / 60_000;
-  return since >= NAG_EVERY_MIN ? "nag" : null;
+  return since >= (r.persistent ? PERSIST_EVERY_MIN : NAG_EVERY_MIN) ? "nag" : null;
 }
 
 /**
@@ -97,7 +109,8 @@ export function quietForFood(quietMin: number | null, lastLoggedAt: string | nul
   return ago >= 0 && ago <= window;
 }
 
-export function foodMessage(label: string): string {
+export function foodMessage(label: string, nag = false): string {
+  if (nag) return `Still need to log ${label.trim() || "what you ate"}? Tap Done once you have.`;
   return label.trim() ? `${label.trim()}: time to log what you ate.` : "Time to log what you ate.";
 }
 

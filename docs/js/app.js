@@ -962,13 +962,17 @@ Alpine.store('ui', {
   reminderDetail(r) { return reminders.detail(r); },
   dayNames: reminders.DAY_NAMES,
 
-  /** "Taken 8:02am", for a med marked today, or ''. */
+  /** "Taken 8:02am" for a med, "Done 12:40pm" for food, checked off today; or ''. */
   takenLabel(r) {
     const at = this.reminderToday[r.id]?.taken_at;
     if (!at) return '';
     const d = new Date(at);
-    return `Taken ${reminders.timeLabel(`${d.getHours()}:${d.getMinutes()}`)}`;
+    return `${reminders.checkOffWord(r)} ${reminders.timeLabel(`${d.getHours()}:${d.getMinutes()}`)}`;
   },
+
+  checksOff(r) { return reminders.checksOff(r); },
+  checkOffWord(r) { return reminders.checkOffWord(r); },
+  canPersist(r) { return reminders.canPersist(r); },
 
   newReminder(kind) {
     this.reminderDraft = reminders.blank(kind);
@@ -1030,14 +1034,14 @@ Alpine.store('ui', {
     }
   },
 
-  /** Taken today, from the list — for a dose taken without the notification. */
+  /** Checked off today, from the list — for a dose taken without the notification. */
   async toggleTaken(r) {
     const was = this.reminderToday[r.id] ?? null;
     const taking = !was?.taken_at;
     try {
       const at = await reminders.setTaken(r.id, taking);
       this.reminderToday = { ...this.reminderToday, [r.id]: { ...was, taken_at: at } };
-      this.flash(taking ? `${reminders.title(r)} taken` : 'Unmarked');
+      this.flash(taking ? `${reminders.title(r)}: ${reminders.checkOffWord(r).toLowerCase()}` : 'Unmarked');
     } catch (e) {
       this.flash(describeError(e));
     }

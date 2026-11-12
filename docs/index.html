@@ -3497,9 +3497,9 @@
                   <small class="reminder-taken" x-show="$store.ui.takenLabel(r)"
                          x-text="$store.ui.takenLabel(r)"></small>
                 </button>
-                <button class="chip" x-show="r.kind === 'meds' && r.enabled"
+                <button class="chip" x-show="$store.ui.checksOff(r) && r.enabled"
                         @click="$store.ui.toggleTaken(r)"
-                        x-text="$store.ui.takenLabel(r) ? 'Undo' : 'Taken'"></button>
+                        x-text="$store.ui.takenLabel(r) ? 'Undo' : $store.ui.checkOffWord(r)"></button>
                 <input type="checkbox" role="switch" :checked="r.enabled"
                        :aria-label="`${$store.ui.reminderTitle(r)} on`"
                        @change="await $store.ui.toggleReminder(r); $el.checked = r.enabled">
@@ -3575,7 +3575,15 @@
                      x-model.number="$store.ui.reminderDraft.quiet_if_logged_min">
             </label>
 
-            <p class="setting-meta" x-show="$store.ui.reminderDraft.kind === 'meds'">
+            <label class="setting" x-show="$store.ui.canPersist($store.ui.reminderDraft)">
+              <span class="setting-text">
+                <b>Keep reminding until checked off</b>
+                <small x-text="`Every 15 minutes, all day, until you tap ${$store.ui.checkOffWord($store.ui.reminderDraft)} here or on the notification`"></small>
+              </span>
+              <input type="checkbox" role="switch" x-model="$store.ui.reminderDraft.persistent">
+            </label>
+
+            <p class="setting-meta" x-show="$store.ui.reminderDraft.kind === 'meds' && !$store.ui.reminderDraft.persistent">
               Comes back every 30 minutes, up to 3 more times, until you tap Taken.
             </p>
             <p class="setting-meta" x-show="$store.ui.reminderDraft.kind === 'evening'">

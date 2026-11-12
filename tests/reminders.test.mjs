@@ -196,6 +196,48 @@ test('Taken in the list marks today\'s dose, and shows when', withServer(async (
   assert.equal(ui.takenLabel(VITD), '');
 }));
 
+// ---- keep reminding until checked off ---------------------------------------------
+
+test('only food and meds can keep reminding, and the detail line says so', () => {
+  assert.equal(r.canPersist({ kind: 'food' }), true);
+  assert.equal(r.canPersist({ kind: 'meds' }), true);
+  assert.equal(r.canPersist({ kind: 'morning' }), false);
+  assert.equal(r.canPersist({ kind: 'evening' }), false);
+  assert.equal(r.detail({ kind: 'meds', at_time: '08:00:00', days: r.EVERY_DAY, persistent: true }),
+    '8:00am · Every day · every 15 min until Taken');
+  assert.equal(r.detail({ kind: 'food', at_time: '12:30:00', days: [1], quiet_if_logged_min: 0, persistent: true }),
+    '12:30pm · Mon · always · every 15 min until Done');
+  assert.equal(r.blank('food').persistent, false);
+});
+
+test('a med always has its Taken chip; food gets Done only when it keeps reminding', () => {
+  assert.equal(r.checksOff({ kind: 'meds' }), true);
+  assert.equal(r.checksOff({ kind: 'food', persistent: false }), false);
+  assert.equal(r.checksOff({ kind: 'food', persistent: true }), true);
+  assert.equal(r.checksOff({ kind: 'morning', persistent: true }), false);
+  assert.equal(r.checkOffWord({ kind: 'food' }), 'Done');
+});
+
+test('the switch is saved for food and meds, and never for the fixed two', withServer(async (server, ui) => {
+  ui.reminderList = [];
+  ui.editReminder({ ...LUNCH, persistent: false });
+  ui.reminderDraft.persistent = true;
+  await ui.saveReminder();
+  assert.equal(server.calls.find((c) => c.op === 'update').row.persistent, true);
+
+  await r.save({ id: 'm', kind: 'morning', at_time: '06:30', days: [1], enabled: true, persistent: true });
+  assert.equal(server.calls.at(-1).row.persistent, false);
+}));
+
+test('Done on a food reminder checks it off and reads as Done', withServer(async (server, ui) => {
+  const lunch = { ...LUNCH, persistent: true };
+  ui.reminderToday = {};
+  server.rpcResult = '2026-11-12T19:40:00.000Z';
+  await ui.toggleTaken(lunch);
+  assert.equal(server.calls.find((c) => c.rpc === 'set_reminder_taken').args.p_reminder, 'l');
+  assert.match(ui.takenLabel(lunch), /^Done \d{1,2}:\d{2}(am|pm)$/);
+}));
+
 // ---- markup ---------------------------------------------------------------------------
 
 const html = await readFile(fileURLToPath(new URL('../docs/index.html', import.meta.url)), 'utf8');
@@ -207,7 +249,8 @@ test('Settings lists the reminders with a switch each, and buttons to add food a
   assert.match(settings, /@change="await \$store\.ui\.toggleReminder\(r\)/);
   assert.match(settings, /@click="\$store\.ui\.newReminder\('food'\)"/);
   assert.match(settings, /@click="\$store\.ui\.newReminder\('meds'\)"/);
-  assert.match(settings, /x-show="r\.kind === 'meds' && r\.enabled"/);
+  assert.match(settings, /x-show="\$store\.ui\.checksOff\(r\) && r\.enabled"/);
+  assert.match(settings, /x-text="\$store\.ui\.takenLabel\(r\) \? 'Undo' : \$store\.ui\.checkOffWord\(r\)"/);
 });
 
 test('the old fixed morning and evening switches are gone, folded into the list', () => {
@@ -223,6 +266,8 @@ test('the reminder sheet edits time, days and quiet minutes, and stacks above Se
   assert.match(sheet, /x-model\.number="\$store\.ui\.reminderDraft\.quiet_if_logged_min"/);
   assert.match(sheet, /@click="\$store\.ui\.toggleReminderDay\(day\)"/);
   assert.match(sheet, /:disabled="\$store\.ui\.reminderBusy \|\| Boolean\(\$store\.ui\.reminderProblem\)"/);
+  assert.match(sheet, /<label class="setting" x-show="\$store\.ui\.canPersist\(\$store\.ui\.reminderDraft\)">/);
+  assert.match(sheet, /<input type="checkbox" role="switch" x-model="\$store\.ui\.reminderDraft\.persistent">/);
 });
 
 test('the new module is precached', async () => {

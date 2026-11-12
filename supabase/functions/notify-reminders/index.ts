@@ -13,6 +13,10 @@
 //   morning  the motivation line (morning.ts)
 //   evening  only when the day looks unfinished (nudge.ts)
 //
+// Food and meds can be set to keep reminding (persistent): then it comes back
+// every 15 minutes, uncapped, until checked off — Taken for a med, Done for
+// food — in the app or from the notification's button.
+//
 // Opt-in twice over, like the jobs it replaces: a live push subscription and the
 // reminder switched on.
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -32,6 +36,9 @@ const json = (body: unknown, status = 200) =>
 type SupabaseLike = any;
 
 type Row = Reminder & { id: string; owner_email: string; label: string; quiet_if_logged_min: number | null };
+
+/** What a reminder's check-off is called, on its notification button. */
+const checkOff = (r: Row) => (r.kind === "meds" ? "Taken" : "Done");
 
 /** The evening nudge's day, read the way notify-evening read it. */
 async function eveningMessage(db: SupabaseLike, owner: string, today: string, now: Date) {
@@ -123,7 +130,7 @@ Deno.serve(async (req) => {
 
   const { data: reminders, error: remindersError } = await db
     .from("reminders")
-    .select("id, owner_email, kind, label, at_time, days, quiet_if_logged_min, enabled, deleted_at")
+    .select("id, owner_email, kind, label, at_time, days, quiet_if_logged_min, enabled, deleted_at, persistent")
     .eq("enabled", true)
     .is("deleted_at", null);
   if (remindersError) return json({ error: remindersError.message }, 500);
@@ -165,7 +172,10 @@ Deno.serve(async (req) => {
     if (!subs.length) continue;
 
     let body: string | null;
-    if (r.kind === "food") {
+    if (r.kind === "food" && due === "nag") {
+      // Quiet was decided at the first send; from here only Done stops it.
+      body = foodMessage(r.label, true);
+    } else if (r.kind === "food") {
       body = quietForFood(r.quiet_if_logged_min, await lastEatenAt(db, r.owner_email, now), now)
         ? null
         : foodMessage(r.label);
@@ -178,9 +188,9 @@ Deno.serve(async (req) => {
     }
     decisions[r.id] = body;
 
-    // A new token per send, so only the latest notification's Taken button
-    // counts; only its hash is kept.
-    const token = r.kind === "meds" ? crypto.randomUUID() + crypto.randomUUID() : null;
+    // A new token per send, so only the latest notification's button counts;
+    // only its hash is kept. Anything that can be checked off carries one.
+    const token = r.kind === "meds" || r.persistent ? crypto.randomUUID() + crypto.randomUUID() : null;
     const stamp = now.toISOString();
     const row = {
       reminder_id: r.id,
@@ -219,7 +229,7 @@ Deno.serve(async (req) => {
       // One notification per reminder per day: a nag replaces the last one.
       tag: `reminder-${r.id}-${today}`,
       url: r.kind === "morning" ? "/#train" : "/#today",
-      ...(token ? { actions: [{ action: "taken", title: "Taken" }], taken: { url: takenUrl, token } } : {}),
+      ...(token ? { actions: [{ action: "taken", title: checkOff(r) }], taken: { url: takenUrl, token } } : {}),
     });
 
     for (const sub of subs) {

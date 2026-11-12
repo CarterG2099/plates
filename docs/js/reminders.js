@@ -17,7 +17,19 @@ export const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
 /** What a new food reminder stays quiet for, matching the function's default. */
 export const DEFAULT_QUIET_MIN = 60;
 
-const COLUMNS = 'id, kind, label, at_time, days, quiet_if_logged_min, enabled';
+const COLUMNS = 'id, kind, label, at_time, days, quiet_if_logged_min, enabled, persistent';
+
+/** How often a reminder set to keep reminding comes back, matching the function. */
+export const PERSIST_EVERY_MIN = 15;
+
+/** Food and meds can be checked off, so they can keep reminding until they are. */
+export const canPersist = (r) => r.kind === 'food' || r.kind === 'meds';
+
+/** What checking one off is called: Taken for a med, Done for food. */
+export const checkOffWord = (r) => (r.kind === 'meds' ? 'Taken' : 'Done');
+
+/** Whether a reminder's row shows the check-off chip. */
+export const checksOff = (r) => r.kind === 'meds' || (r.kind === 'food' && Boolean(r.persistent));
 
 /** "20:30:00" → "8:30pm". */
 export function timeLabel(time) {
@@ -52,6 +64,7 @@ export function detail(r) {
     parts.push(quiet ? `quiet if you logged in the last ${quiet} min` : 'always');
   }
   if (r.kind === 'evening') parts.push('only when the day looks unfinished');
+  if (r.persistent && canPersist(r)) parts.push(`every ${PERSIST_EVERY_MIN} min until ${checkOffWord(r)}`);
   return parts.join(' · ');
 }
 
@@ -70,6 +83,7 @@ export function blank(kind) {
     days: [...EVERY_DAY],
     quiet_if_logged_min: kind === 'food' ? DEFAULT_QUIET_MIN : null,
     enabled: true,
+    persistent: false,
     isNew: true,
   };
 }
@@ -123,6 +137,7 @@ export async function save(draft) {
     days: [...new Set(draft.days)].sort((a, b) => a - b),
     quiet_if_logged_min: draft.kind === 'food' ? Number(draft.quiet_if_logged_min) : null,
     enabled: Boolean(draft.enabled),
+    persistent: canPersist(draft) && Boolean(draft.persistent),
     updated_at: new Date().toISOString(),
   };
 
@@ -141,7 +156,7 @@ export async function remove(id) {
   if (error) throw error;
 }
 
-/** Marks today's dose taken, or un-marks a mis-tap. Returns the time, or null. */
+/** Checks today's off (a dose taken, food logged), or un-marks a mis-tap. Returns the time, or null. */
 export async function setTaken(id, taken) {
   const { data, error } = await supabase.schema('plates')
     .rpc('set_reminder_taken', { p_reminder: id, p_day: today(), p_taken: taken });
