@@ -195,3 +195,40 @@ test('photoNear returns null rather than a photo of a different body or month', 
   ];
   assert.equal(progress.photoNear(photos, EMAIL, '2026-09-07T08:00:00Z'), null);
 });
+
+// ---- editing a saved photo ----------------------------------------------------
+//
+// Two photos taken the same day both landed as "front"; the only fix was to
+// delete one and upload it again. The date, pose and note are now editable from
+// the viewer. The object in the bucket is never touched by an edit.
+
+test('updatePhoto changes the date, pose and note and nothing else', async () => {
+  const row = await progress.savePhoto({
+    blob: new Blob(['x']), takenOn: '2026-11-12', pose: 'front', note: '', ownerEmail: EMAIL,
+  });
+
+  // A clock tick apart, or the two stamps land in the same millisecond.
+  await new Promise((r) => setTimeout(r, 2));
+  const saved = await progress.updatePhoto(row, { pose: 'side', note: '  week 6  ' });
+
+  assert.equal(saved.id, row.id);
+  assert.equal(saved.pose, 'side');
+  assert.equal(saved.note, 'week 6', 'trimmed, like the save sheet');
+  assert.equal(saved.taken_on, '2026-11-12', 'untouched fields stay');
+  assert.equal(saved.object_path, row.object_path);
+  assert.equal(saved.owner_email, EMAIL);
+  assert.ok(saved.updated_at > row.updated_at, 'or the sync cursor would skip it');
+
+  const stored = await local.get('progress_photos', row.id);
+  assert.equal(stored.pose, 'side');
+});
+
+test('updatePhoto clears a blank note and keeps a blank date from erasing the real one', async () => {
+  const row = await progress.savePhoto({
+    blob: new Blob(['x']), takenOn: '2026-11-12', pose: 'front', note: 'old', ownerEmail: EMAIL,
+  });
+
+  const saved = await progress.updatePhoto(row, { note: '   ', taken_on: '' });
+  assert.equal(saved.note, null);
+  assert.equal(saved.taken_on, '2026-11-12');
+});

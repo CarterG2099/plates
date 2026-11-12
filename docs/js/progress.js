@@ -155,6 +155,26 @@ export async function photoBlob(objectPath) {
   return data;
 }
 
+/**
+ * Change a photo's date, pose or note after the fact.
+ *
+ * Two photos from the same day both landed as "front", and the only fix was to
+ * delete one and upload it again. The object in the bucket is never touched —
+ * only the row moves — so an edit works offline and costs no upload. A blank
+ * date is ignored rather than stored: a photo with no day is unfindable.
+ */
+export async function updatePhoto(photo, fields) {
+  const next = { ...photo, ...fields };
+  const saved = await local.save('progress_photos', {
+    ...next,
+    taken_on: fields.taken_on || photo.taken_on,
+    pose: next.pose || null,
+    note: String(next.note ?? '').trim() || null,
+  }, photo.owner_email);
+  sync.nudge();
+  return saved;
+}
+
 export async function removePhoto(photo) {
   const row = await local.remove('progress_photos', photo.id);
   await local.deleteBlob(photo.object_path);

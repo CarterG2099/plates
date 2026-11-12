@@ -3314,9 +3314,36 @@
                       x-text="photoWeight(viewingPhoto) ? ` · ${photoWeight(viewingPhoto)} lb` : ''"></span>
                 <span x-show="ownedBy(viewingPhoto)" x-text="` · ${ownedBy(viewingPhoto)}`"></span>
               </p>
-              <p class="stat-sub" x-show="viewingPhoto.note" x-text="viewingPhoto.note"></p>
-              <button class="btn btn-danger btn-block" x-show="viewingPhoto.owner_email === email"
-                      @click="deletePhoto(viewingPhoto)">Delete photo</button>
+              <p class="stat-sub" x-show="viewingPhoto.note && viewingPhoto.owner_email !== email"
+                 x-text="viewingPhoto.note"></p>
+
+              <!-- Your own photo is editable in place: same three fields as the
+                   save sheet, each written as it changes. -->
+              <template x-if="viewingPhoto.owner_email === email">
+                <div>
+                  <div class="field">
+                    <label for="pv-date">Taken on</label>
+                    <input id="pv-date" type="date" :value="viewingPhoto.taken_on"
+                           @change="editPhoto({ taken_on: $event.target.value })">
+                  </div>
+                  <div class="field">
+                    <label>Pose</label>
+                    <div class="chips">
+                      <template x-for="p in poses" :key="p">
+                        <button class="chip" :class="viewingPhoto.pose === p && 'is-active'"
+                                @click="editPhoto({ pose: p })" x-text="p"></button>
+                      </template>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label for="pv-note">Note</label>
+                    <input id="pv-note" type="text" :value="viewingPhoto.note ?? ''"
+                           placeholder="end of cut, week 6…" autocomplete="off"
+                           @change="editPhoto({ note: $event.target.value })">
+                  </div>
+                  <button class="btn btn-danger btn-block" @click="deletePhoto(viewingPhoto)">Delete photo</button>
+                </div>
+              </template>
             </div>
           </div>
         </template>

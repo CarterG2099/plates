@@ -5129,6 +5129,14 @@ Alpine.data('statsPage', () => ({
     }
   },
 
+  /** Saved on change, like every other field in the app. Own photos only. */
+  async editPhoto(fields) {
+    const saved = await progress.updatePhoto(this.viewingPhoto, fields);
+    this.viewingPhoto = saved;
+    await Alpine.store('data').refresh();
+    Alpine.store('ui').flash('Photo updated');
+  },
+
   async deletePhoto(p) {
     if (!confirm('Delete this photo? This cannot be undone.')) return;
     await progress.removePhoto(p);

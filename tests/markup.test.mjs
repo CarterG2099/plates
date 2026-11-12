@@ -156,3 +156,17 @@ test('each estimated food has its own portion stepper, beside its remove button'
   assert.match(sheet, /x-text="portionLabel\(item\)"/);
   assert.match(sheet, /x-text="estimateItemLine\(item\)"/);
 });
+
+// The photo viewer's edit fields and delete button sit behind one ownership
+// gate. A partner's photo is view-only; yours is editable in place.
+test('the photo viewer only edits or deletes your own photo', () => {
+  const viewer = html.slice(html.indexOf('<!-- View one photo'), html.indexOf('<!-- Compare two'));
+  assert.ok(viewer.length > 0, 'the viewer block exists');
+
+  const gate = viewer.indexOf('x-if="viewingPhoto.owner_email === email"');
+  assert.ok(gate > 0, 'the owner gate exists');
+  for (const control of ['editPhoto({ taken_on', 'editPhoto({ pose', 'editPhoto({ note', 'deletePhoto(viewingPhoto)']) {
+    const at = viewer.indexOf(control);
+    assert.ok(at > gate, `${control} must sit inside the owner gate`);
+  }
+});
