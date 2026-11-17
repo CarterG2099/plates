@@ -3264,6 +3264,33 @@ Alpine.data('trainPage', () => ({
   muscleLabel(key) { return key.replace(/([A-Z])/g, ' $1').toLowerCase(); },
 
   /**
+   * Ticked in the picker, in the order they were ticked: adding several at
+   * once, to the workout or the routine being built — whichever opened it.
+   * Kept as rows, not ids, so a pick that a later search or filter hides is
+   * still added.
+   */
+  picked: [],
+
+  isPicked(e) { return this.picked.some((p) => p.id === e.id); },
+
+  togglePick(e) {
+    this.picked = this.isPicked(e) ? this.picked.filter((p) => p.id !== e.id) : [...this.picked, e];
+  },
+
+  /** "Add 3 to workout" — or to the routine, when the builder opened the picker. */
+  get pickedLabel() {
+    const n = this.picked.length;
+    return `Add ${n || ''} ${n === 1 ? 'exercise' : 'exercises'} to ${this.builder ? 'routine' : 'workout'}`.replace('  ', ' ');
+  },
+
+  async addPicked() {
+    const list = this.picked;
+    if (!list.length) return;
+    if (this.builder) await this.addToRoutine(list);
+    else await this.addExercises(list);
+  },
+
+  /**
    * The picker serves three callers — add, replace, and the routine builder —
    * so which one opened it has to be remembered while it is up.
    *
@@ -3286,26 +3313,31 @@ Alpine.data('trainPage', () => ({
   closePicker() {
     this.picker = false;
     this.replacing = null;
+    this.picked = [];
     this.pickerTerm = '';
     this.pickerGroup = null;
     this.pickerMuscle = null;
     this.pickerEquipment = null;
   },
 
-  /** Opens with as many sets as last time — see workout.openingSets. */
-  async addExercise(exercise) {
-    const previous = this.data.prior.get(exercise.id ?? exercise.name)?.previous ?? [];
-
+  /**
+   * Each opens with as many sets as last time — see workout.openingSets — in
+   * the order they were ticked.
+   */
+  async addExercises(exercises) {
     // `existingSets` is threaded by hand because addSet takes the next set_index
     // from its length, and `this.sets` will not have grown until the refresh
     // below. Without this every seeded set lands on the same index.
     let existing = this.sets;
-    for (let n = 0; n < workout.openingSets(previous); n++) {
-      const { set } = await workout.addSet({
-        session: this.session, exercise, weight: null, reps: null,
-        isWarmup: false, ownerEmail: this.email, existingSets: existing,
-      });
-      existing = [...existing, set];
+    for (const exercise of exercises) {
+      const previous = this.data.prior.get(exercise.id ?? exercise.name)?.previous ?? [];
+      for (let n = 0; n < workout.openingSets(previous); n++) {
+        const { set } = await workout.addSet({
+          session: this.session, exercise, weight: null, reps: null,
+          isWarmup: false, ownerEmail: this.email, existingSets: existing,
+        });
+        existing = [...existing, set];
+      }
     }
 
     this.closePicker();
@@ -4010,17 +4042,19 @@ Alpine.data('trainPage', () => ({
   },
 
   /** Picker doubles as "add to routine" while the builder is open. */
-  async addToRoutine(exercise) {
+  async addToRoutine(exercises) {
     if (!this.builder.routine) await this.saveRoutineName();
 
-    await workout.addRoutineExercise({
-      routineId: this.builder.routine.id,
-      exercise,
-      position: this.builderExercises.length,
-      ownerEmail: this.email,
-    });
-    this.picker = false;
-    this.pickerTerm = '';
+    const start = this.builderExercises.length;
+    for (const [i, exercise] of exercises.entries()) {
+      await workout.addRoutineExercise({
+        routineId: this.builder.routine.id,
+        exercise,
+        position: start + i,
+        ownerEmail: this.email,
+      });
+    }
+    this.closePicker();
     await Alpine.store('data').refreshTraining();
   },
 

@@ -484,6 +484,23 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 .keyboard-up .sheet-backdrop.is-search .chip { flex: none; white-space: nowrap; }
 .keyboard-up .sheet-backdrop.is-search .sheet > .btn-ghost { display: none; }
 
+/* A ticked exercise in the picker: lit, with its check where the chevron was. */
+.row.is-picked { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.pick-box {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-border);
+  border-radius: 7px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: #fff;
+}
+.row.is-picked .pick-box { background: var(--color-primary); border-color: var(--color-primary); }
+
 /* Everything that is not the list keeps its height while the list takes the
    slack. */
 .sheet-backdrop.is-search .search,

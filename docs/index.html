@@ -1921,20 +1921,27 @@
                 Nothing matches those filters.
               </p>
               <div class="rows">
+                <!-- Replacing is one tap. Adding ticks as many as you like and
+                     the button below adds them all to whatever opened this. -->
                 <template x-for="e in library.slice(0, 40)" :key="e.id">
-                  <button class="row"
-                          @click="builder ? addToRoutine(e) : (replacing ? applyReplace(e) : addExercise(e))">
+                  <button class="row" :class="isPicked(e) && 'is-picked'"
+                          :aria-pressed="replacing ? null : String(isPicked(e))"
+                          @click="replacing ? applyReplace(e) : togglePick(e)">
                     <!-- loading="lazy": nothing downloads until it scrolls in -->
                     <span class="thumb" x-html="muscleMap(e.id, e.name)"></span>
                     <div class="row-text">
                       <b x-text="e.name"></b>
                       <small x-text="[e.primary_muscle, e.equipment].filter(Boolean).join(' · ')"></small>
                     </div>
-                    <span class="tap">›</span>
+                    <span class="tap" x-show="replacing">›</span>
+                    <span class="pick-box" x-show="!replacing" aria-hidden="true"
+                          x-text="isPicked(e) ? '✓' : ''"></span>
                   </button>
                 </template>
               </div>
               <p class="empty" x-show="!library.length">Nothing matches that.</p>
+              <button class="btn btn-primary btn-block" x-show="!replacing"
+                      :disabled="!picked.length" @click="addPicked()" x-text="pickedLabel"></button>
               <button class="btn btn-ghost btn-block" @click="closePicker()">Cancel</button>
             </div>
           </div>
