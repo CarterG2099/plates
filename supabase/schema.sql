@@ -946,3 +946,9 @@ begin
   return stamp;
 end;
 $$;
+
+-- ---- photos of you both (added 2026-11-18) ----------------------------------------
+-- A progress photo taken together shows in both people's timelines, whoever's
+-- phone took it. Reading it already works for the other person through
+-- can_read() on the row and the bucket; only the owner can edit or delete it.
+alter table plates.progress_photos add column if not exists together boolean not null default false;

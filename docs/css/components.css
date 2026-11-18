@@ -736,6 +736,86 @@
   text-align: left;
 }
 
+.photo-cell-together {
+  position: absolute;
+  top: 4px; left: 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(0, 0, 0, .6);
+}
+
+/* The camera: the whole screen, the viewfinder taking what the controls leave.
+   Above every sheet, like the scanner. */
+.camera {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: calc(var(--inset-top) + var(--space-3)) var(--space-4) calc(var(--inset-bottom) + var(--space-3));
+  background: #000;
+  color: #fff;
+}
+.camera-top { justify-content: center; }
+.camera-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #111;
+}
+.camera-frame video { width: 100%; height: 100%; object-fit: cover; }
+.camera-frame video.is-mirrored { transform: scaleX(-1); }
+.camera-countdown {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 96px;
+  font-weight: 700;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .6);
+}
+.camera-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  text-align: center;
+}
+.camera-bar { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--space-4); }
+.camera-side {
+  min-width: 64px;
+  min-height: 44px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.camera-shutter {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background: rgba(255, 255, 255, .25);
+}
+.camera-shutter:active:not(:disabled) { background: #fff; }
+.camera-shutter:disabled { opacity: .4; }
+.camera-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); font-size: var(--text-sm); }
+
 .photo-full {
   width: 100%;
   max-height: 62vh;

@@ -61,6 +61,14 @@ export async function pinStep({ pin, stage, storedHash, first, email }) {
   return { stage, error: 'Wrong PIN.' };
 }
 
+/**
+ * Whether a photo is in this person's timeline: their own, or one of the two
+ * of you together — which shows in both, whoever's phone took it.
+ */
+export function inTimeline(photo, email) {
+  return Boolean(photo.together) || photo.owner_email?.toLowerCase() === String(email ?? '').toLowerCase();
+}
+
 /** Live rows, newest day first. */
 export function photosFor(rows, pose = 'all') {
   return (rows ?? [])
@@ -113,7 +121,7 @@ export function photoNear(photos, ownerEmail, atIso, windowDays = 3) {
 }
 
 /** Downscale + upload + row. Split from addPhoto so the row logic is testable. */
-export async function savePhoto({ blob, takenOn, pose, note, ownerEmail }) {
+export async function savePhoto({ blob, takenOn, pose, note, together = false, ownerEmail }) {
   const objectPath = `${crypto.randomUUID()}.jpg`;
 
   const { error } = await supabase.storage.from(BUCKET)
@@ -127,6 +135,7 @@ export async function savePhoto({ blob, takenOn, pose, note, ownerEmail }) {
     taken_on: takenOn,
     pose: pose || null,
     note: note || null,
+    together: Boolean(together),
     object_path: objectPath,
   }, ownerEmail);
   await local.putBlob(objectPath, blob);
@@ -135,12 +144,12 @@ export async function savePhoto({ blob, takenOn, pose, note, ownerEmail }) {
   return row;
 }
 
-export async function addPhoto({ file, takenOn, pose, note, ownerEmail }) {
+export async function addPhoto({ file, takenOn, pose, note, together = false, ownerEmail }) {
   if (!file) throw new Error('No photo selected.');
   if (!navigator.onLine) throw new Error('Saving a photo needs a connection.');
 
   const blob = await downscale(file);
-  return savePhoto({ blob, takenOn, pose, note, ownerEmail });
+  return savePhoto({ blob, takenOn, pose, note, together, ownerEmail });
 }
 
 /** Cached blob if we have it, the bucket if not. */

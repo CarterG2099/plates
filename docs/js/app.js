@@ -18,6 +18,7 @@ import * as grocery from './grocery.js';
 import * as scanner from './scanner.js';
 import * as photo from './photo.js';
 import * as progress from './progress.js';
+import * as camera from './camera.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
 import { exerciseArt, exerciseArtPair } from './muscle-map.js';
@@ -4414,6 +4415,12 @@ Alpine.data('planPage', () => ({
   },
 }));
 
+/**
+ * The live camera, outside Alpine: a MediaStream wrapped in a reactive proxy
+ * stops being a MediaStream the <video> will accept.
+ */
+let cameraStream = null;
+
 Alpine.data('statsPage', () => ({
   weighing: false,
   newWeight: '',
@@ -4961,7 +4968,7 @@ Alpine.data('statsPage', () => ({
 
   addingPhoto: false,
   photoFile: null,
-  photoDraft: { takenOn: '', pose: 'front', note: '' },
+  photoDraft: { takenOn: '', pose: 'front', note: '', together: false },
   photoBusy: false,
 
   viewingPhoto: null,
@@ -5011,10 +5018,16 @@ Alpine.data('statsPage', () => ({
     return partnerOf(Alpine.store('auth').members, this.email)?.display_name || 'Theirs';
   },
 
+  /** Whose timeline is showing: yours, or the other person's. */
+  get timelineEmail() {
+    if (this.ownerFilter === 'mine') return this.email;
+    return partnerOf(Alpine.store('auth').members, this.email)?.email ?? '';
+  },
+
+  /** Their own photos, and the ones of you both, which show in either timeline. */
   get photos() {
-    const email = this.email.toLowerCase();
-    const rows = this.data.progressPhotos.filter((p) =>
-      (p.owner_email?.toLowerCase() === email) === (this.ownerFilter === 'mine'));
+    const email = this.timelineEmail;
+    const rows = email ? this.data.progressPhotos.filter((p) => progress.inTimeline(p, email)) : [];
     return progress.photosFor(rows, this.poseFilter);
   },
 
@@ -5078,6 +5091,7 @@ Alpine.data('statsPage', () => ({
   },
 
   relockPhotos() {
+    this.closeCamera();
     this.photosLocked = true;
     this.pinEntry = '';
     this.pinFirst = '';
@@ -5123,14 +5137,105 @@ Alpine.data('statsPage', () => ({
     return other?.display_name || p.owner_email;
   },
 
+  /** The weight of whoever's timeline it is — a photo of you both was taken on one of your phones. */
   photoWeight(p) {
-    return progress.nearestWeight(this.data.weightLog, p.owner_email, p.taken_on);
+    return progress.nearestWeight(this.data.weightLog, p.together ? this.timelineEmail : p.owner_email, p.taken_on);
   },
 
   photoDate(on, opts) {
     return new Date(`${on}T12:00:00`).toLocaleDateString(undefined,
       opts?.long ? { month: 'long', day: 'numeric', year: 'numeric' }
                  : { month: 'short', day: 'numeric' });
+  },
+
+  // ---- the camera ---------------------------------------------------------------
+  //
+  // One tap of the shutter saves the photo: today, the pose lit above the
+  // viewfinder, Together if that is lit. The pose then moves on, so front,
+  // side and back are three taps. Saving runs behind the viewfinder, so the
+  // next shot doesn't wait on the upload.
+
+  camera: null,        // { facing, pose, together, timer, countdown }
+  cameraError: '',
+  cameraSaving: 0,
+  cameraTimers: camera.TIMERS,
+
+  async openCamera() {
+    this.cameraError = '';
+    if (!camera.supported()) { this.usePhoneCamera(); return; }
+    this.camera = { facing: 'environment', pose: 'front', together: false, timer: 0, countdown: 0 };
+    await this.startStream();
+  },
+
+  async startStream() {
+    camera.close(cameraStream);
+    cameraStream = null;
+    try {
+      cameraStream = await camera.open(this.camera.facing);
+      await this.$nextTick?.();
+      const video = this.$refs?.viewfinder;
+      if (video) { video.srcObject = cameraStream; await video.play?.(); }
+    } catch (error) {
+      this.cameraError = camera.problem(error);
+    }
+  },
+
+  async flipCamera() {
+    this.camera.facing = this.camera.facing === 'user' ? 'environment' : 'user';
+    await this.startStream();
+  },
+
+  cycleTimer() {
+    const timers = camera.TIMERS;
+    this.camera.timer = timers[(timers.indexOf(this.camera.timer) + 1) % timers.length];
+  },
+
+  /** The shutter: counts down if the timer is set, then shoots. */
+  async shutter() {
+    if (!this.camera || this.camera.countdown) return;
+    for (let left = this.camera.timer; left > 0; left--) {
+      this.camera.countdown = left;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (!this.camera) return;   // closed mid-countdown
+    }
+    this.camera.countdown = 0;
+    await this.snap();
+  },
+
+  async snap() {
+    let blob;
+    try {
+      blob = await camera.still(cameraStream, this.$refs?.viewfinder);
+    } catch (error) {
+      this.cameraError = error.message ?? String(error);
+      return;
+    }
+    const { pose, together } = this.camera;
+    this.camera.pose = camera.nextPose(pose, this.poses);
+    this.cameraSaving++;
+    try {
+      await progress.addPhoto({ file: blob, takenOn: food.toDateOnly(new Date()), pose, note: '', together, ownerEmail: this.email });
+      await Alpine.store('data').refresh();
+      Alpine.store('ui').flash(`${together ? 'Together, ' : ''}${pose} saved`);
+    } catch (error) {
+      Alpine.store('ui').flash(describeError(error) || 'Could not save the photo');
+    } finally {
+      this.cameraSaving--;
+    }
+  },
+
+  closeCamera() {
+    camera.close(cameraStream);
+    cameraStream = null;
+    this.camera = null;
+    this.cameraError = '';
+  },
+
+  /** No camera in the page, or it was refused: the phone's camera app and the save sheet, as before. */
+  usePhoneCamera() {
+    this.closeCamera();
+    this.pickerHeld = true;
+    document.getElementById?.('pp-camera')?.click?.();
   },
 
   pickPhoto(event) {
@@ -5140,7 +5245,7 @@ Alpine.data('statsPage', () => ({
     if (!file) return;
 
     this.photoFile = file;
-    this.photoDraft = { takenOn: food.toDateOnly(new Date()), pose: 'front', note: '' };
+    this.photoDraft = { takenOn: food.toDateOnly(new Date()), pose: 'front', note: '', together: false };
     this.addingPhoto = true;
   },
 
@@ -5154,6 +5259,7 @@ Alpine.data('statsPage', () => ({
         takenOn: this.photoDraft.takenOn,
         pose: this.photoDraft.pose,
         note: this.photoDraft.note.trim(),
+        together: this.photoDraft.together,
         ownerEmail: this.email,
       });
       this.addingPhoto = false;

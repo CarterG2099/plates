@@ -3252,6 +3252,7 @@
                           @click="tapPhoto(p)">
                     <img x-show="photoUrl(p)" :src="photoUrl(p) || null" alt="" loading="lazy">
                     <span class="photo-cell-date" x-text="photoDate(p.taken_on)"></span>
+                    <span class="photo-cell-together" x-show="p.together">Together</span>
                   </button>
                 </template>
               </div>
@@ -3261,16 +3262,57 @@
                    ? 'No photos yet. Same spot, same light, same pose — future you will want the comparison to be fair.'
                    : `No photos from ${partnerName} yet.`"></p>
 
-              <!-- The real camera app, full native quality. @click arms pickerHeld
-                   so the hide caused by the camera itself doesn't relock and
-                   destroy the flow. -->
+              <!-- Take photo opens the camera inside the app: one tap saves. The
+                   library still goes through the save sheet. @click arms
+                   pickerHeld so the hide the photo picker causes doesn't relock
+                   and destroy the flow. -->
               <div class="photo-add-row" x-show="ownerFilter === 'mine'">
-                <label class="btn btn-primary" for="pp-camera" @click="pickerHeld = true">Take photo</label>
+                <button class="btn btn-primary" @click="openCamera()">Take photo</button>
                 <label class="btn" for="pp-library" @click="pickerHeld = true">From library</label>
               </div>
             </div>
           </template>
         </div>
+
+        <!-- The camera ------------------------------------------------------------
+             Pose and Together above the viewfinder, set before the shot; the
+             shutter saves. The preview is mirrored only for the front camera,
+             so moving left moves left; the saved photo is never mirrored. -->
+        <template x-if="camera">
+          <div class="camera" role="dialog" aria-label="Camera">
+            <div class="camera-top chips">
+              <template x-for="p in poses" :key="p">
+                <button class="chip" :class="camera.pose === p && 'is-active'"
+                        @click="camera.pose = p" x-text="p"></button>
+              </template>
+              <button class="chip" :class="camera.together && 'is-active'"
+                      :aria-pressed="String(camera.together)"
+                      @click="camera.together = !camera.together">Together</button>
+            </div>
+
+            <div class="camera-frame">
+              <video x-ref="viewfinder" playsinline muted autoplay
+                     :class="camera.facing === 'user' && 'is-mirrored'"></video>
+              <div class="camera-countdown" x-show="camera.countdown" x-text="camera.countdown"></div>
+              <div class="camera-error" x-show="cameraError">
+                <p x-text="cameraError"></p>
+                <button class="btn" @click="usePhoneCamera()">Use the phone camera</button>
+              </div>
+            </div>
+
+            <div class="camera-bar">
+              <button class="camera-side" @click="flipCamera()" aria-label="Switch camera">Flip</button>
+              <button class="camera-shutter" @click="shutter()" :disabled="Boolean(cameraError || camera.countdown)"
+                      :aria-label="`Take the ${camera.pose} photo`"></button>
+              <button class="camera-side" @click="cycleTimer()" :aria-label="`Timer ${camera.timer || 'off'}`"
+                      x-text="camera.timer ? `${camera.timer}s` : 'Timer'"></button>
+            </div>
+            <div class="camera-foot">
+              <span x-show="cameraSaving" x-text="`Saving ${cameraSaving}…`"></span>
+              <button class="btn" @click="closeCamera()">Done</button>
+            </div>
+          </div>
+        </template>
 
         <!-- Save a progress photo --------------------------------------------- -->
         <template x-if="addingPhoto">
@@ -3298,6 +3340,11 @@
                 <label for="pp-note">Note</label>
                 <input id="pp-note" type="text" x-model="photoDraft.note"
                        placeholder="end of cut, week 6…" autocomplete="off">
+              </div>
+              <div class="chips">
+                <button class="chip" :class="photoDraft.together && 'is-active'"
+                        :aria-pressed="String(photoDraft.together)"
+                        @click="photoDraft.together = !photoDraft.together">Together</button>
               </div>
               <button class="btn btn-primary btn-block" :disabled="photoBusy"
                       @click="savePhoto()" x-text="photoBusy ? 'Saving…' : 'Save'"></button>
@@ -3340,6 +3387,9 @@
                         <button class="chip" :class="viewingPhoto.pose === p && 'is-active'"
                                 @click="editPhoto({ pose: p })" x-text="p"></button>
                       </template>
+                      <button class="chip" :class="viewingPhoto.together && 'is-active'"
+                              :aria-pressed="String(Boolean(viewingPhoto.together))"
+                              @click="editPhoto({ together: !viewingPhoto.together })">Together</button>
                     </div>
                   </div>
                   <div class="field">
