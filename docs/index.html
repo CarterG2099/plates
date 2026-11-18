@@ -133,8 +133,20 @@
 
       <header class="app-bar">
         <h1>Plates</h1>
-        <button class="app-bar-meta" @click="$store.ui.openSettings()"
-                x-text="$store.auth.displayName" aria-label="Settings"></button>
+        <!-- Two doors, each to one thing: the bell to notifications and
+             reminders, the initial to who is signed in, the watch, signing out. -->
+        <div class="app-bar-actions">
+          <button class="tap" @click="$store.ui.openSettings()" aria-label="Notifications">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+              <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>
+            </svg>
+          </button>
+          <button class="tap avatar" @click="$store.ui.openProfile()"
+                  :aria-label="`Profile, ${$store.auth.displayName}`"
+                  x-text="$store.auth.initial"></button>
+        </div>
       </header>
 
       <!-- Today ------------------------------------------------------------ -->
@@ -3517,7 +3529,7 @@
           <div class="sheet" x-init="$swipe($el, () => { $store.ui.settingsOpen = false })">
             <div class="grabber"></div>
             <div class="sheet-head">
-              <h2>Settings</h2>
+              <h2>Notifications</h2>
               <button class="tap" @click="$store.ui.settingsOpen = false" aria-label="Close">×</button>
             </div>
 
@@ -3568,8 +3580,29 @@
               <button class="chip" @click="$store.ui.newReminder('food')">+ Food reminder</button>
               <button class="chip" @click="$store.ui.newReminder('meds')">+ Med reminder</button>
             </div>
+          </div>
+        </div>
+      </template>
 
-            <div class="card-label" style="margin-top: var(--space-4)">Watch</div>
+      <!-- Profile: who is signed in, the watch, and signing out. -->
+      <template x-if="$store.ui.profileOpen">
+        <div class="sheet-backdrop" @click.self="$store.ui.profileOpen = false">
+          <div class="sheet" x-init="$swipe($el, () => { $store.ui.profileOpen = false })">
+            <div class="grabber"></div>
+            <div class="sheet-head">
+              <h2>Profile</h2>
+              <button class="tap" @click="$store.ui.profileOpen = false" aria-label="Close">×</button>
+            </div>
+
+            <div class="profile-who">
+              <span class="tap avatar" aria-hidden="true" x-text="$store.auth.initial"></span>
+              <span class="setting-text">
+                <b x-text="$store.auth.displayName"></b>
+                <small x-text="$store.auth.email"></small>
+              </span>
+            </div>
+
+            <div class="card-label">Watch</div>
             <div class="setting">
               <span class="setting-text">
                 <b>Pair a watch</b>
@@ -3585,9 +3618,7 @@
             <p class="watch-code" x-show="$store.ui.watchCode" x-cloak
                x-text="$store.ui.watchCodeText"></p>
 
-            <div class="card-label" style="margin-top: var(--space-4)">Account</div>
-            <p class="setting-meta" x-text="$store.auth.email"></p>
-            <button class="btn btn-block" @click="$store.auth.signOut()">Sign out</button>
+            <button class="btn btn-block" style="margin-top: var(--space-4)" @click="$store.auth.signOut()">Sign out</button>
           </div>
         </div>
       </template>

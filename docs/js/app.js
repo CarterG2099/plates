@@ -461,6 +461,11 @@ Alpine.store('auth', {
     return me?.display_name || this.email;
   },
 
+  /** The letter on the profile button. */
+  get initial() {
+    return this.displayName.trim().charAt(0).toUpperCase();
+  },
+
   async init() {
     const { data } = await supabase.auth.getSession();
     const session = data.session ?? null;
@@ -901,9 +906,17 @@ Alpine.store('ui', {
 
   openSettings() {
     this.settingsOpen = true;
-    this.watchCode = null;
     this.loadSettings();
     this.loadReminders();
+  },
+
+  // Who is signed in, the watch, and signing out. A code from last time has
+  // expired or been used, so the sheet opens without one.
+  profileOpen: false,
+
+  openProfile() {
+    this.profileOpen = true;
+    this.watchCode = null;
   },
 
   async loadSettings() {

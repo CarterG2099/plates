@@ -102,6 +102,31 @@ button {
   align-items: center;
 }
 
+/* The bell and the profile initial, top right. Centred on the brand rather
+   than its baseline, like a bar with a back button. */
+.app-bar:has(> .app-bar-actions) {
+  align-items: center;
+}
+
+.app-bar-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tap.avatar {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.profile-who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
 .app-bar .app-bar-meta {
   font-family: var(--font-mono);
   font-size: var(--text-xs);

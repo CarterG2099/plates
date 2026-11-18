@@ -127,9 +127,9 @@ test('settings has the pair row, and a reopened sheet never shows a stale code',
   assert.match(html, /x-text="\$store\.ui\.watchCodeText"/);
 
   const app = await source('../docs/js/app.js');
-  const open = app.slice(app.indexOf('openSettings() {'), app.indexOf('openSettings() {') + 200);
+  const open = app.slice(app.indexOf('openProfile() {'), app.indexOf('openProfile() {') + 200);
   assert.match(open, /this\.watchCode = null/);
 
   const sw = await source('../docs/sw.js');
-  assert.match(sw, /'\/js\/watch\.js'/, 'precached, or Settings breaks offline');
+  assert.match(sw, /'\/js\/watch\.js'/, 'precached, or Profile breaks offline');
 });
