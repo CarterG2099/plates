@@ -29,6 +29,21 @@ const READ_KEY = 'messages:read_at';
  */
 const at = (stamp) => Date.parse(stamp ?? '') || 0;
 
+/**
+ * Who this account can message, or undefined, in which case there is no
+ * Messages button at all.
+ *
+ * Stricter than partnerOf(): that treats an unknown `sharing` as "any other
+ * member", so a failed grants query or a membership cached before the flag
+ * existed would hand Andra or the test account a conversation with someone.
+ * Here only a confirmed grant from them counts, the same rule the database
+ * holds sending to.
+ */
+export function partnerFor(members, email) {
+  const me = String(email ?? '').toLowerCase();
+  return (members ?? []).find((m) => m.email?.toLowerCase() !== me && m.sharing === true);
+}
+
 /** Live messages, oldest first, the way a conversation reads. */
 export function thread(rows) {
   return (rows ?? [])

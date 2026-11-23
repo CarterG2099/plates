@@ -202,6 +202,55 @@ test('a live row lands locally, and an older copy never overwrites a newer one',
   assert.equal(channel.removed, true);
 });
 
+// ---- who gets a conversation ------------------------------------------------------
+
+const ANDRA = 'andragividen@gmail.com';
+const TEST = 'carterhustle20@gmail.com';
+
+// As loadMembership leaves it: sharing is true only for members whose grant
+// reaches this account. Andra and the test account share with no one.
+const household = (viewer) => [ME, AANA, ANDRA, TEST].map((email) => ({
+  email,
+  sharing: (viewer === ME && email === AANA) || (viewer === AANA && email === ME),
+}));
+
+test('Carter and Aana each get the other, and only the other', () => {
+  assert.equal(messages.partnerFor(household(ME), ME)?.email, AANA);
+  assert.equal(messages.partnerFor(household(AANA), AANA)?.email, ME);
+});
+
+test('Andra and the test account get no one to message', () => {
+  assert.equal(messages.partnerFor(household(ANDRA), ANDRA), undefined);
+  assert.equal(messages.partnerFor(household(TEST), TEST), undefined);
+});
+
+// partnerOf() reads an unknown `sharing` as "any other member". A failed
+// grants query, or a membership cached before the flag, must not turn that
+// into a conversation.
+test('a membership without confirmed sharing gives no one to message', () => {
+  const unknown = [ME, AANA, ANDRA].map((email) => ({ email }));
+  assert.equal(messages.partnerFor(unknown, ANDRA), undefined);
+  assert.equal(messages.partnerFor(unknown, ME), undefined);
+});
+
+test('for Andra there is no Messages button and the conversation will not open', () => {
+  fakeChannel();
+  Alpine.store('auth').session = { user: { email: ANDRA } };
+  Alpine.store('auth').members = household(ANDRA);
+  const page = Alpine.reactive(components.statsPage());
+  page.$refs = {};
+  page.photosLocked = false;
+
+  assert.equal(page.chatPartner, undefined, 'the button is shown on chatPartner');
+  page.openChat();
+  assert.equal(page.chatOpen, false);
+});
+
+test('the Messages button is shown only when there is someone to message', async () => {
+  const html = await read('../docs/index.html');
+  assert.match(html, /<button class="btn" x-show="chatPartner" @click="openChat\(\)"/);
+});
+
 // ---- the screen -----------------------------------------------------------------
 
 test('the conversation will not open while the photos are locked', () => {
