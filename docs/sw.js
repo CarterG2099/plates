@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v208';
+const CACHE_VERSION = 'plates-v209';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -54,6 +54,7 @@ const SHELL = [
   '/js/scanner.js',
   '/js/photo.js',
   '/js/progress.js',
+  '/js/messages.js',
   '/js/camera.js',
   '/js/workout.js',
   '/js/muscle-map.js',

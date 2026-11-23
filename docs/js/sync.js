@@ -31,6 +31,7 @@ const PULL_ORDER = [
   'meal_plans',
   'shopping_items',
   'walmart_items',
+  'messages',
 ];
 
 const PAGE_SIZE = 1000;

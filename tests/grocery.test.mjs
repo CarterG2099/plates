@@ -508,7 +508,9 @@ test('the three tables are stored locally, synced, and the module is precached',
 
 test('the tables are shared with the household through can_read, never world-readable', async () => {
   const sql = await read('../supabase/schema.sql');
-  const block = sql.slice(sql.indexOf('-- ---- meal plan, shopping list, Walmart usuals'));
+  const start = sql.indexOf('-- ---- meal plan, shopping list, Walmart usuals');
+  // Its own section only: later sections (the message bucket) need a delete policy.
+  const block = sql.slice(start, sql.indexOf('\n-- ---- ', start + 1));
   assert.match(block, /array\['meal_plans', 'shopping_items', 'walmart_items'\]/);
   assert.match(block, /for select using \(plates\.can_read\(owner_email\)\)/);
   // Insert matches update: sync's upserts are held to the insert policy even

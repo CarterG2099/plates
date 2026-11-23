@@ -12,7 +12,7 @@
 const DB_NAME = 'plates';
 // Bump whenever TABLES changes: onupgradeneeded is the only place object stores
 // get created, and it only runs on a version increase.
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 /**
  * Synced tables.
@@ -39,13 +39,14 @@ export const TABLES = [
   'meal_plans',
   'shopping_items',
   'walmart_items',
+  'messages',
 ];
 
 /** Pending local writes, drained by sync.push(). */
 const OUTBOX = '_outbox';
 /** Sync cursors and other small key/value state. */
 const META = '_meta';
-/** Cached image blobs (progress photos), keyed by their storage object path. */
+/** Cached image blobs (progress and message photos), keyed by their storage object path. */
 const BLOBS = '_blobs';
 
 let dbPromise = null;

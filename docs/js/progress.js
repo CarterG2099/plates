@@ -195,7 +195,7 @@ export async function removePhoto(photo) {
   return row;
 }
 
-async function downscale(file) {
+export async function downscale(file) {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
 

@@ -952,3 +952,106 @@ $$;
 -- phone took it. Reading it already works for the other person through
 -- can_read() on the row and the bucket; only the owner can edit or delete it.
 alter table plates.progress_photos add column if not exists together boolean not null default false;
+
+-- ---- private messages (added 2026-11-20) ------------------------------------------
+-- A conversation between the two of us, behind the progress-photo PIN. Unlike
+-- the other shared tables this does not read through can_read(): share_grants
+-- is about seeing someone's logs, and a message is readable by exactly its
+-- sender and its recipient, nobody else, whatever grants exist. Sending still
+-- requires a grant from the recipient, so a test account that is a member but
+-- not part of the household cannot be messaged.
+--
+-- Unsend tombstones the row and clears the text; photo_path stays so the
+-- sender can still delete the object, but a tombstoned photo is unreadable.
+-- Deletes are soft, so there is no delete policy on the table.
+
+create table if not exists plates.messages (
+  id              uuid primary key,
+  owner_email     text not null,          -- the sender
+  recipient_email text not null,
+  body            text,
+  photo_path      text,
+  sent_at         timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  deleted_at      timestamptz,
+  check (deleted_at is not null or body is not null or photo_path is not null)
+);
+
+create index if not exists messages_updated_at on plates.messages (updated_at);
+
+alter table plates.messages enable row level security;
+
+create policy messages_read on plates.messages
+  for select using (plates.is_member() and (plates.is_owner(owner_email) or plates.is_owner(recipient_email)));
+create policy messages_write on plates.messages
+  for insert with check (
+    plates.is_member() and plates.is_owner(owner_email)
+    and not plates.is_owner(recipient_email) and plates.can_read(recipient_email)
+  );
+create policy messages_update on plates.messages
+  for update using (plates.is_owner(owner_email))
+  with check (plates.is_owner(owner_email) and plates.can_read(recipient_email));
+
+-- Live delivery while the conversation is open. Realtime applies the read
+-- policy above per subscriber, so this does not widen who sees a row.
+alter publication supabase_realtime add table plates.messages;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('plates-messages', 'plates-messages', false, 5242880,
+        array['image/jpeg','image/webp','image/png'])
+on conflict (id) do nothing;
+
+create policy plates_messages_read on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'plates-messages'
+    and exists (
+      select 1 from plates.messages m
+      where m.photo_path = storage.objects.name
+        and m.deleted_at is null
+        and plates.is_member()
+        and (plates.is_owner(m.owner_email) or plates.is_owner(m.recipient_email))
+    )
+  );
+create policy plates_messages_insert on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'plates-messages' and plates.is_member());
+create policy plates_messages_delete on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'plates-messages'
+    and exists (
+      select 1 from plates.messages m
+      where m.photo_path = storage.objects.name
+        and plates.is_owner(m.owner_email)
+    )
+  );
+
+-- The push to the other phone. A trigger rather than the app calling a
+-- function, because a message written offline reaches the server whenever the
+-- outbox drains, possibly with the app already closed. After insert only: the
+-- outbox retrying an upsert lands as an update and must not buzz twice. The
+-- push carries no text and no photo; see notify-message.
+create or replace function plates.notify_message() returns trigger
+  language plpgsql security definer set search_path = ''
+as $$
+declare
+  secret text;
+begin
+  select value into secret from plates.app_config where key = 'cron_secret';
+  if secret is null or new.deleted_at is not null then return new; end if;
+
+  perform net.http_post(
+    url := 'https://hyxttezhchkihuubyprb.supabase.co/functions/v1/notify-message',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', secret),
+    body := jsonb_build_object('id', new.id)
+  );
+  return new;
+end;
+$$;
+
+revoke execute on function plates.notify_message() from public, anon, authenticated;
+
+drop trigger if exists messages_notify on plates.messages;
+create trigger messages_notify after insert on plates.messages
+  for each row execute function plates.notify_message();

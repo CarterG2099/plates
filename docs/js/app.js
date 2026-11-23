@@ -18,6 +18,7 @@ import * as grocery from './grocery.js';
 import * as scanner from './scanner.js';
 import * as photo from './photo.js';
 import * as progress from './progress.js';
+import * as messages from './messages.js';
 import * as camera from './camera.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
@@ -617,6 +618,7 @@ const raw = {
   exercises: [], routines: [], routineExercises: [], sessions: [], sessionSets: [],
   progressPhotos: [],
   mealPlans: [], shoppingItems: [], walmartItems: [],
+  messages: [],
   index: workout.buildIndex([], [], ''),
   prior: new Map(),
   stalls: new Map(),   // exercise key → stats.stallFor(), see refreshTraining
@@ -673,7 +675,7 @@ Alpine.store('data', {
   /** What Today needs: small, and read first so the app paints immediately. */
   async refreshCore() {
     const [goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks,
-      mealPlans, shoppingItems, walmartItems] = await Promise.all([
+      mealPlans, shoppingItems, walmartItems, messageRows] = await Promise.all([
       local.all('goals'),
       local.all('foods'),
       local.all('food_log'),
@@ -685,10 +687,11 @@ Alpine.store('data', {
       local.all('meal_plans'),
       local.all('shopping_items'),
       local.all('walmart_items'),
+      local.all('messages'),
     ]);
 
     Object.assign(raw, { goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks,
-      mealPlans, shoppingItems, walmartItems });
+      mealPlans, shoppingItems, walmartItems, messages: messageRows });
     this.ready = true;
     this.version++;
   },
@@ -5011,11 +5014,13 @@ Alpine.data('statsPage', () => ({
       }
     };
     document.addEventListener('visibilitychange', this.relockOnHide);
+    messages.readAt().then((stamp) => { this.chatReadAt = stamp; });
   },
 
   destroy() {
     document.removeEventListener('visibilitychange', this.relockOnHide);
     this.revokePhotoUrls();
+    this.closeChat();
   },
 
   get myPinHash() {
@@ -5105,6 +5110,7 @@ Alpine.data('statsPage', () => ({
 
   relockPhotos() {
     this.closeCamera();
+    this.closeChat();
     this.photosLocked = true;
     this.pinEntry = '';
     this.pinFirst = '';
@@ -5325,6 +5331,141 @@ Alpine.data('statsPage', () => ({
     this.comparing = null;
     this.compareSel = [];
     this.compareMode = false;
+  },
+
+  // ---- messages ----------------------------------------------------------------
+  //
+  // The conversation lives behind the same PIN: it opens only from the unlocked
+  // section, and relockPhotos() closes it, so hiding the app or tapping Lock
+  // takes it off the screen along with the photos.
+
+  chatOpen: false,
+  chatText: '',
+  chatPhoto: null,     // { file, url } waiting in the composer
+  chatBusy: false,
+  chatReadAt: null,
+  chatViewing: null,   // the message whose sheet is open
+  chatUrls: {},
+  chatUrlQueue: new Set(),
+  stopChatListen: null,
+
+  get chatThread() {
+    return messages.thread(this.data.messages);
+  },
+
+  get chatUnread() {
+    return messages.unreadCount(this.data.messages, this.email, this.chatReadAt);
+  },
+
+  get chatPartner() {
+    return partnerOf(Alpine.store('auth').members, this.email);
+  },
+
+  openChat() {
+    if (this.photosLocked) return;
+    this.chatOpen = true;
+    this.stopChatListen?.();
+    this.stopChatListen = messages.listen(() => Alpine.store('data').refreshCore());
+    // The other person's unsends arrive as tombstones; their photos go too.
+    messages.purgeUnsent().catch(() => {});
+  },
+
+  closeChat() {
+    this.stopChatListen?.();
+    this.stopChatListen = null;
+    this.chatOpen = false;
+    this.chatViewing = null;
+    this.chatText = '';
+    this.clearChatPhoto();
+    for (const url of Object.values(this.chatUrls)) URL.revokeObjectURL(url);
+    this.chatUrls = {};
+    this.chatUrlQueue.clear();
+  },
+
+  /** Run from an x-effect on the open conversation: whatever is on screen has been seen. */
+  async chatSeen() {
+    const rows = this.chatThread;
+    if (!this.chatOpen) return;
+    this.chatReadAt = await messages.markRead(rows);
+    await this.$nextTick?.();
+    this.$refs?.chatEnd?.scrollIntoView?.({ block: 'end' });
+  },
+
+  chatMine(m) {
+    return m.owner_email?.toLowerCase() === this.email.toLowerCase();
+  },
+
+  chatTime(m) {
+    const at = new Date(m.sent_at);
+    const today = food.toDateOnly(new Date()) === food.toDateOnly(at);
+    return at.toLocaleString(undefined, today
+      ? { hour: 'numeric', minute: '2-digit' }
+      : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  },
+
+  chatPhotoUrl(m) {
+    if (!m.photo_path) return '';
+    const known = this.chatUrls[m.id];
+    if (known) return known;
+
+    if (!this.chatUrlQueue.has(m.id)) {
+      this.chatUrlQueue.add(m.id);
+      messages.photoBlob(m.photo_path)
+        .then((blob) => {
+          if (!this.chatOpen) return; // closed or relocked while downloading
+          this.chatUrls = { ...this.chatUrls, [m.id]: URL.createObjectURL(blob) };
+        })
+        .catch(() => this.chatUrlQueue.delete(m.id));
+    }
+    return '';
+  },
+
+  pickChatPhoto(event) {
+    this.pickerHeld = false;
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !this.chatOpen) return;
+    this.clearChatPhoto();
+    this.chatPhoto = { file, url: URL.createObjectURL(file) };
+  },
+
+  clearChatPhoto() {
+    if (this.chatPhoto?.url) URL.revokeObjectURL(this.chatPhoto.url);
+    this.chatPhoto = null;
+  },
+
+  async sendChat() {
+    if (this.chatBusy) return;
+    const recipientEmail = this.chatPartner?.email;
+    const text = this.chatText.trim();
+    if (!text && !this.chatPhoto) return;
+
+    this.chatBusy = true;
+    try {
+      if (this.chatPhoto) {
+        await messages.sendPhoto({ file: this.chatPhoto.file, text, ownerEmail: this.email, recipientEmail });
+        this.clearChatPhoto();
+      } else {
+        await messages.sendText({ text, ownerEmail: this.email, recipientEmail });
+      }
+      this.chatText = '';
+      await Alpine.store('data').refreshCore();
+    } catch (error) {
+      Alpine.store('ui').flash(describeError(error) || 'Could not send');
+    } finally {
+      this.chatBusy = false;
+    }
+  },
+
+  async unsendChat(m) {
+    if (!confirm('Unsend this? It disappears for both of you.')) return;
+    await messages.unsend(m);
+    this.chatViewing = null;
+    if (this.chatUrls[m.id]) URL.revokeObjectURL(this.chatUrls[m.id]);
+    const { [m.id]: _gone, ...rest } = this.chatUrls;
+    this.chatUrls = rest;
+    await Alpine.store('data').refreshCore();
+    Alpine.store('ui').flash('Unsent');
   },
 }));
 

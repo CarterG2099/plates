@@ -3196,6 +3196,10 @@
                  hidden @change="pickPhoto($event)">
           <input id="pp-library" type="file" accept="image/*"
                  hidden @change="pickPhoto($event)">
+          <!-- The conversation's photo picker, out here for the same reason. No
+               capture attribute: the phone offers camera or library itself. -->
+          <input id="pm-photo" type="file" accept="image/*"
+                 hidden @change="pickChatPhoto($event)">
 
           <div class="readout-head">
             <div>
@@ -3203,7 +3207,13 @@
               <div class="stat-sub" x-show="!photosLocked"
                    x-text="`${photos.length} photo${photos.length === 1 ? '' : 's'}`"></div>
             </div>
-            <button class="btn" x-show="!photosLocked" @click="relockPhotos()">Lock</button>
+            <div class="photo-head-actions" x-show="!photosLocked">
+              <button class="btn" x-show="chatPartner" @click="openChat()"
+                      :aria-label="chatUnread ? `Messages, ${chatUnread} unread` : 'Messages'">
+                Messages<span class="chat-dot" x-show="chatUnread" aria-hidden="true"></span>
+              </button>
+              <button class="btn" @click="relockPhotos()">Lock</button>
+            </div>
           </div>
 
           <!-- Locked: the PIN pad and nothing else. No thumbnails, no counts.
@@ -3322,6 +3332,73 @@
             <div class="camera-foot">
               <span x-show="cameraSaving" x-text="`Saving ${cameraSaving}…`"></span>
               <button class="btn" @click="closeCamera()">Done</button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Messages -------------------------------------------------------------
+             Full screen over the stats page, opened only from the unlocked
+             photos card. relockPhotos() closes it, and the x-if checks the lock
+             too, so nothing here can outlive the curtain. -->
+        <template x-if="chatOpen && !photosLocked">
+          <div class="chat" role="dialog" aria-label="Messages" x-effect="chatSeen()">
+            <div class="chat-head">
+              <button class="tap" @click="closeChat()" aria-label="Close">×</button>
+              <h2 x-text="chatPartner?.display_name || 'Messages'"></h2>
+              <button class="btn" @click="relockPhotos()">Lock</button>
+            </div>
+
+            <div class="chat-list">
+              <p class="empty" x-show="!chatThread.length">Nothing here yet. Only the two of you can see this.</p>
+              <template x-for="m in chatThread" :key="m.id">
+                <div class="chat-row" :class="chatMine(m) && 'is-mine'">
+                  <button class="chat-bubble" @click="chatViewing = m">
+                    <template x-if="m.photo_path">
+                      <span class="chat-photo">
+                        <img x-show="chatPhotoUrl(m)" :src="chatPhotoUrl(m) || null" alt="Photo">
+                      </span>
+                    </template>
+                    <span class="chat-text" x-show="m.body" x-text="m.body"></span>
+                  </button>
+                  <span class="chat-time" x-text="chatTime(m)"></span>
+                </div>
+              </template>
+              <div x-ref="chatEnd"></div>
+            </div>
+
+            <form class="chat-compose" @submit.prevent="sendChat()">
+              <template x-if="chatPhoto">
+                <div class="chat-pending">
+                  <img :src="chatPhoto.url" alt="Photo to send">
+                  <button type="button" class="tap" @click="clearChatPhoto()" aria-label="Remove photo">×</button>
+                </div>
+              </template>
+              <div class="chat-compose-row">
+                <label class="btn" for="pm-photo" @click="pickerHeld = true" aria-label="Add a photo">Photo</label>
+                <input type="text" x-model="chatText" placeholder="Message" autocomplete="off"
+                       aria-label="Message" enterkeyhint="send">
+                <button class="btn btn-primary" type="submit"
+                        :disabled="chatBusy || (!chatText.trim() && !chatPhoto)"
+                        x-text="chatBusy ? 'Sending…' : 'Send'"></button>
+              </div>
+            </form>
+          </div>
+        </template>
+
+        <!-- One message: the photo full size, and Unsend on your own. -->
+        <template x-if="chatViewing && chatOpen && !photosLocked">
+          <div class="sheet-backdrop is-chat" @click.self="chatViewing = null">
+            <div class="sheet" x-init="$swipe($el, () => { chatViewing = null })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2 x-text="chatTime(chatViewing)"></h2>
+                <button class="tap" @click="chatViewing = null" aria-label="Close">×</button>
+              </div>
+              <img class="photo-full" x-show="chatViewing.photo_path"
+                   :src="chatPhotoUrl(chatViewing) || null" alt="Photo">
+              <p class="chat-sheet-text" x-show="chatViewing.body" x-text="chatViewing.body"></p>
+              <button class="btn btn-danger btn-block" x-show="chatMine(chatViewing)"
+                      @click="unsendChat(chatViewing)">Unsend</button>
             </div>
           </div>
         </template>
