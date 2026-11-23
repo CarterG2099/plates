@@ -1,6 +1,6 @@
 /**
- * Progress photos from the camera inside the app: one tap of the shutter saves
- * the photo, and a photo of you both shows in both timelines.
+ * Progress photos from the camera inside the app: the shutter freezes the shot,
+ * tapping its pose saves it, and a photo of you both shows in both timelines.
  *
  * The camera is a stand-in — a stream whose tracks remember being stopped —
  * but the code driving it is the real Stats screen in app.js, and the save
@@ -63,12 +63,6 @@ test('it asks for the biggest picture the camera has, without sound', () => {
     audio: false,
     video: { facingMode: 'environment', width: { ideal: 4096 }, height: { ideal: 4096 } },
   });
-});
-
-test('the pose moves on after each shot and stays on the last', () => {
-  assert.equal(camera.nextPose('front', progress.POSES), 'side');
-  assert.equal(camera.nextPose('side', progress.POSES), 'back');
-  assert.equal(camera.nextPose('back', progress.POSES), 'back');
 });
 
 test('a refused or missing camera says what to do', () => {
@@ -147,17 +141,35 @@ test('a photo saved together says so on its row', async () => {
 
 // ---- the camera screen ------------------------------------------------------------
 
-test('Take photo opens the back camera on front, timer off', async () => {
+test('Take photo opens the back camera with no shot waiting, timer off', async () => {
   const cam = fakeCamera();
   const page = statsPage();
   await page.openCamera();
-  assert.deepEqual({ ...page.camera }, { facing: 'environment', pose: 'front', together: false, timer: 0, countdown: 0 });
+  assert.deepEqual({ ...page.camera }, { facing: 'environment', together: false, timer: 0, countdown: 0, shot: null });
   assert.equal(cam.asked[0].video.facingMode, 'environment');
   assert.equal(page.cameraError, '');
   page.closeCamera();
 });
 
-test('one tap saves the photo as today\'s, with the lit pose, and moves to the next pose', async () => {
+test('the shutter only freezes the shot; nothing is saved until a pose is chosen', async () => {
+  fakeCamera();
+  const page = statsPage();
+  await page.openCamera();
+  const before = supabase.storage._uploads.length;
+
+  await page.shutter();
+  assert.ok(page.camera.shot.blob instanceof Blob);
+  assert.match(page.camera.shot.url, /^blob:/);
+  assert.equal(supabase.storage._uploads.length, before, 'not saved yet');
+
+  const first = page.camera.shot;
+  await page.shutter();
+  assert.equal(page.camera.shot, first, 'a second tap does not replace the shot');
+  assert.equal(supabase.storage._uploads.length, before, 'nor save it');
+  page.closeCamera();
+});
+
+test('choosing a pose saves the shot as today\'s, with that pose, and goes back to the viewfinder', async () => {
   fakeCamera();
   const page = statsPage();
   await page.openCamera();
@@ -165,13 +177,14 @@ test('one tap saves the photo as today\'s, with the lit pose, and moves to the n
   const before = supabase.storage._uploads.length;
 
   await page.shutter();
+  await page.keepShot('side');
   assert.equal(supabase.storage._uploads.length, before + 1, 'uploaded');
-  assert.equal(page.camera.pose, 'side', 'ready for the next one');
+  assert.equal(page.camera.shot, null, 'ready for the next one');
   assert.equal(page.cameraSaving, 0);
 
   const rows = (await local.all('progress_photos')).filter((p) => p.object_path === supabase.storage._uploads.at(-1).path);
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].pose, 'front');
+  assert.equal(rows[0].pose, 'side');
   assert.equal(rows[0].together, true);
   assert.equal(rows[0].owner_email, ME);
   const pad = (n) => String(n).padStart(2, '0');
@@ -194,14 +207,57 @@ test('with the timer set, it counts down before shooting', async (t) => {
   assert.equal(page.camera.countdown, 3);
   t.mock.timers.tick(1000); await Promise.resolve(); await Promise.resolve();
   assert.equal(page.camera.countdown, 2);
-  assert.equal(supabase.storage._uploads.length, before, 'not yet');
+  assert.equal(page.camera.shot, null, 'not yet');
   t.mock.timers.tick(1000); await Promise.resolve(); await Promise.resolve();
   t.mock.timers.tick(1000);
   t.mock.timers.reset();
   await shot;
   assert.equal(page.camera.countdown, 0);
-  assert.equal(supabase.storage._uploads.length, before + 1);
+  assert.ok(page.camera.shot, 'the shot is waiting for its pose');
+  assert.equal(supabase.storage._uploads.length, before);
   page.closeCamera();
+});
+
+test('Retake throws the shot away and saves nothing', async () => {
+  fakeCamera();
+  const page = statsPage();
+  await page.openCamera();
+  const before = supabase.storage._uploads.length;
+  const revoked = [];
+  const real = URL.revokeObjectURL;
+  URL.revokeObjectURL = (url) => revoked.push(url);
+  try {
+    await page.shutter();
+    const { url } = page.camera.shot;
+    page.retake();
+    assert.equal(page.camera.shot, null);
+    assert.deepEqual(revoked, [url], 'the preview is let go');
+    await page.keepShot('front');
+    assert.equal(supabase.storage._uploads.length, before, 'no shot, nothing to save');
+  } finally {
+    URL.revokeObjectURL = real;
+  }
+  page.closeCamera();
+});
+
+test('Done with a shot still waiting discards it', async () => {
+  fakeCamera();
+  const page = statsPage();
+  await page.openCamera();
+  const before = supabase.storage._uploads.length;
+  const revoked = [];
+  const real = URL.revokeObjectURL;
+  URL.revokeObjectURL = (url) => revoked.push(url);
+  try {
+    await page.shutter();
+    const { url } = page.camera.shot;
+    page.closeCamera();
+    assert.deepEqual(revoked, [url], 'the preview is let go');
+  } finally {
+    URL.revokeObjectURL = real;
+  }
+  assert.equal(page.camera, null);
+  assert.equal(supabase.storage._uploads.length, before);
 });
 
 test('the timer goes off, 3s, 10s, and round again', async () => {
@@ -269,7 +325,18 @@ test('Take photo opens the camera; the library still goes through the save sheet
   assert.match(html, /<label class="btn" for="pp-library" @click="pickerHeld = true">From library<\/label>/);
 });
 
-test('the camera screen: inline video, poses and Together, shutter, flip, timer, Done', () => {
+test('the camera screen: the pose is chosen under the frozen shot, not above the viewfinder', () => {
+  const cam = html.slice(html.indexOf('<template x-if="camera">'), html.indexOf('<!-- Messages'));
+  const top = cam.slice(cam.indexOf('camera-top'), cam.indexOf('camera-frame'));
+  assert.doesNotMatch(top, /poses/, 'no pose to set before the shot');
+  assert.match(cam, /<img class="camera-shot" x-show="camera\.shot" :src="camera\.shot\?\.url \|\| null"/);
+  assert.match(cam, /<div class="camera-bar camera-poses" x-show="camera\.shot">/);
+  assert.match(cam, /<template x-for="p in poses" :key="p">\s*<button class="btn" @click="keepShot\(p\)"/);
+  assert.match(cam, /@click="retake\(\)">Retake<\/button>/);
+  assert.match(cam, /<div class="camera-bar" x-show="!camera\.shot">/);
+});
+
+test('the camera screen: inline video, Together, shutter, flip, timer, Done', () => {
   const cam = html.slice(html.indexOf('<template x-if="camera">'), html.indexOf('<!-- Save a progress photo'));
   assert.match(cam, /<video x-ref="viewfinder" playsinline muted autoplay/);
   assert.match(cam, /:class="camera\.facing === 'user' && 'is-mirrored'"/);

@@ -3,7 +3,7 @@
  *
  * The phone's camera app took two extra screens per photo: its own "use this
  * photo", then a save sheet. Here the viewfinder is a <video> on the page and
- * one tap of the shutter is the whole thing.
+ * the shutter and a pose are the whole thing.
  *
  * The cost is the phone's processing. A camera app runs HDR, night mode and
  * noise reduction on its stills; a frame off the video stream gets far less of
@@ -62,12 +62,6 @@ export async function still(stream, video) {
     (blob) => (blob ? resolve(blob) : reject(new Error('The camera gave no picture.'))),
     'image/jpeg', 0.92,
   ));
-}
-
-/** Front, then side, then back: the pose after a shot, staying on the last. */
-export function nextPose(pose, poses) {
-  const i = poses.indexOf(pose);
-  return poses[Math.min(i + 1, poses.length - 1)] ?? poses[0];
 }
 
 /** The words for a camera that wouldn't open, from the browser's error name. */

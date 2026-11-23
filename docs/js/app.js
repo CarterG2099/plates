@@ -5181,12 +5181,13 @@ Alpine.data('statsPage', () => ({
 
   // ---- the camera ---------------------------------------------------------------
   //
-  // One tap of the shutter saves the photo: today, the pose lit above the
-  // viewfinder, Together if that is lit. The pose then moves on, so front,
-  // side and back are three taps. Saving runs behind the viewfinder, so the
-  // next shot doesn't wait on the upload.
+  // The shutter freezes the shot in the frame; tapping front, side or back
+  // under it saves it as today's, Together if that is lit, and goes back to the
+  // viewfinder. The pose comes after the shot because it is easier to say what
+  // a photo is than to remember to set it before walking into frame. Saving
+  // runs behind the viewfinder, so the next shot doesn't wait on the upload.
 
-  camera: null,        // { facing, pose, together, timer, countdown }
+  camera: null,        // { facing, together, timer, countdown, shot: { blob, url } | null }
   cameraError: '',
   cameraSaving: 0,
   cameraTimers: camera.TIMERS,
@@ -5194,7 +5195,7 @@ Alpine.data('statsPage', () => ({
   async openCamera() {
     this.cameraError = '';
     if (!camera.supported()) { this.usePhoneCamera(); return; }
-    this.camera = { facing: 'environment', pose: 'front', together: false, timer: 0, countdown: 0 };
+    this.camera = { facing: 'environment', together: false, timer: 0, countdown: 0, shot: null };
     await this.startStream();
   },
 
@@ -5223,7 +5224,7 @@ Alpine.data('statsPage', () => ({
 
   /** The shutter: counts down if the timer is set, then shoots. */
   async shutter() {
-    if (!this.camera || this.camera.countdown) return;
+    if (!this.camera || this.camera.countdown || this.camera.shot) return;
     for (let left = this.camera.timer; left > 0; left--) {
       this.camera.countdown = left;
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -5241,8 +5242,22 @@ Alpine.data('statsPage', () => ({
       this.cameraError = error.message ?? String(error);
       return;
     }
-    const { pose, together } = this.camera;
-    this.camera.pose = camera.nextPose(pose, this.poses);
+    if (!this.camera) return;   // closed while the still was coming
+    this.camera.shot = { blob, url: URL.createObjectURL(blob) };
+  },
+
+  /** Throw the frozen shot away and go back to the viewfinder. */
+  retake() {
+    if (this.camera?.shot) URL.revokeObjectURL(this.camera.shot.url);
+    if (this.camera) this.camera.shot = null;
+  },
+
+  /** Tapping a pose under the frozen shot is what saves it. */
+  async keepShot(pose) {
+    const blob = this.camera?.shot?.blob;
+    if (!blob) return;
+    const { together } = this.camera;
+    this.retake();
     this.cameraSaving++;
     try {
       await progress.addPhoto({ file: blob, takenOn: food.toDateOnly(new Date()), pose, note: '', together, ownerEmail: this.email });
@@ -5256,6 +5271,7 @@ Alpine.data('statsPage', () => ({
   },
 
   closeCamera() {
+    this.retake();
     camera.close(cameraStream);
     cameraStream = null;
     this.camera = null;

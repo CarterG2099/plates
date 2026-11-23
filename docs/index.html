@@ -3297,16 +3297,14 @@
         </div>
 
         <!-- The camera ------------------------------------------------------------
-             Pose and Together above the viewfinder, set before the shot; the
-             shutter saves. The preview is mirrored only for the front camera,
-             so moving left moves left; the saved photo is never mirrored. -->
+             Together above the viewfinder, set before the shot. The shutter
+             freezes the shot in the frame and swaps the bar for the poses;
+             tapping one saves it, Retake throws it away. The preview is
+             mirrored only for the front camera, so moving left moves left; the
+             frozen shot is shown as saved, never mirrored. -->
         <template x-if="camera">
           <div class="camera" role="dialog" aria-label="Camera">
             <div class="camera-top chips">
-              <template x-for="p in poses" :key="p">
-                <button class="chip" :class="camera.pose === p && 'is-active'"
-                        @click="camera.pose = p" x-text="p"></button>
-              </template>
               <button class="chip" :class="camera.together && 'is-active'"
                       :aria-pressed="String(camera.together)"
                       @click="camera.together = !camera.together">Together</button>
@@ -3315,6 +3313,7 @@
             <div class="camera-frame">
               <video x-ref="viewfinder" playsinline muted autoplay
                      :class="camera.facing === 'user' && 'is-mirrored'"></video>
+              <img class="camera-shot" x-show="camera.shot" :src="camera.shot?.url || null" alt="The photo just taken">
               <div class="camera-countdown" x-show="camera.countdown" x-text="camera.countdown"></div>
               <div class="camera-error" x-show="cameraError">
                 <p x-text="cameraError"></p>
@@ -3322,10 +3321,16 @@
               </div>
             </div>
 
-            <div class="camera-bar">
+            <div class="camera-bar camera-poses" x-show="camera.shot">
+              <button class="camera-side" @click="retake()">Retake</button>
+              <template x-for="p in poses" :key="p">
+                <button class="btn" @click="keepShot(p)" x-text="p" :aria-label="`Save as ${p}`"></button>
+              </template>
+            </div>
+            <div class="camera-bar" x-show="!camera.shot">
               <button class="camera-side" @click="flipCamera()" aria-label="Switch camera">Flip</button>
               <button class="camera-shutter" @click="shutter()" :disabled="Boolean(cameraError || camera.countdown)"
-                      :aria-label="`Take the ${camera.pose} photo`"></button>
+                      aria-label="Take the photo"></button>
               <button class="camera-side" @click="cycleTimer()" :aria-label="`Timer ${camera.timer || 'off'}`"
                       x-text="camera.timer ? `${camera.timer}s` : 'Timer'"></button>
             </div>
