@@ -5370,11 +5370,11 @@ Alpine.data('statsPage', () => ({
   },
 
   get chatPartner() {
-    return partnerOf(Alpine.store('auth').members, this.email);
+    return messages.partnerFor(Alpine.store('auth').members, this.email);
   },
 
   openChat() {
-    if (this.photosLocked) return;
+    if (this.photosLocked || !this.chatPartner) return;
     this.chatOpen = true;
     this.stopChatListen?.();
     this.stopChatListen = messages.listen(() => Alpine.store('data').refreshCore());
