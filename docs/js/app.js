@@ -500,6 +500,11 @@ Alpine.store('auth', {
     }
 
     supabase.auth.onAuthStateChange((_event, next) => this.apply(next ?? null));
+
+    // Opened by a tap on a reminder (sw.js). Cleared so a reload doesn't reopen it.
+    if (this.isMember && Alpine.store('ui').openLink(globalThis.location?.hash)) {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
   },
 
   /** Confirm the cached membership against the server, after the app is usable. */
@@ -911,6 +916,13 @@ Alpine.store('ui', {
     this.settingsOpen = true;
     this.loadSettings();
     this.loadReminders();
+  },
+
+  /** #reminders, from a tapped reminder notification: the sheet with its Taken button. */
+  openLink(hash) {
+    if (hash !== '#reminders') return false;
+    this.openSettings();
+    return true;
   },
 
   // Who is signed in, the watch, and signing out. A code from last time has
@@ -5358,11 +5370,11 @@ Alpine.data('statsPage', () => ({
   },
 
   get chatPartner() {
-    return partnerOf(Alpine.store('auth').members, this.email);
+    return messages.partnerFor(Alpine.store('auth').members, this.email);
   },
 
   openChat() {
-    if (this.photosLocked) return;
+    if (this.photosLocked || !this.chatPartner) return;
     this.chatOpen = true;
     this.stopChatListen?.();
     this.stopChatListen = messages.listen(() => Alpine.store('data').refreshCore());
@@ -5476,6 +5488,10 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('/sw.js').catch((e) => {
       console.warn('Service worker registration failed:', e.message);
     });
+  });
+  // A reminder tapped while the app was already open (sw.js).
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data === 'open-reminders') Alpine.store('ui').openLink('#reminders');
   });
 }
 

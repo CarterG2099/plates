@@ -274,6 +274,6 @@ test('the service worker answers Taken without opening the app, and opens it if 
   const sw = await source('../docs/sw.js');
   assert.match(sw, /event\.action === 'taken' && taken\?\.url && taken\?\.token/);
   assert.match(sw, /body: JSON\.stringify\(\{ token: taken\.token \}\)/);
-  assert.match(sw, /\.catch\(\(\) => self\.clients\.openWindow\('\/#today'\)\)/);
+  assert.match(sw, /\.catch\(\(\) => self\.clients\.openWindow\('\/#reminders'\)\)/);
   assert.match(sw, /data: \{ url: data\.url \|\| '\/#train', taken: data\.taken \?\? null \}/);
 });

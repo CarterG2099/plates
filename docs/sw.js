@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v209';
+const CACHE_VERSION = 'plates-v210';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -255,17 +255,22 @@ self.addEventListener('notificationclick', (event) => {
       body: JSON.stringify({ token: taken.token }),
     }).then((r) => { if (!r.ok) throw new Error(String(r.status)); })
       // Not recorded, so open the app, where the same reminder has a button.
-      .catch(() => self.clients.openWindow('/#today')));
+      .catch(() => self.clients.openWindow('/#reminders')));
     return;
   }
 
-  const target = event.notification.data?.url || '/';
+  // A tap on the notification itself goes to the reminder's Taken button.
+  // iPhone shows no buttons on a web app's notification, so this is the only
+  // way to it there. An open window is already past reading its address, so
+  // it is told instead.
+  const target = taken ? '/#reminders' : (event.notification.data?.url || '/');
 
   event.waitUntil((async () => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of clients) {
       if (new URL(client.url).origin === self.location.origin) {
         await client.focus();
+        if (taken) client.postMessage('open-reminders');
         return;
       }
     }
