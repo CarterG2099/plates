@@ -655,9 +655,9 @@ test('locking mid-hold covers the photo and drops the menu', (t) => {
 
 test('every photo surface is blurred unless held, in the thread, the box, and full screen', async () => {
   const css = await read('../docs/css/components.css');
-  const covered = css.match(/\.chat-photo img, \.chat-viewer-photo img, \.chat-pending img \{[^}]+\}/)?.[0] ?? '';
-  assert.match(covered, /filter: blur\(\d+px\)/);
-  assert.match(css, /\.chat-photo\.is-revealed img, \.chat-viewer-photo\.is-revealed img, \.chat-pending\.is-revealed img \{\s*filter: none;/);
+  const covered = css.match(/\.chat-photo img, \.chat-viewer-photo img, \.chat-pending img,\s*\.chat-photo video, \.chat-viewer-photo video, \.chat-pending video \{[^}]+\}/)?.[0] ?? '';
+  assert.match(covered, /filter: blur\(\d+px\)/, 'photos and clips alike');
+  assert.match(css, /\.chat-photo\.is-revealed img, \.chat-viewer-photo\.is-revealed img, \.chat-pending\.is-revealed img,\s*\.chat-photo\.is-revealed video, \.chat-viewer-photo\.is-revealed video, \.chat-pending\.is-revealed video \{\s*filter: none;/);
 
   const html = await read('../docs/index.html');
   assert.match(html, /class="chat-photo" :class="chatRevealed === item\.m\.id && 'is-revealed'"/);

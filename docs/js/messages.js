@@ -259,13 +259,21 @@ export async function sendText({ text, ownerEmail, recipientEmail }) {
   return row;
 }
 
+/** A clip is told apart from a photo by its object's extension; the row has no type column. */
+export function isVideo(path) {
+  return /\.(mp4|webm)$/i.test(path ?? '');
+}
+
+/** The bucket refuses anything bigger (see the schema); saying so here is kinder than a 413. */
+export const VIDEO_MAX_BYTES = 25 * 1024 * 1024;
+
 /** Upload + row, split from sendPhoto so the ordering is testable without a canvas. */
-export async function savePhotoMessage({ blob, text, ownerEmail, recipientEmail }) {
+export async function savePhotoMessage({ blob, text, ownerEmail, recipientEmail, ext = 'jpg', contentType = 'image/jpeg' }) {
   if (!recipientEmail) throw new Error('No one to send it to.');
-  const photoPath = `${crypto.randomUUID()}.jpg`;
+  const photoPath = `${crypto.randomUUID()}.${ext}`;
 
   const { error } = await supabase.storage.from(BUCKET)
-    .upload(photoPath, blob, { contentType: 'image/jpeg' });
+    .upload(photoPath, blob, { contentType });
   if (error) throw new Error(error.message ?? String(error));
 
   const row = await local.save('messages', {
@@ -286,6 +294,17 @@ export async function sendPhoto({ file, text, ownerEmail, recipientEmail }) {
 
   const blob = await downscale(file);
   return savePhotoMessage({ blob, text, ownerEmail, recipientEmail });
+}
+
+/** A clip from the in-page camera. Sent as recorded: no re-encoding in the browser. */
+export async function sendVideo({ blob, text, ownerEmail, recipientEmail }) {
+  if (!blob) throw new Error('No clip recorded.');
+  if (!navigator.onLine) throw new Error('Sending a video needs a connection.');
+  if (blob.size > VIDEO_MAX_BYTES) throw new Error('That clip is too big to send. Try a shorter one.');
+
+  const contentType = String(blob.type || 'video/webm').split(';')[0];
+  const ext = /mp4/i.test(contentType) ? 'mp4' : 'webm';
+  return savePhotoMessage({ blob, text, ownerEmail, recipientEmail, ext, contentType });
 }
 
 /** Cached blob if we have it, the bucket if not. */

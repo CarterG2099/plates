@@ -146,7 +146,7 @@ test('Take photo opens the back camera with no shot waiting, timer off', async (
   const cam = fakeCamera();
   const page = statsPage();
   await page.openCamera();
-  assert.deepEqual({ ...page.camera }, { purpose: 'progress', facing: 'environment', together: false, timer: 0, countdown: 0, shot: null });
+  assert.deepEqual({ ...page.camera }, { purpose: 'progress', mode: 'photo', facing: 'environment', together: false, timer: 0, countdown: 0, recording: false, elapsed: 0, shot: null });
   assert.equal(cam.asked[0].video.facingMode, 'environment');
   assert.equal(page.cameraError, '');
   page.closeCamera();
@@ -330,7 +330,7 @@ test('the camera screen: the pose is chosen under the frozen shot, not above the
   const cam = html.slice(html.indexOf('<template x-if="camera">'), html.indexOf('<!-- Messages'));
   const top = cam.slice(cam.indexOf('camera-top'), cam.indexOf('camera-frame'));
   assert.doesNotMatch(top, /poses/, 'no pose to set before the shot');
-  assert.match(cam, /<img class="camera-shot" x-show="camera\.shot" :src="camera\.shot\?\.url \|\| null"/);
+  assert.match(cam, /<img class="camera-shot" x-show="camera\.shot && camera\.shot\.kind !== 'video'"/);
   assert.match(cam, /<div class="camera-bar camera-poses" x-show="camera\.shot && camera\.purpose === 'progress'">/);
   assert.match(cam, /<template x-for="p in poses" :key="p">\s*<button class="btn" @click="keepShot\(p\)"/);
   assert.match(cam, /@click="retake\(\)">Retake<\/button>/);
@@ -483,8 +483,271 @@ test('the message box has a camera icon (in the page) beside a library icon', ()
 test('the camera screen in chat mode: Use photo, no poses, no Together, no phone-camera button', () => {
   const cam = html.slice(html.indexOf('<template x-if="camera">'), html.indexOf('<!-- Messages'));
   assert.match(cam, /<div class="camera-top chips" x-show="camera\.purpose === 'progress'">/);
-  assert.match(cam, /<div class="camera-bar camera-poses" x-show="camera\.shot && camera\.purpose === 'chat'">\s*<button class="camera-side" @click="retake\(\)">Retake<\/button>\s*<button class="btn btn-primary" @click="useChatShot\(\)">Use photo<\/button>/);
+  assert.match(cam, /<div class="camera-bar camera-poses" x-show="camera\.shot && camera\.purpose === 'chat'">\s*<button class="camera-side" @click="retake\(\)">Retake<\/button>\s*<button class="btn btn-primary" @click="useChatShot\(\)"\s+x-text="camera\.shot\?\.kind === 'video' \? 'Use video' : 'Use photo'">/);
   assert.match(cam, /<button class="btn" x-show="camera\.purpose === 'progress'" @click="usePhoneCamera\(\)">/);
+});
+
+// ---- video clips in Messages ------------------------------------------------------
+//
+// MediaRecorder is a stand-in that hands over one chunk when stopped (or none,
+// with `empty`), and remembers what it was asked for.
+
+class FakeRecorder {
+  static supported = ['video/webm;codecs=vp8,opus', 'video/webm'];
+  static isTypeSupported(type) { return FakeRecorder.supported.includes(type); }
+  static last = null;
+  static empty = false;
+  constructor(stream, options) {
+    this.stream = stream;
+    this.options = options;
+    this.mimeType = options?.mimeType ?? '';
+    this.state = 'inactive';
+    this.stops = 0;
+    FakeRecorder.last = this;
+  }
+  start() { this.state = 'recording'; }
+  stop() {
+    this.stops++;
+    this.state = 'inactive';
+    if (!FakeRecorder.empty) this.ondataavailable?.({ data: new Blob(['clip'], { type: 'video/webm' }) });
+    queueMicrotask(() => this.onstop?.());
+  }
+}
+
+function withRecorder(t) {
+  globalThis.MediaRecorder = FakeRecorder;
+  FakeRecorder.supported = ['video/webm;codecs=vp8,opus', 'video/webm'];
+  FakeRecorder.empty = false;
+  t.after(() => { delete globalThis.MediaRecorder; });
+}
+
+const settle = () => new Promise((r) => setImmediate(r));
+
+test('a clip asks for sound and a phone-sized frame; a still asks for neither', () => {
+  const clip = camera.constraints('user', { audio: true });
+  assert.equal(clip.audio, true);
+  assert.equal(clip.video.width.ideal, 1280);
+  const still = camera.constraints('user');
+  assert.equal(still.audio, false);
+  assert.equal(still.video.width.ideal, 4096);
+});
+
+test('clips record as MP4 where the browser can, else WebM, and keep that extension', (t) => {
+  withRecorder(t);
+  assert.equal(camera.recorderType(), 'video/webm;codecs=vp8,opus');
+  FakeRecorder.supported = ['video/mp4', 'video/webm'];
+  assert.equal(camera.recorderType(), 'video/mp4');
+  assert.equal(camera.extensionFor('video/mp4;codecs=avc1'), 'mp4');
+  assert.equal(camera.extensionFor('video/webm'), 'webm');
+});
+
+test('a clip stops itself at the limit', async (t) => {
+  withRecorder(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rec = camera.record({}, { maxMs: 15_000 });
+  t.mock.timers.tick(14_999);
+  assert.equal(FakeRecorder.last.state, 'recording');
+  t.mock.timers.tick(1);
+  t.mock.timers.reset();
+  const blob = await rec.done;
+  assert.ok(blob instanceof Blob);
+  assert.equal(blob.type, 'video/webm');
+  assert.equal(camera.VIDEO_MAX_S, 15);
+});
+
+test('a clip with nothing in it says so instead of sending an empty file', async (t) => {
+  withRecorder(t);
+  FakeRecorder.empty = true;
+  const rec = camera.record({});
+  await assert.rejects(rec.stop(), /recorded nothing/);
+});
+
+test('Video is offered in the chat camera only, and only where the browser can record', async (t) => {
+  fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  assert.equal(page.canRecordVideo, false, 'no MediaRecorder: no Video chip');
+  withRecorder(t);
+  assert.equal(page.canRecordVideo, true);
+  page.closeCamera();
+  await page.openCamera('progress');
+  assert.equal(page.canRecordVideo, false, 'progress photos stay photos');
+  page.closeCamera();
+  page.closeChat();
+});
+
+test('switching to Video reopens the camera with the microphone', async (t) => {
+  withRecorder(t);
+  const cam = fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  await page.setCameraMode('video');
+  assert.equal(page.camera.mode, 'video');
+  assert.equal(cam.asked.at(-1).audio, true);
+  assert.equal(cam.tracks[0].stopped, true, 'the silent stream was let go');
+  page.closeCamera();
+  page.closeChat();
+});
+
+test('with the microphone refused, the clip records silent and says so', async (t) => {
+  withRecorder(t);
+  const asked = [];
+  navigator.mediaDevices = {
+    getUserMedia: async (c) => {
+      asked.push(c);
+      if (c.audio) throw Object.assign(new Error('no'), { name: 'NotAllowedError' });
+      const track = { stop() {} };
+      return { getTracks: () => [track], getVideoTracks: () => [track] };
+    },
+  };
+  const page = chatPage();
+  await page.openCamera('chat');
+  await page.setCameraMode('video');
+  assert.equal(page.cameraError, '');
+  assert.match(page.cameraNote, /No sound/);
+  assert.equal(asked.at(-1).audio, false);
+  page.closeCamera();
+  page.closeChat();
+});
+
+test('the shutter starts and stops a clip; Use video puts it in the message box', async (t) => {
+  withRecorder(t);
+  fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  await page.setCameraMode('video');
+
+  await page.shutter();
+  assert.equal(page.camera.recording, true);
+  assert.equal(page.camera.shot, null);
+  await page.shutter();
+  await settle();
+  assert.equal(page.camera.recording, false);
+  assert.equal(page.camera.shot.kind, 'video');
+
+  const { blob } = page.camera.shot;
+  page.useChatShot();
+  assert.equal(page.camera, null);
+  assert.equal(page.chatPhoto.kind, 'video');
+  assert.equal(page.chatPhoto.file, blob);
+  page.closeChat();
+});
+
+test('Send uploads the clip to the messages bucket as video, never as a progress photo', async (t) => {
+  withRecorder(t);
+  fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  await page.setCameraMode('video');
+  await page.shutter(); await page.shutter(); await settle();
+  page.useChatShot();
+  page.chatText = 'for later';
+  const photos = (await local.all('progress_photos')).length;
+
+  await page.sendChat();
+  const upload = supabase.storage._uploads.at(-1);
+  assert.equal(upload.bucket, messages.BUCKET);
+  assert.match(upload.path, /\.webm$/);
+  assert.equal(messages.isVideo(upload.path), true);
+  const sent = (await local.all('messages')).find((m) => m.photo_path === upload.path);
+  assert.equal(sent.body, 'for later');
+  assert.equal((await local.all('progress_photos')).length, photos);
+  page.closeChat();
+});
+
+test('closing the camera mid-clip throws the clip away', async (t) => {
+  withRecorder(t);
+  const cam = fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  await page.setCameraMode('video');
+  await page.shutter();
+  const recorder = FakeRecorder.last;
+  page.closeCamera();
+  await settle();
+  assert.equal(recorder.stops, 1, 'recording stopped');
+  assert.equal(page.camera, null);
+  assert.equal(page.chatPhoto, null, 'nothing handed over');
+  assert.ok(cam.tracks.every((tr) => tr.stopped), 'camera and microphone off');
+  page.closeChat();
+});
+
+test('mid-clip the camera cannot be flipped or switched back to Photo', async (t) => {
+  withRecorder(t);
+  const cam = fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  await page.setCameraMode('video');
+  await page.shutter();
+  const opened = cam.asked.length;
+  await page.flipCamera();
+  await page.setCameraMode('photo');
+  assert.equal(cam.asked.length, opened, 'no new stream mid-clip');
+  assert.equal(page.camera.mode, 'video');
+  page.closeCamera();
+  page.closeChat();
+});
+
+test('a clip too big for the bucket, or sent offline, is refused before uploading', async () => {
+  const uploads = supabase.storage._uploads.length;
+  const big = { size: messages.VIDEO_MAX_BYTES + 1, type: 'video/webm' };
+  await assert.rejects(messages.sendVideo({ blob: big, ownerEmail: ME, recipientEmail: AANA }), /too big/);
+  navigator.onLine = false;
+  try {
+    await assert.rejects(messages.sendVideo({ blob: new Blob(['x'], { type: 'video/mp4' }), ownerEmail: ME, recipientEmail: AANA }), /needs a connection/);
+  } finally {
+    navigator.onLine = true;
+  }
+  assert.equal(supabase.storage._uploads.length, uploads);
+});
+
+test('an MP4 clip is stored as .mp4 with its own content type', async () => {
+  await messages.sendVideo({ blob: new Blob(['x'], { type: 'video/mp4;codecs=avc1' }), ownerEmail: ME, recipientEmail: AANA });
+  const upload = supabase.storage._uploads.at(-1);
+  assert.match(upload.path, /\.mp4$/);
+  assert.equal(messages.isVideo('a.jpg'), false);
+  assert.equal(messages.isVideo('a.MP4'), true);
+});
+
+test('a clip plays only while held, with sound where the phone allows, silent where it does not', async () => {
+  fakeCamera();
+  const page = chatPage();
+  const calls = [];
+  const el = {
+    muted: true,
+    play() { calls.push(`play:${this.muted ? 'muted' : 'sound'}`); return calls.length === 1 ? Promise.reject(new Error('gesture')) : Promise.resolve(); },
+    pause() { calls.push('pause'); },
+  };
+  page.chatPlay(el, true);
+  await settle();
+  assert.deepEqual(calls, ['play:sound', 'play:muted']);
+  page.chatPlay(el, false);
+  assert.equal(calls.at(-1), 'pause');
+  page.closeChat();
+});
+
+test('the camera screen offers Photo and Video in chat, and a stop button while recording', () => {
+  const cam = html.slice(html.indexOf('<template x-if="camera">'), html.indexOf('<!-- Messages'));
+  assert.match(cam, /<div class="camera-top chips" x-show="canRecordVideo">/);
+  assert.match(cam, /@click="setCameraMode\('video'\)">Video<\/button>/);
+  assert.match(cam, /:aria-label="camera\.mode !== 'video' \? 'Take the photo' : \(camera\.recording \? 'Stop recording' : 'Start recording'\)"/);
+  assert.match(cam, /<div class="camera-rec" x-show="camera\.recording"/);
+});
+
+test('clips in the thread and full screen play only while held; the waiting one too', () => {
+  assert.match(html, /x-effect="chatPlay\(\$el, chatRevealed === item\.m\.id\)"/);
+  assert.match(html, /x-effect="chatPlay\(\$el, chatRevealed === 'viewer'\)"/);
+  assert.match(html, /x-effect="chatRevealed === 'pending' \? \$el\.play\?\.\(\) : \$el\.pause\?\.\(\)"/);
+  assert.doesNotMatch(html, /<video[^>]*\bautoplay\b[^>]*chatPhotoUrl/, 'no clip in the thread plays on its own');
+});
+
+test('the messages bucket takes short clips, and is still private', async () => {
+  const sql = await readFile(fileURLToPath(new URL('../supabase/schema.sql', import.meta.url)), 'utf8');
+  const update = sql.match(/update storage\.buckets[\s\S]+?where id = 'plates-messages';/)?.[0] ?? '';
+  assert.match(update, /file_size_limit = 26214400/);
+  assert.match(update, /'video\/mp4','video\/webm'/);
+  assert.doesNotMatch(update, /public/);
+  assert.equal(messages.VIDEO_MAX_BYTES, 26214400, 'the app and the bucket agree');
 });
 
 test('Together can be set when saving from the library and changed later', () => {

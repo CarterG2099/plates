@@ -817,6 +817,38 @@
   background: rgba(255, 255, 255, .25);
 }
 .camera-shutter:active:not(:disabled) { background: #fff; }
+/* Video: a red dot to start, a red square while recording. */
+.camera-shutter.is-video { background: radial-gradient(circle, #e5394f 0 22px, transparent 23px); }
+.camera-shutter.is-recording { background: linear-gradient(#e5394f, #e5394f) center / 26px 26px no-repeat; border-color: #e5394f; }
+.camera-rec {
+  position: absolute;
+  top: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .55);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.camera-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #e5394f; animation: camera-rec 1s infinite; }
+@keyframes camera-rec { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .camera-rec-dot { animation: none; } }
+.camera-note {
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: var(--space-3);
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, .55);
+  font-size: var(--text-xs);
+  text-align: center;
+}
 .camera-shutter:disabled { opacity: .4; }
 .camera-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); font-size: var(--text-sm); }
 
@@ -974,15 +1006,17 @@
   -webkit-user-select: none;
 }
 .chat-photo { width: 220px; max-width: 100%; border-radius: 16px; cursor: pointer; }
-.chat-photo img { display: block; width: 100%; max-height: 58vh; object-fit: cover; }
-.chat-photo img, .chat-viewer-photo img, .chat-pending img {
+.chat-photo img, .chat-photo video { display: block; width: 100%; max-height: 58vh; object-fit: cover; }
+.chat-photo img, .chat-viewer-photo img, .chat-pending img,
+.chat-photo video, .chat-viewer-photo video, .chat-pending video {
   filter: blur(28px) saturate(.7);
   transform: scale(1.12);
   transition: filter .12s ease;
   -webkit-user-drag: none;
   pointer-events: none;
 }
-.chat-photo.is-revealed img, .chat-viewer-photo.is-revealed img, .chat-pending.is-revealed img {
+.chat-photo.is-revealed img, .chat-viewer-photo.is-revealed img, .chat-pending.is-revealed img,
+.chat-photo.is-revealed video, .chat-viewer-photo.is-revealed video, .chat-pending.is-revealed video {
   filter: none;
   transform: none;
 }
@@ -1024,7 +1058,7 @@
 @keyframes chat-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .chat-dots i { animation: none; } }
 .chat-pending { align-self: flex-start; width: 64px; height: 84px; border-radius: 12px; }
-.chat-pending img { width: 100%; height: 100%; object-fit: cover; }
+.chat-pending img, .chat-pending video { width: 100%; height: 100%; object-fit: cover; }
 .chat-pending-x {
   position: absolute; top: 4px; right: 4px;
   width: 22px; height: 22px; padding: 0;
@@ -1108,7 +1142,7 @@
 }
 .chat-viewer-head { display: flex; align-items: center; gap: var(--space-3); padding-top: var(--space-3); font-size: var(--text-sm); color: var(--chat-muted); }
 .chat-viewer-photo { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; border-radius: 16px; }
-.chat-viewer-photo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.chat-viewer-photo img, .chat-viewer-photo video { max-width: 100%; max-height: 100%; object-fit: contain; }
 .chat-viewer-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-unsend {
   padding: 12px;

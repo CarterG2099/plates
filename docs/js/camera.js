@@ -24,15 +24,81 @@ export function supported() {
  * Ask for the biggest frame the camera has. `ideal`, not `exact`: a camera
  * that can't do 4096 gives its best rather than refusing.
  */
-export function constraints(facing) {
+export function constraints(facing, { audio = false } = {}) {
   return {
-    audio: false,
-    video: { facingMode: facing, width: { ideal: 4096 }, height: { ideal: 4096 } },
+    audio,
+    video: audio
+      // Video: a phone-sized frame, not the sensor's biggest. A 4K stream would
+      // make a 15-second clip tens of megabytes.
+      ? { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 1280 } }
+      : { facingMode: facing, width: { ideal: 4096 }, height: { ideal: 4096 } },
   };
 }
 
-export function open(facing) {
-  return navigator.mediaDevices.getUserMedia(constraints(facing));
+export function open(facing, options) {
+  return navigator.mediaDevices.getUserMedia(constraints(facing, options));
+}
+
+// ---- video clips (Messages) ------------------------------------------------------
+//
+// Recorded from the same in-page stream as the stills, so a clip never passes
+// through the phone's camera app or its gallery either.
+
+/** Longest clip, seconds. Short is the point, and it keeps uploads small. */
+export const VIDEO_MAX_S = 15;
+/** About 4–5 MB for a full clip, sound included. */
+const VIDEO_BITRATE = 2_000_000;
+
+/** Whether this browser can record the stream at all. */
+export function canRecord() {
+  return typeof globalThis.MediaRecorder === 'function';
+}
+
+/**
+ * The container to record into: MP4 where the browser can (Safari only does
+ * MP4, and it plays everywhere), else WebM (Android Chrome).
+ */
+export function recorderType() {
+  const candidates = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  return candidates.find((t) => globalThis.MediaRecorder?.isTypeSupported?.(t)) ?? '';
+}
+
+/** The file extension a recorded type is stored under. */
+export function extensionFor(type) {
+  return /mp4/i.test(type ?? '') ? 'mp4' : 'webm';
+}
+
+/**
+ * Start recording. Returns { stop(), done } where both resolve to the clip as
+ * a Blob; it stops on its own at VIDEO_MAX_S.
+ */
+export function record(stream, { maxMs = VIDEO_MAX_S * 1000 } = {}) {
+  const type = recorderType();
+  const recorder = new globalThis.MediaRecorder(stream, {
+    ...(type ? { mimeType: type } : {}),
+    videoBitsPerSecond: VIDEO_BITRATE,
+  });
+  const chunks = [];
+  recorder.ondataavailable = (event) => { if (event.data?.size) chunks.push(event.data); };
+
+  const done = new Promise((resolve, reject) => {
+    recorder.onstop = () => {
+      if (!chunks.length) { reject(new Error('The camera recorded nothing.')); return; }
+      const kind = String(recorder.mimeType || type || 'video/webm').split(';')[0];
+      resolve(new Blob(chunks, { type: kind }));
+    };
+    recorder.onerror = (event) => reject(event?.error ?? new Error('Recording failed.'));
+  });
+
+  const limit = setTimeout(() => stop(), maxMs);
+  function stop() {
+    clearTimeout(limit);
+    if (recorder.state !== 'inactive') recorder.stop();
+    return done;
+  }
+
+  recorder.start(250);
+  return { stop, done };
 }
 
 /** Stop every track, which is what turns the camera light off. */

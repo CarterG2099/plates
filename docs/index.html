@@ -3337,11 +3337,26 @@
                       :aria-pressed="String(camera.together)"
                       @click="camera.together = !camera.together">Together</button>
             </div>
+            <!-- Chat only, where the browser can record: a short clip, not a
+                 photo. Locked while recording. -->
+            <div class="camera-top chips" x-show="canRecordVideo">
+              <button class="chip" :class="camera.mode === 'photo' && 'is-active'" :disabled="camera.recording"
+                      @click="setCameraMode('photo')">Photo</button>
+              <button class="chip" :class="camera.mode === 'video' && 'is-active'" :disabled="camera.recording"
+                      @click="setCameraMode('video')">Video</button>
+            </div>
 
             <div class="camera-frame">
               <video x-ref="viewfinder" playsinline muted autoplay
                      :class="camera.facing === 'user' && 'is-mirrored'"></video>
-              <img class="camera-shot" x-show="camera.shot" :src="camera.shot?.url || null" alt="The photo just taken">
+              <img class="camera-shot" x-show="camera.shot && camera.shot.kind !== 'video'" :src="camera.shot?.kind !== 'video' ? (camera.shot?.url || null) : null" alt="The photo just taken">
+              <template x-if="camera.shot?.kind === 'video'">
+                <video class="camera-shot" :src="camera.shot.url" playsinline autoplay loop controls></video>
+              </template>
+              <div class="camera-rec" x-show="camera.recording" aria-live="polite">
+                <span class="camera-rec-dot" aria-hidden="true"></span><span x-text="cameraClock"></span>
+              </div>
+              <p class="camera-note" x-show="cameraNote" x-text="cameraNote"></p>
               <div class="camera-countdown" x-show="camera.countdown" x-text="camera.countdown"></div>
               <div class="camera-error" x-show="cameraError">
                 <p x-text="cameraError"></p>
@@ -3357,12 +3372,14 @@
             </div>
             <div class="camera-bar camera-poses" x-show="camera.shot && camera.purpose === 'chat'">
               <button class="camera-side" @click="retake()">Retake</button>
-              <button class="btn btn-primary" @click="useChatShot()">Use photo</button>
+              <button class="btn btn-primary" @click="useChatShot()"
+                      x-text="camera.shot?.kind === 'video' ? 'Use video' : 'Use photo'">Use photo</button>
             </div>
             <div class="camera-bar" x-show="!camera.shot">
-              <button class="camera-side" @click="flipCamera()" aria-label="Switch camera">Flip</button>
+              <button class="camera-side" @click="flipCamera()" :disabled="camera.recording" aria-label="Switch camera">Flip</button>
               <button class="camera-shutter" @click="shutter()" :disabled="Boolean(cameraError || camera.countdown)"
-                      aria-label="Take the photo"></button>
+                      :class="[camera.mode === 'video' && 'is-video', camera.recording && 'is-recording']"
+                      :aria-label="camera.mode !== 'video' ? 'Take the photo' : (camera.recording ? 'Stop recording' : 'Start recording')"></button>
               <button class="camera-side" @click="cycleTimer()" :aria-label="`Timer ${camera.timer || 'off'}`"
                       x-text="camera.timer ? `${camera.timer}s` : 'Timer'"></button>
             </div>
@@ -3416,8 +3433,15 @@
                              @pointermove="chatPressMove($event)"
                              @pointerup="chatPressEnd(item.m)"
                              @pointercancel="chatPressCancel()" @pointerleave="chatPressCancel()">
-                          <img x-show="chatPhotoUrl(item.m)" :src="chatPhotoUrl(item.m) || null" alt="Photo, blurred. Hold to see it." draggable="false">
-                          <span class="chat-hold-hint" aria-hidden="true">Hold to see</span>
+                          <template x-if="!chatIsVideo(item.m)">
+                            <img x-show="chatPhotoUrl(item.m)" :src="chatPhotoUrl(item.m) || null" alt="Photo, blurred. Hold to see it." draggable="false">
+                          </template>
+                          <template x-if="chatIsVideo(item.m)">
+                            <video x-show="chatPhotoUrl(item.m)" :src="chatPhotoUrl(item.m) || null" playsinline loop preload="metadata"
+                                   aria-label="Video, blurred. Hold to play it."
+                                   x-effect="chatPlay($el, chatRevealed === item.m.id)"></video>
+                          </template>
+                          <span class="chat-hold-hint" aria-hidden="true" x-text="chatIsVideo(item.m) ? '▶ Hold to play' : 'Hold to see'"></span>
                         </div>
                       </template>
                       <div class="chat-bubble" x-show="item.m.body" x-text="item.m.body"
@@ -3449,7 +3473,11 @@
                 <div class="chat-pending" :class="chatRevealed === 'pending' && 'is-revealed'"
                      @pointerdown="chatHold('pending')" @pointerup="chatRelease()"
                      @pointercancel="chatRelease()" @pointerleave="chatRelease()" @contextmenu.prevent>
-                  <img :src="chatPhoto.url" alt="Photo to send, blurred. Hold to see it." draggable="false">
+                  <img x-show="chatPhoto.kind !== 'video'" :src="chatPhoto.kind !== 'video' ? chatPhoto.url : null" alt="Photo to send, blurred. Hold to see it." draggable="false">
+                  <template x-if="chatPhoto.kind === 'video'">
+                    <video :src="chatPhoto.url" playsinline muted loop preload="metadata" aria-label="Video to send, blurred. Hold to see it."
+                           x-effect="chatRevealed === 'pending' ? $el.play?.() : $el.pause?.()"></video>
+                  </template>
                   <button type="button" class="chat-pending-x" @click="clearChatPhoto()" aria-label="Remove photo">×</button>
                 </div>
               </template>
@@ -3504,8 +3532,15 @@
             <div class="chat-viewer-photo" :class="chatRevealed === 'viewer' && 'is-revealed'"
                  @pointerdown="chatHold('viewer')" @pointerup="chatRelease()"
                  @pointercancel="chatRelease()" @pointerleave="chatRelease()" @contextmenu.prevent>
-              <img :src="chatPhotoUrl(chatViewing) || null" alt="Photo, blurred. Hold to see it." draggable="false">
-              <span class="chat-hold-hint" aria-hidden="true">Hold to see</span>
+              <template x-if="!chatIsVideo(chatViewing)">
+                <img :src="chatPhotoUrl(chatViewing) || null" alt="Photo, blurred. Hold to see it." draggable="false">
+              </template>
+              <template x-if="chatIsVideo(chatViewing)">
+                <video :src="chatPhotoUrl(chatViewing) || null" playsinline loop preload="metadata"
+                       aria-label="Video, blurred. Hold to play it."
+                       x-effect="chatPlay($el, chatRevealed === 'viewer')"></video>
+              </template>
+              <span class="chat-hold-hint" aria-hidden="true" x-text="chatIsVideo(chatViewing) ? '▶ Hold to play' : 'Hold to see'"></span>
             </div>
             <p class="chat-viewer-text" x-show="chatViewing.body" x-text="chatViewing.body"></p>
             <div class="chat-reaction-bar">

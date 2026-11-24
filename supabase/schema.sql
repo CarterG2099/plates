@@ -1001,6 +1001,13 @@ values ('plates-messages', 'plates-messages', false, 5242880,
         array['image/jpeg','image/webp','image/png'])
 on conflict (id) do nothing;
 
+-- Short video clips from the chat camera (camera.VIDEO_MAX_S, about 5 MB each).
+-- 25 MB leaves room; messages.VIDEO_MAX_BYTES says so before an upload is refused.
+update storage.buckets
+   set file_size_limit = 26214400,
+       allowed_mime_types = array['image/jpeg','image/webp','image/png','video/mp4','video/webm']
+ where id = 'plates-messages';
+
 create policy plates_messages_read on storage.objects
   for select to authenticated
   using (

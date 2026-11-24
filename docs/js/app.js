@@ -4482,6 +4482,9 @@ Alpine.data('planPage', () => ({
  * stops being a MediaStream the <video> will accept.
  */
 let cameraStream = null;
+/** The clip being recorded in the chat camera, and the ticker for its clock. */
+let cameraRecorder = null;
+let cameraTicker = null;
 
 Alpine.data('statsPage', () => ({
   weighing: false,
@@ -5225,10 +5228,21 @@ Alpine.data('statsPage', () => ({
   // shot goes into the message box). A chat photo is taken here, never by the
   // phone's camera app, because that app keeps its own copy in the gallery —
   // and a photo that stays only in the conversation is what Messages is for.
-  camera: null,        // { purpose, facing, together, timer, countdown, shot: { blob, url } | null }
+  //
+  // In chat the camera can also record a clip (`mode` 'video'): the shutter
+  // starts and stops it, it stops itself at camera.VIDEO_MAX_S, and the clip is
+  // handed over exactly like a photo.
+  camera: null,        // { purpose, mode, facing, together, timer, countdown, recording, elapsed, shot: { blob, url, kind } | null }
   cameraError: '',
+  cameraNote: '',      // e.g. no microphone: the clip records without sound
   cameraSaving: 0,
   cameraTimers: camera.TIMERS,
+  cameraMaxS: camera.VIDEO_MAX_S,
+
+  /** Video is offered only in chat, and only where the browser can record. */
+  get canRecordVideo() {
+    return this.camera?.purpose === 'chat' && camera.canRecord();
+  },
 
   async openCamera(purpose = 'progress') {
     this.cameraError = '';
@@ -5238,15 +5252,24 @@ Alpine.data('statsPage', () => ({
       this.usePhoneCamera();
       return;
     }
-    this.camera = { purpose, facing: 'environment', together: false, timer: 0, countdown: 0, shot: null };
+    this.camera = { purpose, mode: 'photo', facing: 'environment', together: false, timer: 0, countdown: 0, recording: false, elapsed: 0, shot: null };
+    this.cameraNote = '';
     await this.startStream();
   },
 
   async startStream() {
     camera.close(cameraStream);
     cameraStream = null;
+    const audio = this.camera.mode === 'video';
     try {
-      cameraStream = await camera.open(this.camera.facing);
+      try {
+        cameraStream = await camera.open(this.camera.facing, { audio });
+      } catch (error) {
+        // A refused microphone shouldn't cost the clip: record it silent.
+        if (!audio) throw error;
+        cameraStream = await camera.open(this.camera.facing);
+        this.cameraNote = 'No sound: the microphone is off for Plates.';
+      }
       await this.$nextTick?.();
       const video = this.$refs?.viewfinder;
       if (video) { video.srcObject = cameraStream; await video.play?.(); }
@@ -5255,7 +5278,19 @@ Alpine.data('statsPage', () => ({
     }
   },
 
+  /** Photo or Video, from the chips above the viewfinder. Not mid-clip. */
+  async setCameraMode(mode) {
+    if (!this.camera || this.camera.recording || this.camera.mode === mode) return;
+    if (mode === 'video' && !this.canRecordVideo) return;
+    this.retake();
+    this.camera.mode = mode;
+    this.cameraNote = '';
+    this.cameraError = '';
+    await this.startStream();
+  },
+
   async flipCamera() {
+    if (this.camera?.recording) return;
     this.camera.facing = this.camera.facing === 'user' ? 'environment' : 'user';
     await this.startStream();
   },
@@ -5267,6 +5302,7 @@ Alpine.data('statsPage', () => ({
 
   /** The shutter: counts down if the timer is set, then shoots. */
   async shutter() {
+    if (this.camera?.recording) { await this.stopRecording(); return; }
     if (!this.camera || this.camera.countdown || this.camera.shot) return;
     for (let left = this.camera.timer; left > 0; left--) {
       this.camera.countdown = left;
@@ -5274,7 +5310,52 @@ Alpine.data('statsPage', () => ({
       if (!this.camera) return;   // closed mid-countdown
     }
     this.camera.countdown = 0;
-    await this.snap();
+    if (this.camera.mode === 'video') this.startRecording();
+    else await this.snap();
+  },
+
+  startRecording() {
+    let recorder;
+    try {
+      recorder = camera.record(cameraStream);
+    } catch (error) {
+      this.cameraError = error.message ?? String(error);
+      return;
+    }
+    cameraRecorder = recorder;
+    this.camera.recording = true;
+    this.camera.elapsed = 0;
+    const started = Date.now();
+    clearInterval(cameraTicker);
+    cameraTicker = setInterval(() => {
+      if (this.camera) this.camera.elapsed = Math.min(camera.VIDEO_MAX_S, Math.floor((Date.now() - started) / 1000));
+    }, 250);
+
+    // However it ends — the shutter, or the limit — the clip lands as the shot.
+    recorder.done.then((blob) => {
+      if (cameraRecorder !== recorder || !this.camera) return;   // closed mid-clip: thrown away
+      this.camera.shot = { blob, url: URL.createObjectURL(blob), kind: 'video' };
+    }).catch((error) => {
+      if (cameraRecorder === recorder && this.camera) this.cameraError = error.message ?? String(error);
+    }).finally(() => {
+      if (cameraRecorder !== recorder) return;
+      cameraRecorder = null;
+      clearInterval(cameraTicker);
+      if (this.camera) this.camera.recording = false;
+    });
+  },
+
+  async stopRecording() {
+    const recorder = cameraRecorder;
+    if (!recorder) return;
+    try { await recorder.stop(); } catch { /* reported by startRecording's handler */ }
+    await Promise.resolve();
+  },
+
+  /** "0:07 / 0:15" while recording. */
+  get cameraClock() {
+    const s = this.camera?.elapsed ?? 0;
+    return `0:${String(s).padStart(2, '0')} / 0:${String(camera.VIDEO_MAX_S).padStart(2, '0')}`;
   },
 
   async snap() {
@@ -5326,15 +5407,21 @@ Alpine.data('statsPage', () => ({
     this.closeCamera();
     if (!this.chatOpen) { URL.revokeObjectURL(shot.url); return; }
     this.clearChatPhoto();
-    this.chatPhoto = { file: shot.blob, url: shot.url };
+    this.chatPhoto = { file: shot.blob, url: shot.url, kind: shot.kind ?? 'photo' };
   },
 
   closeCamera() {
+    // A clip still recording is thrown away, never handed over.
+    const recorder = cameraRecorder;
+    cameraRecorder = null;
+    clearInterval(cameraTicker);
+    if (recorder) Promise.resolve(recorder.stop()).catch(() => {});
     this.retake();
     camera.close(cameraStream);
     cameraStream = null;
     this.camera = null;
     this.cameraError = '';
+    this.cameraNote = '';
   },
 
   /** No camera in the page, or it was refused: the phone's camera app and the save sheet, as before. */
@@ -5535,6 +5622,20 @@ Alpine.data('statsPage', () => ({
     };
   },
 
+  /** A clip in the thread or full screen plays only while it is uncovered. */
+  chatPlay(el, on) {
+    if (!el) return;
+    if (!on) { el.pause?.(); return; }
+    el.muted = false;
+    Promise.resolve(el.play?.()).catch(() => {
+      // Sound needs a direct tap on some phones; play it silent rather than not at all.
+      el.muted = true;
+      Promise.resolve(el.play?.()).catch(() => {});
+    });
+  },
+
+  chatIsVideo(m) { return messages.isVideo(m?.photo_path); },
+
   /** Hold on the pending photo or the full-screen one: uncovered until let go. */
   chatHold(what) { this.chatRevealed = what; },
   chatRelease() { this.chatRevealed = null; },
@@ -5675,7 +5776,10 @@ Alpine.data('statsPage', () => ({
 
     this.chatBusy = true;
     try {
-      if (this.chatPhoto) {
+      if (this.chatPhoto?.kind === 'video') {
+        await messages.sendVideo({ blob: this.chatPhoto.file, text, ownerEmail: this.email, recipientEmail });
+        this.clearChatPhoto();
+      } else if (this.chatPhoto) {
         await messages.sendPhoto({ file: this.chatPhoto.file, text, ownerEmail: this.email, recipientEmail });
         this.clearChatPhoto();
       } else {
