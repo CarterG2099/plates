@@ -76,6 +76,18 @@ const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 say(`Browser: ${navigator.userAgent}`);
 say(`Passkeys: ${window.PublicKeyCredential ? 'yes' : 'NO'}`);
+// What the browser says it can do, where it says at all (Chrome 133+, Safari 18+).
+Promise.resolve(window.PublicKeyCredential?.getClientCapabilities?.())
+  .then((caps) => say(`Says it supports the secret (PRF): ${caps ? String(caps['extension:prf'] ?? 'not listed') : 'cannot tell'}`))
+  .catch(() => say('Says it supports the secret (PRF): cannot tell'));
+
+/** Everything the passkey handed back, for the screenshot. */
+function report(step, cred) {
+  const ext = cred.getClientExtensionResults?.() ?? {};
+  say(`${step}: kept on ${cred.authenticatorAttachment ?? 'unknown'} · PRF ${JSON.stringify({
+    enabled: ext.prf?.enabled, gotSecret: Boolean(ext.prf?.results?.first),
+  })}`);
+}
 
 /** A 256-bit AES key from the passkey's secret. */
 async function keyFrom(secret) {
@@ -103,6 +115,7 @@ async function secretFromPasskey() {
   });
   const prf = assertion.getClientExtensionResults()?.prf;
   say(`Passkey used: ${b64(assertion.rawId).slice(0, 16)}…`);
+  report('Sign-in', assertion);
   if (!prf?.results?.first) throw new Error('This phone signed in with the passkey but gave no secret (no PRF support).');
   return prf.results.first;
 }
@@ -122,6 +135,7 @@ document.getElementById('setup').onclick = async () => {
     });
     const ext = cred.getClientExtensionResults()?.prf;
     say(`Passkey made. PRF enabled: ${ext?.enabled ?? 'not reported'}`);
+    report('Created', cred);
     if (ext?.enabled === false) throw new Error('This phone made the passkey but cannot give a secret from it (no PRF support).');
 
     // Some phones return the secret at creation; the rest need one sign-in.
