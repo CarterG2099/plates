@@ -3323,9 +3323,10 @@
         <!-- The camera ------------------------------------------------------------
              Together above the viewfinder, set before the shot. The shutter
              freezes the shot in the frame and swaps the bar for the poses;
-             tapping one saves it, Retake throws it away. The preview is
-             mirrored only for the front camera, so moving left moves left; the
-             frozen shot is shown as saved, never mirrored.
+             tapping one saves it, Retake throws it away. The poses say
+             Together when it is on, so what is saved is in view at the tap.
+             The preview is mirrored only for the front camera, so moving left
+             moves left; the frozen shot is shown as saved, never mirrored.
              Opened from Messages (camera.purpose 'chat'), there is no Together
              or pose: the frozen shot gets Use photo, which puts it in the
              message box, and no phone-camera fallback, since that app would
@@ -3367,7 +3368,8 @@
             <div class="camera-bar camera-poses" x-show="camera.shot && camera.purpose === 'progress'">
               <button class="camera-side" @click="retake()">Retake</button>
               <template x-for="p in poses" :key="p">
-                <button class="btn" @click="keepShot(p)" x-text="p" :aria-label="`Save as ${p}`"></button>
+                <button class="btn" @click="keepShot(p)" x-text="camera.together ? `Together · ${p}` : p"
+                        :aria-label="`Save as ${camera.together ? 'together, ' : ''}${p}`"></button>
               </template>
             </div>
             <div class="camera-bar camera-poses" x-show="camera.shot && camera.purpose === 'chat'">

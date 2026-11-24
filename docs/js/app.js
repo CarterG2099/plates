@@ -5238,6 +5238,8 @@ Alpine.data('statsPage', () => ({
   cameraSaving: 0,
   cameraTimers: camera.TIMERS,
   cameraMaxS: camera.VIDEO_MAX_S,
+  // Together, carried from a camera that failed into the phone camera's save sheet.
+  phoneCameraTogether: false,
 
   /** Video is offered only in chat, and only where the browser can record. */
   get canRecordVideo() {
@@ -5426,6 +5428,7 @@ Alpine.data('statsPage', () => ({
 
   /** No camera in the page, or it was refused: the phone's camera app and the save sheet, as before. */
   usePhoneCamera() {
+    this.phoneCameraTogether = Boolean(this.camera?.together);
     this.closeCamera();
     this.pickerHeld = true;
     document.getElementById?.('pp-camera')?.click?.();
@@ -5433,12 +5436,14 @@ Alpine.data('statsPage', () => ({
 
   pickPhoto(event) {
     this.pickerHeld = false;
+    const together = event.target.id === 'pp-camera' && this.phoneCameraTogether;
+    this.phoneCameraTogether = false;
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
 
     this.photoFile = file;
-    this.photoDraft = { takenOn: food.toDateOnly(new Date()), pose: 'front', note: '', together: false };
+    this.photoDraft = { takenOn: food.toDateOnly(new Date()), pose: 'front', note: '', together };
     this.addingPhoto = true;
   },
 

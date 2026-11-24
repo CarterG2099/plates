@@ -317,6 +317,51 @@ test('with no camera in the page at all, Take photo falls back to the phone came
   }
 });
 
+/** The phone camera's file input handing back a photo, the way the browser fires its change. */
+function picked(page, id) {
+  page.pickPhoto({ target: { id, value: 'x', files: [new Blob(['jpeg'], { type: 'image/jpeg' })] } });
+}
+
+test('Together set before the camera failed is still on in the phone camera\'s save sheet', async () => {
+  fakeCamera({ refuse: 'NotAllowedError' });
+  const real = document.getElementById;
+  document.getElementById = () => ({ click() {} });
+  try {
+    const page = statsPage();
+    await page.openCamera();
+    page.camera.together = true;
+    page.usePhoneCamera();
+    picked(page, 'pp-camera');
+    assert.equal(page.addingPhoto, true);
+    assert.equal(page.photoDraft.together, true);
+  } finally {
+    document.getElementById = real;
+  }
+});
+
+test('it stays off when it was off, and the library never inherits it', async () => {
+  fakeCamera({ refuse: 'NotAllowedError' });
+  const real = document.getElementById;
+  document.getElementById = () => ({ click() {} });
+  try {
+    const page = statsPage();
+    await page.openCamera();
+    page.usePhoneCamera();
+    picked(page, 'pp-camera');
+    assert.equal(page.photoDraft.together, false, 'off in the camera, off in the sheet');
+
+    await page.openCamera();
+    page.camera.together = true;
+    page.usePhoneCamera();
+    picked(page, 'pp-library');
+    assert.equal(page.photoDraft.together, false, 'a library photo is not the one the camera was set for');
+    picked(page, 'pp-camera');
+    assert.equal(page.photoDraft.together, false, 'used once, then forgotten');
+  } finally {
+    document.getElementById = real;
+  }
+});
+
 // ---- markup ---------------------------------------------------------------------
 
 const html = await readFile(fileURLToPath(new URL('../docs/index.html', import.meta.url)), 'utf8');
@@ -335,6 +380,19 @@ test('the camera screen: the pose is chosen under the frozen shot, not above the
   assert.match(cam, /<template x-for="p in poses" :key="p">\s*<button class="btn" @click="keepShot\(p\)"/);
   assert.match(cam, /@click="retake\(\)">Retake<\/button>/);
   assert.match(cam, /<div class="camera-bar" x-show="!camera\.shot">/);
+});
+
+test('with Together on, each pose under the shot says so', () => {
+  const cam = html.slice(html.indexOf('<template x-if="camera">'), html.indexOf('<!-- Messages'));
+  const button = cam.match(/<button class="btn" @click="keepShot\(p\)"[^>]*>/)?.[0];
+  assert.ok(button, 'the pose button');
+  const text = button.match(/x-text="([^"]*)"/)[1];
+  const label = button.match(/:aria-label="([^"]*)"/)[1];
+  const run = (expr, together) => new Function('camera', 'p', `return ${expr}`)({ together }, 'front');
+  assert.equal(run(text, true), 'Together · front');
+  assert.equal(run(text, false), 'front');
+  assert.equal(run(label, true), 'Save as together, front');
+  assert.equal(run(label, false), 'Save as front');
 });
 
 test('the camera screen: inline video, Together, shutter, flip, timer, Done', () => {
