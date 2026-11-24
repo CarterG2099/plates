@@ -820,6 +820,38 @@ Alpine.store('ui', {
 
   go(view) { this.view = view; },
 
+  // ---- Messages from the top bar ------------------------------------------------
+  //
+  // The conversation lives on the Stats screen, behind the photo PIN. The top
+  // bar's icon asks for it from anywhere: Stats picks the request up, puts the
+  // PIN pad in front if the photos are locked, then opens the conversation.
+  // Leaving it goes back to where the icon was tapped, locked again.
+  chatRequested: false,
+  chatReturnTo: null,
+  messagesReadAt: null,   // mirrors the conversation's read mark, for the icon's dot
+
+  /** Only the two people who have a conversation get the icon. */
+  get canMessage() {
+    const auth = Alpine.store('auth');
+    return Boolean(messages.partnerFor(auth.members, auth.email));
+  },
+
+  get messagesUnread() {
+    return messages.unreadCount(snapshot().messages, Alpine.store('auth').email, this.messagesReadAt);
+  },
+
+  /** The read mark, so the icon's dot is right before Stats has ever opened. */
+  init() {
+    messages.readAt().then((stamp) => { this.messagesReadAt = stamp; }).catch(() => {});
+  },
+
+  openMessages() {
+    if (!this.canMessage) return;
+    this.chatReturnTo = this.view === 'stats' ? null : this.view;
+    this.chatRequested = true;
+    this.go('stats');
+  },
+
   get date() { return food.fromDateOnly(this.viewDate); },
   get dayLabel() { return food.dayLabel(this.date); },
   get isToday() { return this.viewDate === food.toDateOnly(new Date()); },
@@ -5063,7 +5095,56 @@ Alpine.data('statsPage', () => ({
       }
     };
     document.addEventListener('visibilitychange', this.relockOnHide);
-    messages.readAt().then((stamp) => { this.chatReadAt = stamp; });
+    messages.readAt().then((stamp) => { this.chatReadAt = stamp; Alpine.store('ui').messagesReadAt = stamp; });
+  },
+
+  // ---- opened from the top bar ---------------------------------------------------
+
+  chatGate: false,       // the PIN pad over everything, until the photos unlock
+  chatReturnTo: null,    // the screen to go back to when that conversation closes
+
+  /** Run from an x-effect: picks up the top bar's request, and again once the PIN unlocks. */
+  takeChatRequest() {
+    const ui = Alpine.store('ui');
+    if (!ui.chatRequested) return;
+    if (!this.chatPartner) { ui.chatRequested = false; return; }
+    if (this.photosLocked) { this.chatGate = true; return; }
+    ui.chatRequested = false;
+    this.chatGate = false;
+    this.chatReturnTo = ui.chatReturnTo;
+    ui.chatReturnTo = null;
+    this.openChat();
+  },
+
+  /** Backing out of the PIN pad: nothing opened, back where you were. */
+  cancelChatGate() {
+    const ui = Alpine.store('ui');
+    const back = ui.chatReturnTo;
+    ui.chatRequested = false;
+    ui.chatReturnTo = null;
+    this.chatGate = false;
+    this.pinEntry = '';
+    this.pinError = '';
+    if (back) ui.go(back);
+  },
+
+  /**
+   * The conversation's close button. Opened from the top bar, it locks the
+   * photos again and goes back: going in for messages shouldn't leave the
+   * progress photos open on the Stats screen.
+   */
+  leaveChat() {
+    const back = this.chatReturnTo;
+    if (!back) { this.closeChat(); return; }
+    this.relockPhotos();
+    Alpine.store('ui').go(back);
+  },
+
+  /** The conversation's Lock: locked either way, and back where you came from if that was the top bar. */
+  lockFromChat() {
+    const back = this.chatReturnTo;
+    this.relockPhotos();
+    if (back) Alpine.store('ui').go(back);
   },
 
   destroy() {
@@ -5704,6 +5785,7 @@ Alpine.data('statsPage', () => ({
   },
 
   closeChat() {
+    this.chatReturnTo = null;
     this.stopChatListen?.();
     this.stopChatListen = null;
     this.chatTyping?.close();
@@ -5729,6 +5811,7 @@ Alpine.data('statsPage', () => ({
     const rows = this.chatThread;
     if (!this.chatOpen) return;
     this.chatReadAt = await messages.markRead(rows);
+    Alpine.store('ui').messagesReadAt = this.chatReadAt;
     await this.$nextTick?.();
     this.$refs?.chatEnd?.scrollIntoView?.({ block: 'end' });
   },

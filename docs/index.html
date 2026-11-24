@@ -133,9 +133,19 @@
 
       <header class="app-bar">
         <h1>Plates</h1>
-        <!-- Two doors, each to one thing: the bell to notifications and
+        <!-- Doors, each to one thing: Messages (only for the two of you who
+             have it; still behind the PIN), the bell to notifications and
              reminders, the initial to who is signed in, the watch, signing out. -->
         <div class="app-bar-actions">
+          <button class="tap app-bar-messages" x-show="$store.ui.canMessage" @click="$store.ui.openMessages()"
+                  :aria-label="$store.ui.messagesUnread ? `Messages, ${$store.ui.messagesUnread} unread` : 'Messages'">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+              <path d="M20 12a7.5 7.5 0 0 1-11.2 6.5L4 20l1.5-4.6A7.5 7.5 0 1 1 20 12Z"/>
+            </svg>
+            <span class="chat-dot" x-show="$store.ui.messagesUnread" aria-hidden="true"></span>
+          </button>
           <button class="tap" @click="$store.ui.openSettings()" aria-label="Notifications">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"
@@ -2523,7 +2533,7 @@
       </template>
 
       <template x-if="$store.ui.view === 'stats'">
-      <main class="app-main" x-data="statsPage">
+      <main class="app-main" x-data="statsPage" x-effect="takeChatRequest()">
 
         <!-- Targets ---------------------------------------------------------- -->
         <div class="card">
@@ -3403,17 +3413,42 @@
              and it covers again. Tap a photo to see it full screen (still
              blurred until held); double-tap anything to heart it; hold a text
              bubble for the reactions, Copy and Unsend. -->
+        <!-- Messages from the top bar, with the photos locked: the PIN first,
+             over everything. Unlocking opens the conversation. -->
+        <template x-if="chatGate && photosLocked">
+          <div class="chat chat-gate" role="dialog" aria-label="Messages are locked">
+            <div class="chat-head">
+              <button class="chat-icon" @click="cancelChatGate()" aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+              </button>
+              <div class="chat-who"><h2>Messages</h2></div>
+            </div>
+            <div class="chat-gate-body">
+              <svg class="chat-gate-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
+              <p x-text="pinPrompt"></p>
+              <form class="pin-row" @submit.prevent="submitPin()">
+                <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+                       x-model="pinEntry" placeholder="••••" autocomplete="off" aria-label="PIN"
+                       x-init="$nextTick(() => $el.focus())">
+                <button class="chat-gate-go" type="submit" :disabled="pinEntry.length < 4"
+                        x-text="pinStage === 'enter' && myPinHash ? 'Unlock' : 'Next'"></button>
+              </form>
+              <p class="chat-gate-error" x-show="pinError" x-text="pinError"></p>
+            </div>
+          </div>
+        </template>
+
         <template x-if="chatOpen && !photosLocked">
           <div class="chat" role="dialog" aria-label="Messages" x-effect="chatSeen()">
             <div class="chat-head">
-              <button class="chat-icon" @click="closeChat()" aria-label="Close">
+              <button class="chat-icon" @click="leaveChat()" aria-label="Close">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
               </button>
               <div class="chat-who">
                 <h2 x-text="chatPartner?.display_name || 'Messages'"></h2>
                 <span class="chat-who-sub">Only you two</span>
               </div>
-              <button class="chat-icon" @click="relockPhotos()" aria-label="Lock">
+              <button class="chat-icon" @click="lockFromChat()" aria-label="Lock">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
               </button>
             </div>

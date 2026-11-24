@@ -763,3 +763,141 @@ test('the photo box keeps its size and says what is happening before the photo a
   assert.match(html, /chatPhotoState\(item\.m\) === 'failed' \? 'Couldn’t load · tap to try again'/);
   assert.match(html, /<span class="chat-photo-error" x-show="chatUrlFailed\[item\.m\.id\]" x-text="chatUrlFailed\[item\.m\.id\]"><\/span>/);
 });
+
+// ---- Messages from the top bar ----------------------------------------------------------
+
+const progressMod = await import('../docs/js/progress.js');
+
+/** Signed in as `email`, with a PIN of 1234 set, on `view`. */
+async function signedIn(email = ME, view = 'today') {
+  fakeChannel();
+  const members = household(email).map((m) => ({ ...m, display_name: m.email === AANA ? 'Aana' : 'Carter' }));
+  const me = members.find((m) => m.email === email);
+  me.photo_pin_hash = await progressMod.hashPin(email, '1234');
+  Alpine.store('auth').session = { user: { email } };
+  Alpine.store('auth').members = members;
+  const ui = Alpine.store('ui');
+  ui.view = view;
+  ui.chatRequested = false;
+  ui.chatReturnTo = null;
+  return ui;
+}
+
+function stats() {
+  const page = Alpine.reactive(components.statsPage());
+  page.$refs = {};
+  page.$nextTick = async () => {};
+  return page;
+}
+
+test('the Messages icon is only for the two people who have a conversation', async () => {
+  for (const [who, has] of [[ME, true], [AANA, true], [ANDRA, false], [TEST, false]]) {
+    const ui = await signedIn(who);
+    assert.equal(ui.canMessage, has, who);
+    ui.openMessages();
+    assert.equal(ui.view, has ? 'stats' : 'today', `${who} ${has ? 'goes' : 'stays'}`);
+  }
+});
+
+test('from the icon with the photos locked, the PIN comes first and the conversation waits', async () => {
+  const ui = await signedIn(ME, 'train');
+  ui.openMessages();
+  assert.equal(ui.view, 'stats');
+  const page = stats();
+  page.takeChatRequest();
+  assert.equal(page.photosLocked, true);
+  assert.equal(page.chatGate, true);
+  assert.equal(page.chatOpen, false, 'nothing shown before the PIN');
+
+  page.pinEntry = '0000';
+  await page.submitPin();
+  page.takeChatRequest();
+  assert.equal(page.chatOpen, false, 'a wrong PIN opens nothing');
+  assert.equal(page.chatGate, true);
+
+  page.pinEntry = '1234';
+  await page.submitPin();
+  page.takeChatRequest();
+  assert.equal(page.chatOpen, true);
+  assert.equal(page.chatGate, false);
+  assert.equal(ui.chatRequested, false, 'the request is used up');
+  page.closeChat();
+});
+
+test('closing a conversation opened from the icon locks the photos and goes back', async () => {
+  const ui = await signedIn(ME, 'plan');
+  ui.openMessages();
+  const page = stats();
+  page.pinEntry = '1234';
+  await page.submitPin();
+  page.takeChatRequest();
+  assert.equal(page.chatOpen, true);
+
+  page.leaveChat();
+  assert.equal(page.chatOpen, false);
+  assert.equal(page.photosLocked, true, 'the progress photos are not left open');
+  assert.equal(ui.view, 'plan');
+});
+
+test('Lock in a conversation opened from the icon also goes back', async () => {
+  const ui = await signedIn(ME, 'today');
+  ui.openMessages();
+  const page = stats();
+  page.pinEntry = '1234';
+  await page.submitPin();
+  page.takeChatRequest();
+  page.lockFromChat();
+  assert.equal(page.photosLocked, true);
+  assert.equal(ui.view, 'today');
+});
+
+test('opened from the photos card, closing just closes: photos stay unlocked, the screen stays', async () => {
+  const ui = await signedIn(ME, 'stats');
+  const page = stats();
+  page.pinEntry = '1234';
+  await page.submitPin();
+  page.openChat();
+  page.leaveChat();
+  assert.equal(page.chatOpen, false);
+  assert.equal(page.photosLocked, false);
+  assert.equal(ui.view, 'stats');
+});
+
+test('backing out of the PIN pad opens nothing and goes back', async () => {
+  const ui = await signedIn(ME, 'train');
+  ui.openMessages();
+  const page = stats();
+  page.takeChatRequest();
+  page.pinEntry = '12';
+  page.cancelChatGate();
+  assert.equal(page.chatGate, false);
+  assert.equal(page.pinEntry, '');
+  assert.equal(ui.chatRequested, false);
+  assert.equal(ui.view, 'train');
+  page.takeChatRequest();
+  assert.equal(page.chatOpen, false);
+});
+
+test('the icon\'s dot counts her messages since the conversation was last seen', async () => {
+  const ui = await signedIn(ME);
+  const before = ui.messagesUnread;
+  await local.putManyLocalIfNewer('messages', [msg('dot-1', '2099-01-01T00:00:00.000Z', AANA)]);
+  await Alpine.store('data').refreshCore();
+  assert.equal(ui.messagesUnread, before + 1);
+
+  const page = stats();
+  page.photosLocked = false;
+  page.openChat();
+  await page.chatSeen();
+  assert.equal(ui.messagesUnread, 0, 'seen in the conversation clears the icon too');
+  page.closeChat();
+});
+
+test('the top bar has the icon for the two of you, and Stats answers it behind the PIN', async () => {
+  const html = await read('../docs/index.html');
+  assert.match(html, /<button class="tap app-bar-messages" x-show="\$store\.ui\.canMessage" @click="\$store\.ui\.openMessages\(\)"/);
+  assert.match(html, /<main class="app-main" x-data="statsPage" x-effect="takeChatRequest\(\)">/);
+  assert.match(html, /<template x-if="chatGate && photosLocked">/);
+  assert.match(html, /<button class="chat-icon" @click="leaveChat\(\)" aria-label="Close">/);
+  assert.match(html, /<button class="chat-icon" @click="lockFromChat\(\)" aria-label="Lock">/);
+});

@@ -864,6 +864,48 @@
    Full screen above the page and its sheets (20), below the toast (30), so a
    send failure still shows. A message's own sheet opens above it. */
 .photo-head-actions { display: flex; gap: var(--space-2); }
+.app-bar-messages { position: relative; }
+.app-bar-messages .chat-dot { top: 8px; right: 8px; }
+
+/* The PIN in front of Messages, opened from the top bar. */
+.chat-gate-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  color: var(--chat-muted);
+  text-align: center;
+}
+.chat-gate-body p { margin: 0; }
+.chat-gate-lock { width: 40px; height: 40px; color: var(--chat-text); }
+.chat-gate .pin-row { display: flex; gap: var(--space-2); }
+.chat-gate-go {
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--chat-accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.chat-gate-go:disabled { opacity: .5; cursor: default; }
+.chat-gate-error { color: #ff6b81; }
+.chat-gate .pin-row input {
+  width: 140px;
+  padding: 10px 16px;
+  border: 1px solid var(--chat-line);
+  border-radius: 14px;
+  background: var(--chat-surface);
+  color: var(--chat-text);
+  font: inherit;
+  font-size: 22px;
+  letter-spacing: .3em;
+  text-align: center;
+}
 .photo-head-actions .btn { position: relative; }
 .chat-dot {
   position: absolute;
