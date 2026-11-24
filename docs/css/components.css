@@ -12,11 +12,10 @@
 }
 
 .card-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--color-text-dim);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
 }
 
 /* ---- buttons -------------------------------------------------------------- */
@@ -27,23 +26,22 @@
   justify-content: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-6);
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-raised);
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  background: var(--color-fill);
   color: var(--color-text);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  letter-spacing: .12em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 600;
+  white-space: nowrap;           /* "Get code" on two lines reads as two buttons */
   transition: background var(--transition-fast), border-color var(--transition-fast);
   min-height: 46px;              /* thumb target, gym gloves, one hand */
 }
 
-.btn:hover:not(:disabled) { background: var(--color-hover); }
+.btn:hover:not(:disabled) { background: var(--color-fill-hover); }
 .btn:disabled { opacity: .45; cursor: default; }
 
 .btn-primary {
-  box-shadow: var(--shadow-sm);
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: #fff;
@@ -54,7 +52,7 @@
   border-color: var(--color-primary-hover);
 }
 
-.btn-ghost { background: transparent; }
+.btn-ghost { background: transparent; color: var(--color-primary-hover); }   /* a text button: the accent says "tap me" without a box */
 .btn-block { width: 100%; }
 
 /* ---- pills and status ----------------------------------------------------- */
@@ -66,10 +64,8 @@
   padding: 4px 11px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--color-border);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 
@@ -100,10 +96,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
 }
 
@@ -189,13 +183,13 @@
 }
 
 .row-text small {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
 .row-num {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-base);
   font-weight: 600;
@@ -396,10 +390,10 @@
 .btn-row .btn { flex: 1; padding-left: var(--space-3); padding-right: var(--space-3); }
 
 .btn-danger {
-  border-color: rgba(224, 54, 42, .5);
-  color: var(--color-danger);
+  background: rgba(224, 54, 42, .12);
+  color: #FF6B60;
 }
-.btn-danger:hover:not(:disabled) { background: rgba(224, 54, 42, .12); }
+.btn-danger:hover:not(:disabled) { background: rgba(224, 54, 42, .2); }
 
 /* ---- movement ------------------------------------------------------------- */
 /* The figure performs the shape of the movement. Joint origins are in the SVG's
@@ -506,10 +500,8 @@
 /* The estimate is a guess and has to keep saying so. Warning-coloured rather
    than neutral: this number did not come off a label. */
 .estimate-caveat {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--color-warning);
   margin: 0;
 }
@@ -532,7 +524,7 @@
 .estimate-portion span {
   min-width: 2.75em;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
@@ -624,7 +616,7 @@
 .setting input[type="checkbox"]:disabled { cursor: default; }
 
 .setting-meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   margin: 0;
@@ -633,10 +625,9 @@
 
 /* Read across a room to a wrist: big, spaced, and tabular so no digit shifts. */
 .watch-code {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-2xl);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.12em;
   text-align: center;
   margin: var(--space-2) 0 0;
 }
@@ -665,10 +656,8 @@
   background: none;
   border: 0;
   padding: var(--space-1) 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -741,10 +730,8 @@
   top: 4px; left: 4px;
   padding: 1px 6px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: #fff;
   background: rgba(0, 0, 0, .6);
 }
@@ -780,7 +767,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 96px;
   font-weight: 700;
   text-shadow: 0 2px 12px rgba(0, 0, 0, .6);
@@ -803,10 +790,8 @@
 .camera-side {
   min-width: 64px;
   min-height: 44px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .1em;
-  text-transform: uppercase;
   color: #fff;
 }
 .camera-shutter {
@@ -831,7 +816,7 @@
   padding: 4px 12px;
   border-radius: 999px;
   background: rgba(0, 0, 0, .55);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
 }
 .camera-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #e5394f; animation: camera-rec 1s infinite; }

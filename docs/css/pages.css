@@ -24,24 +24,22 @@
      symmetric padding it needs. The 34px itself stays: it is where the home
      indicator lives, and a button under it loses its taps to the system swipe. */
   padding: var(--space-3) 0 max(0px, calc(var(--space-3) - var(--inset-bottom)));
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .1em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
 }
 
-.tabbar button.is-active { color: var(--color-text); }
-
-.tabbar button.is-active::before {
-  content: "";
-  display: block;
-  width: 22px;
-  height: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--color-primary);
-  margin: 0 auto var(--space-2);
+.tabbar button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-weight: 500;
 }
+.tabbar button .icon { width: 24px; height: 24px; }
+/* The tab you're on: its icon in the accent, its label in full white. */
+.tabbar button.is-active { color: var(--color-text); }
+.tabbar button.is-active .icon { color: var(--color-primary-hover); }
 
 /* ---- date navigation ------------------------------------------------------ */
 
@@ -61,16 +59,14 @@
 }
 
 .datenav-label b {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-lg);
   letter-spacing: -.02em;
 }
 
 .datenav-label small {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
 }
 
@@ -134,7 +130,7 @@
 }
 
 .readout-total {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-3xl);
   line-height: .95;
@@ -142,10 +138,8 @@
 }
 
 .readout-of {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .14em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
   margin-top: var(--space-1);
 }
@@ -154,7 +148,7 @@
 
 .readout-remaining b {
   display: block;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-xl);
   color: var(--color-success);
@@ -163,10 +157,8 @@
 .readout-remaining.is-over b { color: var(--color-danger); }
 
 .readout-remaining small {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .12em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
 }
 
@@ -199,10 +191,8 @@ button.macro {
 }
 
 .macro-name {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .1em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
   width: 62px;
   flex: none;
@@ -223,9 +213,8 @@ button.macro {
 .rack i.is-planned { opacity: .35; }
 
 .plan-line {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .04em;
   color: var(--color-text-muted);
 }
 .plan-line.is-over { color: var(--color-danger); }
@@ -239,7 +228,7 @@ button.macro {
 }
 
 .macro-val {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
   width: 74px;
@@ -254,13 +243,23 @@ button.macro {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--color-text-dim);
+  font-family: var(--font-sans);
+  /* A heading now, not a tracked caption: sentence case at 12px dim read as a
+     footnote, so it takes size and weight instead. */
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: -.01em;
+  color: var(--color-text);
   padding-top: var(--space-2);
 }
+/* What sits beside a heading — a count, "8 routines" — stays a quiet note. */
+.section-head > span + span {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--color-text-dim);
+}
+.search .icon-search { width: 18px; height: 18px; color: var(--color-text-dim); }
 
 .empty {
   color: var(--color-text-dim);
@@ -339,11 +338,10 @@ button.macro {
 .chip {
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border);
-  font-family: var(--font-mono);
+  border: 1px solid transparent;
+  background: var(--color-fill);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 
@@ -353,10 +351,8 @@ button.macro {
   margin-top: var(--space-1);
   padding: 2px var(--space-2);
   border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: #fff;
   background: var(--color-protein);
 }
@@ -373,14 +369,17 @@ button.macro {
   height: 40px;
   flex: none;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-raised);
+  border: 1px solid transparent;
+  background: var(--color-fill);
   color: var(--color-text-muted);
   display: grid;
   place-items: center;
   font-size: var(--text-lg);
   line-height: 1;
 }
+
+.tap .icon { width: 20px; height: 20px; }
+span.tap:not(.avatar) { background: none; }   /* a row's chevron is a hint, not a second button */
 
 .tap-primary {
   background: var(--color-primary);
@@ -524,8 +523,8 @@ html:has(.sheet-backdrop) { overflow: hidden; }
   height: 48px;
   flex: none;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-raised);
+  border: 1px solid transparent;
+  background: var(--color-fill);
   color: var(--color-text-muted);
   font-size: var(--text-xl);
   display: grid;
@@ -704,7 +703,7 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 }
 
 .nf-calories b {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-2xl);
   font-variant-numeric: tabular-nums;
 }
@@ -735,14 +734,14 @@ html:has(.sheet-backdrop) { overflow: hidden; }
 .nf-name { display: flex; gap: var(--space-2); min-width: 0; }
 
 .nf-amount {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
 
 .nf-pct {
   flex: none;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
@@ -783,7 +782,7 @@ button.nf-tap:active { background: var(--color-hover); }
   border: 0;
   outline: none;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-2xl);
   letter-spacing: -.02em;
@@ -791,18 +790,14 @@ button.nf-tap:active { background: var(--color-hover); }
 
 .qty-amount small {
   display: block;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .14em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
 }
 
 .prefill {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .06em;
-  text-transform: uppercase;
   color: var(--color-carbs);
   text-align: center;
 }
@@ -850,10 +845,8 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .field label {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .12em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
 }
 
@@ -905,9 +898,8 @@ button.nf-tap:active { background: var(--color-hover); }
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-md);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .06em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -929,7 +921,7 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .timer .t {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   /* Sized to the viewport, not fixed. Three chips and two clocks share this row,
      and past an hour the elapsed readout gains a whole field — enough to push
      the rest clock out of the bar on a small phone. Scaling by width keeps the
@@ -970,25 +962,21 @@ button.nf-tap:active { background: var(--color-hover); }
 
 .timer .rest b {
   display: block;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: clamp(var(--text-lg), 4.2vw, var(--text-xl));
   font-variant-numeric: tabular-nums;
   color: var(--color-carbs);      /* the only thing counting down */
 }
 
 .timer small {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .13em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
 }
 
 .prev {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .06em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
   padding-top: 4px;
 }
@@ -996,10 +984,8 @@ button.nf-tap:active { background: var(--color-hover); }
 /* A nudge, not an alarm: warning-coloured so it is seen at the bar, but in the
    same small type as "Last:" beside it. */
 .stall {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .06em;
-  text-transform: uppercase;
   color: var(--color-warning);
   padding-top: 4px;
 }
@@ -1007,10 +993,8 @@ button.nf-tap:active { background: var(--color-hover); }
 /* The nudge, beaten: success-coloured and a moment of movement as it appears,
    the visual half of the toast and the buzz. */
 .stall-broken {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .06em;
-  text-transform: uppercase;
   color: var(--color-success);
   font-weight: 600;
   padding-top: 4px;
@@ -1087,10 +1071,8 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .cardstack > .card.row-card.is-group small {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .12em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 
@@ -1162,10 +1144,8 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .sethead {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .13em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
   border-bottom: 1px solid var(--color-border);
 }
@@ -1182,7 +1162,7 @@ button.nf-tap:active { background: var(--color-hover); }
 .setgrid .row-swipe { border-radius: var(--radius-sm); }
 
 .setrow .idx {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--color-text-dim);
   text-align: center;
@@ -1210,7 +1190,7 @@ button.nf-tap:active { background: var(--color-hover); }
 /* What this set was last time. Quiet on purpose — it is reference, not input,
    and it sits directly beside the box you are about to type into. */
 .prev-cell {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-dim);
   text-align: center;
@@ -1252,7 +1232,7 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .running-meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
   flex: none;
@@ -1265,15 +1245,18 @@ button.nf-tap:active { background: var(--color-hover); }
   font-size: var(--text-lg);
   line-height: 1;
 }
+.running-caret .icon { width: 18px; height: 18px; }
+
+/* Icons that replaced text glyphs, sized to where they sit. */
+.chip .icon { width: 16px; height: 16px; }
+.chat-pending-x .icon { width: 14px; height: 14px; margin: auto; }
 
 /* Said in words as well as shape: a bar that only looked tappable was a bar
    nobody could see how to get back into. */
 .running-open {
   flex: none;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .1em;
-  text-transform: uppercase;
   color: var(--color-primary);
 }
 
@@ -1285,10 +1268,8 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .workout-title {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .16em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
   min-width: 0;
   overflow: hidden;
@@ -1398,9 +1379,8 @@ button.nf-tap:active { background: var(--color-hover); }
    own frequents, so it isn't generic advice. */
 
 .infood {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .04em;
   color: var(--color-carbs);
 }
 
@@ -1460,7 +1440,7 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .loadout b {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   font-weight: 700;
   /* Tighter than the old stacked chips: two of them share the track now, and a
@@ -1619,7 +1599,7 @@ button.nf-tap:active { background: var(--color-hover); }
 
 .how li::marker {
   color: var(--color-text-dim);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
 }
 
@@ -1651,10 +1631,8 @@ button.nf-tap:active { background: var(--color-hover); }
   padding: var(--space-2) 0;
   min-height: 44px;
   text-align: left;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .12em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
   cursor: pointer;
 }
@@ -1723,10 +1701,9 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .routine-meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  letter-spacing: .05em;
   margin-top: 2px;
 }
 
@@ -1741,10 +1718,8 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .coverage span {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .09em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
   margin-left: 2px;
   flex: none;
@@ -1753,10 +1728,9 @@ button.nf-tap:active { background: var(--color-hover); }
 .routine-stats {
   display: flex;
   gap: var(--space-4);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  letter-spacing: .04em;
 }
 
 .routine-stats b { color: var(--color-text); font-weight: 700; }
@@ -1774,7 +1748,7 @@ button.nf-tap:active { background: var(--color-hover); }
    plate red and green are 5.1 ΔE apart under deuteranopia. */
 
 .stat-hero {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-2xl);
   font-weight: 700;
@@ -1790,10 +1764,9 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .stat-sub {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  letter-spacing: .04em;
 }
 
 /* ---- interactive plot ------------------------------------------------------ */
@@ -1860,7 +1833,7 @@ button.nf-tap:active { background: var(--color-hover); }
 
 .plot-dot.is-on {
   fill: var(--color-text);
-  r: 2.6;
+  r: 1.8;
 }
 
 /* Value leads, label follows — the reader has the date and wants the number. */
@@ -1881,7 +1854,7 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .finish-when > span {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
@@ -1898,7 +1871,7 @@ button.nf-tap:active { background: var(--color-hover); }
 .celebrate-mark svg { width: 100%; height: 100%; display: block; }
 
 .celebrate-head {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-2xl);
   letter-spacing: -.02em;
   margin: var(--space-3) 0 0;
@@ -1931,11 +1904,11 @@ button.nf-tap:active { background: var(--color-hover); }
   grid-template-columns: 5.5em 1fr 4.5em;
   align-items: center;
   gap: var(--space-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
 }
 
-.sets-name { color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .06em; }
+.sets-name { color: var(--color-text-muted); }
 
 .sets-track {
   position: relative;
@@ -1970,14 +1943,14 @@ button.nf-tap:active { background: var(--color-hover); }
 
 .sets-num { text-align: right; font-variant-numeric: tabular-nums; }
 .sets-num b { color: var(--color-text); font-weight: 600; }
-.sets-num small { color: var(--color-warning); margin-left: 4px; text-transform: uppercase; }
+.sets-num small { color: var(--color-warning); margin-left: 4px; }
 
 .plot-readout {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
   margin-top: var(--space-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .plot-readout b { font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
@@ -2011,7 +1984,7 @@ button.nf-tap:active { background: var(--color-hover); }
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
@@ -2066,7 +2039,7 @@ button.nf-tap:active { background: var(--color-hover); }
   height: 2.2em;
   margin-top: var(--space-1);
   border-top: 1px solid var(--color-border);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-dim);
 }
@@ -2139,28 +2112,26 @@ button.nf-tap:active { background: var(--color-hover); }
 }
 
 .stat-cell small {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
 }
 
 .stat-cell b {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-base);
 }
 
 .stat-cell span {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
 /* Direction is carried by the sign as well as the colour — never colour alone. */
 .delta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
   color: var(--color-text-dim);
@@ -2207,7 +2178,7 @@ button.nf-tap:active { background: var(--color-hover); }
 
 /* What the source actually returned for its serving fields. Diagnostic. */
 .servingraw {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
   line-height: 1.5;
   color: var(--color-text-dim);
@@ -2227,7 +2198,7 @@ button.nf-tap:active { background: var(--color-hover); }
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
@@ -2270,9 +2241,8 @@ button.nf-tap:active { background: var(--color-hover); }
   .paste-hint {
     display: block;
     margin: 0;
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: var(--text-xs);
-    letter-spacing: .04em;
     color: var(--color-text-dim);
   }
 }
@@ -2324,10 +2294,8 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
 .compare-ask p { margin: 0 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-sm); }
 .compare-next { display: block; color: var(--color-text-dim); }
 .compare-level {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .06em;
-  text-transform: uppercase;
 }
 
 .compare-dots {
@@ -2338,9 +2306,9 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
   margin-top: var(--space-3);
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
-.compare-dots span { font-size: var(--text-xs); color: var(--color-text-muted); letter-spacing: .08em; }
+.compare-dots span { font-size: var(--text-xs); color: var(--color-text-muted); }
 .compare-dots b { font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
 .compare-dots small { flex-basis: 100%; font-size: var(--text-xs); color: var(--color-text-dim); }
 
@@ -2368,7 +2336,7 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
 .plan-breakdown {
   text-align: right;
   white-space: pre-line;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
   line-height: 1.6;
   color: var(--color-text-muted);
@@ -2386,7 +2354,7 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
 .plan-count-n {
   min-width: 2ch;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
 .plan-hint, .plan-reason { color: var(--color-text-dim); font-size: var(--text-sm); }
@@ -2410,9 +2378,8 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
 .plan-seg button {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
   color: var(--color-text-muted);
 }
 .plan-seg button.is-active { background: var(--color-primary); color: #fff; }
@@ -2426,35 +2393,31 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
   padding: 2px var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 .plan-batch-n { flex: none; text-align: right; display: flex; flex-direction: column; }
 .plan-batch-n b {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-2xl);
   font-variant-numeric: tabular-nums;
   letter-spacing: -.035em;
   line-height: 1;
 }
 .plan-batch-n small, .plan-of {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .14em;
-  text-transform: uppercase;
   color: var(--color-text-dim);
 }
 .plan-of { font-size: var(--text-base); letter-spacing: 0; text-transform: none; color: var(--color-text-muted); }
-.plan-scale { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text-muted); }
+.plan-scale { font-family: var(--font-sans); font-size: var(--text-sm); color: var(--color-text-muted); }
 
 .plan-macros { display: flex; flex-direction: column; gap: var(--space-2); }
 .plan-macro-line {
   display: flex;
   justify-content: space-between;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
 }
 .plan-macro-line span + span { color: var(--color-text-muted); }
@@ -2480,21 +2443,19 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
 }
 .plan-item input[type="checkbox"] { flex: none; width: 22px; height: 22px; accent-color: var(--color-success); }
 .plan-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.plan-item-text small { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-dim); }
+.plan-item-text small { font-family: var(--font-sans); font-size: var(--text-xs); color: var(--color-text-dim); }
 .plan-item-tag {
   flex: none;
   min-height: 44px;
   padding: 0 var(--space-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--color-text-muted);
 }
 .plan-item.is-unmapped .plan-item-tag { color: var(--color-warning); }
 .plan-item.is-had b { color: var(--color-text-dim); text-decoration: line-through; font-weight: 400; }
 .plan-item.is-had .plan-item-tag { color: var(--color-text-dim); }
-.plan-skipped { margin: 0; font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.6; color: var(--color-warning); }
+.plan-skipped { margin: 0; font-family: var(--font-sans); font-size: var(--text-xs); line-height: 1.6; color: var(--color-warning); }
 
 .plan-pips { display: flex; gap: 4px; }
 .plan-pips i { flex: 1; height: 6px; border-radius: var(--radius-pill); background: var(--color-border); }

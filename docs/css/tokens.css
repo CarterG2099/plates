@@ -1,4 +1,9 @@
-/* tokens.css — Plates. Dark instrument panel; read one-handed in a gym.
+/* tokens.css — Plates. Dark, quiet, read one-handed in a gym.
+ *
+ * Type is the phone's own face (San Francisco, Roboto/Google Sans), with
+ * tabular figures so numbers still hold their columns. It used to be monospace
+ * with tracked capitals everywhere, which read as a developer tool; changed
+ * 2026-11-24 at Carter's request, keeping the colours and layout.
  *
  * Deliberately not shared with recipes/budget.
  *
@@ -71,6 +76,15 @@
   --radius-md:   18px;
   --radius-lg:   22px;
   --radius-pill: 999px;
+  /* Buttons and fields: a rounded rectangle, not a pill. Pills stay for chips
+     and status, where the shape says "a tag" rather than "an action". */
+  --radius-control: 12px;
+
+  /* Soft fills for controls on any surface: a tint of the text colour rather
+     than another grey, so a button reads as lifted on a card and on the page
+     alike without an outline around it. */
+  --color-fill:       rgba(243, 246, 250, .07);
+  --color-fill-hover: rgba(243, 246, 250, .12);
 
   /* Depth. The inset highlight along the top edge is what makes a surface read
      as lifted rather than merely outlined. */

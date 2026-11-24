@@ -4614,7 +4614,7 @@ Alpine.data('statsPage', () => ({
     const on = this.weightHover?.at;
     return plot.points.map((pt) => {
       const cls = pt.at === on ? 'plot-dot is-on' : 'plot-dot';
-      return `<circle cx="${Number(pt.x)}" cy="${Number(pt.y)}" r="1.6" class="${cls}"/>`;
+      return `<circle cx="${Number(pt.x)}" cy="${Number(pt.y)}" r="1" class="${cls}"/>`;
     }).join('');
   },
 
@@ -4934,7 +4934,7 @@ Alpine.data('statsPage', () => ({
     if (!plot || !plot.line) return '';
     return `<path d="${plot.area}" class="plot-area"/><path d="${plot.line}" class="plot-line"/>`
       + plot.points.map((pt) =>
-        `<circle cx="${pt.x}" cy="${pt.y}" r="1.4" class="plot-dot"/>`).join('');
+        `<circle cx="${pt.x}" cy="${pt.y}" r="1" class="plot-dot"/>`).join('');
   },
 
   // ---- nutrition -----------------------------------------------------------

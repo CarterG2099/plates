@@ -171,24 +171,24 @@
         <div class="estimate-banner is-ready" x-show="!$store.ui.estimatingAway && $store.ui.myReadyEstimate" x-cloak role="status">
           <span>Estimate ready · <b x-text="$store.ui.myReadyEstimate && $store.ui.myReadyEstimate.label"></b></span>
           <button class="btn btn-primary" @click="$store.ui.reviewEstimate()">Review</button>
-          <button class="tap" @click="$store.ui.dropReadyEstimate()" aria-label="Discard the estimate">×</button>
+          <button class="tap" @click="$store.ui.dropReadyEstimate()" aria-label="Discard the estimate"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
         </div>
 
         <div class="datenav">
-          <button class="tap" @click="$store.ui.shiftDay(-1)" aria-label="Previous day">‹</button>
+          <button class="tap" @click="$store.ui.shiftDay(-1)" aria-label="Previous day"><svg class="icon icon-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
           <button class="datenav-label" @click="$store.ui.goToday()">
             <b x-text="$store.ui.dayLabel"></b>
             <small x-show="!$store.ui.isToday">
               <span x-text="$store.ui.viewDate"></span> · tap for today
             </small>
           </button>
-          <button class="tap" @click="$store.ui.shiftDay(1)" aria-label="Next day">›</button>
+          <button class="tap" @click="$store.ui.shiftDay(1)" aria-label="Next day"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
           <!-- The day's verdict: green check = complete, struck = incomplete,
                dim = never reviewed. The future cannot be complete yet. -->
           <button class="tap day-mark" x-show="!$store.ui.isFuture"
                   :class="{ 'is-complete': viewMark === true, 'is-incomplete': viewMark === false }"
                   @click="toggleDayMark()"
-                  :aria-label="viewMark === true ? 'Mark day incomplete' : 'Mark day complete'">✓</button>
+                  :aria-label="viewMark === true ? 'Mark day incomplete' : 'Mark day complete'"><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
         </div>
 
         <!-- A future day with entries is a plan, not a record. Say so, so the
@@ -331,7 +331,7 @@
                 <small x-text="amountLabel(entry.quantity, entry.unit)"></small>
               </button>
               <span class="row-num" x-text="round(entry.calories)"></span>
-              <button class="tap" @click="removeEntry(entry.id)" :aria-label="`Remove ${entry.description}`">×</button>
+              <button class="tap" @click="removeEntry(entry.id)" :aria-label="`Remove ${entry.description}`"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
             </div>
 
           </template>
@@ -353,9 +353,9 @@
                   </button>
                   <span class="row-num" x-text="round(entry.calories)"></span>
                   <button class="tap tap-primary" @click="confirmPlanned(entry)"
-                          :aria-label="`Ate ${entry.description}`">✓</button>
+                          :aria-label="`Ate ${entry.description}`"><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
                   <button class="tap" @click="removeEntry(entry.id)"
-                          :aria-label="`Remove ${entry.description}`">×</button>
+                          :aria-label="`Remove ${entry.description}`"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                 </div>
               </template>
             </div>
@@ -463,12 +463,12 @@
               <template x-if="edit.lens !== 'measure' || servingSize">
                 <div style="display: contents;">
                   <div class="qty">
-                    <button class="qty-step" @click="editStep(-1)" aria-label="Decrease">−</button>
+                    <button class="qty-step" @click="editStep(-1)" aria-label="Decrease"><svg class="icon icon-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
                     <label class="qty-amount">
                       <input type="number" inputmode="decimal" step="any" min="0" x-model.number="edit.amount">
                       <small x-text="editUnitLabel"></small>
                     </label>
-                    <button class="qty-step" @click="editStep(1)" aria-label="Increase">+</button>
+                    <button class="qty-step" @click="editStep(1)" aria-label="Increase"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
                   </div>
 
                   <input class="qty-slider" type="range" min="0"
@@ -569,12 +569,12 @@
                 <span x-text="$store.ui.dayLabel.toLowerCase()"></span> onto the days that follow.
               </p>
               <div class="qty">
-                <button class="qty-step" @click="copyCount = Math.max(1, copyCount - 1)" aria-label="Fewer days">−</button>
+                <button class="qty-step" @click="copyCount = Math.max(1, copyCount - 1)" aria-label="Fewer days"><svg class="icon icon-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
                 <label class="qty-amount">
                   <input type="number" inputmode="numeric" min="1" max="14" x-model.number="copyCount">
                   <small>days</small>
                 </label>
-                <button class="qty-step" @click="copyCount = Math.min(14, copyCount + 1)" aria-label="More days">+</button>
+                <button class="qty-step" @click="copyCount = Math.min(14, copyCount + 1)" aria-label="More days"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
               </div>
               <button class="btn btn-primary btn-block" @click="copyForward()">Copy</button>
               <button class="btn btn-ghost btn-block" @click="closePrep()">Cancel</button>
@@ -611,7 +611,7 @@
                       <b x-text="t.name"></b>
                       <small x-text="`${(t.items || []).length} entries`"></small>
                     </button>
-                    <button class="tap" @click="removeTemplate(t)" :aria-label="`Delete ${t.name}`">×</button>
+                    <button class="tap" @click="removeTemplate(t)" :aria-label="`Delete ${t.name}`"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                   </div>
                 </template>
               </div>
@@ -627,7 +627,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2 x-text="nutrientDetail.name"></h2>
-                <button class="tap" @click="nutrientDetail = null" aria-label="Close">×</button>
+                <button class="tap" @click="nutrientDetail = null" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
 
               <div class="rows">
@@ -691,11 +691,11 @@
 
         <div class="search-row">
           <div class="search">
-            <span aria-hidden="true">⌕</span>
+            <svg class="icon icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
             <input type="search" placeholder="Search your foods…" x-model="term"
                    enterkeyhint="search" autocomplete="off">
             <button class="search-clear" x-show="term" x-cloak
-                   @click="term = ''" aria-label="Clear search">×</button>
+                   @click="term = ''" aria-label="Clear search"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
           </div>
           <button class="tap tap-primary" x-show="canScan" @click="openScanner()"
                   aria-label="Scan a barcode">
@@ -753,7 +753,7 @@
                   </button>
                   <span class="pill">meal</span>
                   <button class="tap tap-primary" @click="logCombo(combo)"
-                          :aria-label="`Log ${combo.name}`">+</button>
+                          :aria-label="`Log ${combo.name}`"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
                 </div>
               </div>
             </template>
@@ -778,8 +778,8 @@
                 </button>
                 <!-- Only appears once there's something to take back. -->
                 <button class="tap" x-show="loggedToday(item)" @click="undoLast(item)"
-                        :aria-label="`Remove last ${item.name}`">−</button>
-                <button class="tap tap-primary" @click="quickLog(item)" :aria-label="`Log ${item.name}`">+</button>
+                        :aria-label="`Remove last ${item.name}`"><svg class="icon icon-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                <button class="tap tap-primary" @click="quickLog(item)" :aria-label="`Log ${item.name}`"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
               </div>
             </div>
           </template>
@@ -823,7 +823,7 @@
                     <span class="pill" x-show="recipeMissing(r).length"
                           :title="recipeMissing(r).join(', ')"
                           x-text="`${recipeMissing(r).length} missing`"></span>
-                    <span class="tap">›</span>
+                    <span class="tap"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>
                   </button>
                   <a class="row" x-show="!recipeHasNutrition(r)" :href="recipeEditUrl(r)" target="_blank" rel="noopener" style="opacity:.6">
                     <div class="row-text">
@@ -881,7 +881,7 @@
                   <span class="pill" x-show="r.missing.length"
                         :title="r.missing.join(', ')"
                         x-text="`${r.missing.length} missing`"></span>
-                  <span class="tap">›</span>
+                  <span class="tap"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>
                 </button>
               </template>
             </div>
@@ -915,7 +915,7 @@
                       <small x-text="comboSummary(combo)"></small>
                     </button>
                     <button class="tap tap-primary" @click="logCombo(combo)"
-                            :aria-label="`Log ${combo.name}`">+</button>
+                            :aria-label="`Log ${combo.name}`"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
                   </div>
                 </div>
               </template>
@@ -988,11 +988,11 @@
                       <small x-text="amountLabel(item.quantity, item.unit)"></small>
                     </div>
                     <button class="tap" @click="stepIngredient(i, -1)"
-                            :aria-label="`Less ${item.name}`">−</button>
+                            :aria-label="`Less ${item.name}`"><svg class="icon icon-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
                     <button class="tap" @click="stepIngredient(i, 1)"
-                            :aria-label="`More ${item.name}`">+</button>
+                            :aria-label="`More ${item.name}`"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
                     <button class="tap" @click="removeIngredient(i)"
-                            :aria-label="`Remove ${item.name}`">×</button>
+                            :aria-label="`Remove ${item.name}`"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                   </div>
                 </template>
               </div>
@@ -1013,11 +1013,11 @@
               <!-- Always open. Adding ingredients is what this sheet is for, so
                    hiding the search behind a button was a step for its own sake. -->
               <div class="search">
-                <span aria-hidden="true">⌕</span>
+                <svg class="icon icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
                 <input type="search" placeholder="Add an ingredient…" x-model="mealTerm"
                        autocomplete="off" enterkeyhint="search">
                 <button class="search-clear" x-show="mealTerm" x-cloak
-                   @click="mealTerm = ''" aria-label="Clear search">×</button>
+                   @click="mealTerm = ''" aria-label="Clear search"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
 
               <div>
@@ -1029,7 +1029,7 @@
                             class="brand" x-show="choice.brand" x-text="` (${choice.brand})`"></span></b>
                           <small x-text="amountLabel(choice.default_qty ?? choice.serving_qty, choice.serving_unit)"></small>
                         </div>
-                        <span class="tap">+</span>
+                        <span class="tap"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
                       </button>
                     </template>
                   </div>
@@ -1052,7 +1052,7 @@
                                 · <span x-text="Math.round(r.draft.calories ?? 0)"></span> kcal
                               </small>
                             </div>
-                            <span class="tap">+</span>
+                            <span class="tap"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
                           </button>
                         </template>
                       </div>
@@ -1100,13 +1100,13 @@
                          many of it you actually had, a quarter at a time. -->
                     <div class="estimate-portion" role="group" :aria-label="`Portion of ${item.name}`">
                       <button class="tap" @click="stepEstimateItem(i, -1)"
-                              :aria-label="`Less ${item.name}`">−</button>
+                              :aria-label="`Less ${item.name}`"><svg class="icon icon-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
                       <span x-text="portionLabel(item)"></span>
                       <button class="tap" @click="stepEstimateItem(i, 1)"
-                              :aria-label="`More ${item.name}`">+</button>
+                              :aria-label="`More ${item.name}`"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
                     </div>
                     <button class="tap" @click="removeEstimateItem(i)"
-                            :aria-label="`Remove ${item.name}`">×</button>
+                            :aria-label="`Remove ${item.name}`"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                   </div>
                 </template>
               </div>
@@ -1287,13 +1287,13 @@
               </div>
 
               <div class="qty">
-                <button class="qty-step" @click="step(-1)" aria-label="Decrease">−</button>
+                <button class="qty-step" @click="step(-1)" aria-label="Decrease"><svg class="icon icon-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
                 <label class="qty-amount">
                   <input type="number" inputmode="decimal" step="any" min="0"
                          x-model.number="sheet.amount">
                   <small x-text="sheetUnitLabel"></small>
                 </label>
-                <button class="qty-step" @click="step(1)" aria-label="Increase">+</button>
+                <button class="qty-step" @click="step(1)" aria-label="Increase"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
               </div>
 
               <!-- The slider is the fast way and the box is the exact one; both
@@ -1481,7 +1481,7 @@
         <!-- Folded away. First thing on the tab, and the whole bar reopens it. -->
         <template x-if="session && collapsed">
           <button class="running-bar" @click="collapsed = false">
-            <span class="running-caret" aria-hidden="true">›</span>
+            <span class="running-caret" aria-hidden="true"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>
             <span class="running-name" x-text="session.name || 'Workout'"></span>
             <span class="running-meta">
               <span x-text="elapsed"></span> ·
@@ -1496,7 +1496,7 @@
           <div style="display: contents;">
             <div class="section-head">
               <span>Train</span>
-              <button class="chip" @click="menu = true" aria-label="More options">⋯</button>
+              <button class="chip" @click="menu = true" aria-label="More options"><svg class="icon icon-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></button>
             </div>
 
             <button class="btn btn-primary btn-block" @click="startEmpty()">Start workout</button>
@@ -1582,7 +1582,7 @@
                               <span x-show="c.lastLabel"> · <span x-text="c.lastLabel"></span></span>
                             </div>
                           </div>
-                          <span class="tap">›</span>
+                          <span class="tap"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>
                         </div>
 
                         <!-- What the routine works, as a share of its exercises. -->
@@ -1629,7 +1629,7 @@
                       <b x-text="s.name || 'Workout'"></b>
                       <small x-text="`${sessionDate(s)} · ${sessionSummary(s)}`"></small>
                     </div>
-                    <span class="tap">›</span>
+                    <span class="tap"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>
                   </button>
                 </template>
               </div>
@@ -1648,7 +1648,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2 x-text="past.name || 'Workout'"></h2>
-                <button class="tap" @click="closeSession()" aria-label="Close">×</button>
+                <button class="tap" @click="closeSession()" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
 
               <div class="chips">
@@ -1677,7 +1677,7 @@
                         <small x-text="groupLine(group)"></small>
                       </div>
                     </template>
-                    <span class="tap" x-show="pastIsMine">›</span>
+                    <span class="tap" x-show="pastIsMine"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>
                   </div>
                 </template>
               </div>
@@ -1772,7 +1772,7 @@
                     </button>
                   </div>
                   <button class="chip" @click="openExMenu(group)"
-                          :aria-label="`Options for ${group.name}`">⋯</button>
+                          :aria-label="`Options for ${group.name}`"><svg class="icon icon-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></button>
                 </div>
 
                 <div class="setgrid">
@@ -1853,7 +1853,7 @@
                         </div>
                         <button class="check" @click="toggleDone(set, placeholderFor(group, i))"
                                 :aria-label="currentSet(set).completed_at ? 'Mark set incomplete' : 'Mark set done'"
-                        >✓</button>
+                        ><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
                       </div>
                     </div>
                   </template>
@@ -1907,10 +1907,10 @@
               <div class="card-label" x-show="replacing"
                    x-text="replacing && `Replace ${replacing.name} with…`"></div>
               <div class="search">
-                <span aria-hidden="true">⌕</span>
+                <svg class="icon icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
                 <input type="search" placeholder="Search exercises…" x-model="pickerTerm" autocomplete="off">
                 <button class="search-clear" x-show="pickerTerm" x-cloak
-                   @click="pickerTerm = ''" aria-label="Clear search">×</button>
+                   @click="pickerTerm = ''" aria-label="Clear search"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
 
               <!-- Muscle family, then that family's specific muscles, then the
@@ -1955,7 +1955,7 @@
                       <b x-text="e.name"></b>
                       <small x-text="[e.primary_muscle, e.equipment].filter(Boolean).join(' · ')"></small>
                     </div>
-                    <span class="tap" x-show="replacing">›</span>
+                    <span class="tap" x-show="replacing"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>
                     <span class="pick-box" x-show="!replacing" aria-hidden="true"
                           x-text="isPicked(e) ? '✓' : ''"></span>
                   </button>
@@ -2006,7 +2006,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2 x-text="detail.name"></h2>
-                <button class="tap" @click="closeExercise()" aria-label="Close">×</button>
+                <button class="tap" @click="closeExercise()" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
 
               <div class="detail-top">
@@ -2160,7 +2160,7 @@
                 <div style="display:flex; flex-direction:column; gap:var(--space-4)">
                   <div class="sheet-head">
                     <h2 x-text="builder.name"></h2>
-                    <button class="tap" @click="closeBuilder()" aria-label="Close">×</button>
+                    <button class="tap" @click="closeBuilder()" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                   </div>
 
                   <div class="rows">
@@ -2171,7 +2171,7 @@
                           <b x-text="row.name"></b>
                           <small x-text="lastLine(row)"></small>
                         </div>
-                        <span class="tap">›</span>
+                        <span class="tap"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></span>
                       </button>
                     </template>
                   </div>
@@ -2230,7 +2230,7 @@
                         <span class="thumb" x-html="muscleMap(row.item.exercise_id, row.name)"></span>
                         <div class="row-text"><b x-text="row.name"></b></div>
                         <button class="tap" @click="dropRoutineItem(row.item)"
-                                :aria-label="`Remove ${row.name}`">×</button>
+                                :aria-label="`Remove ${row.name}`"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                       </div>
                     </template>
                   </div>
@@ -2327,15 +2327,15 @@
               <div class="plan-steppers">
                 <div class="plan-count">
                   <span class="plan-count-name">Dinners</span>
-                  <button class="chip" @click="stepDinners(-1)" aria-label="Fewer dinners">−</button>
+                  <button class="chip" @click="stepDinners(-1)" aria-label="Fewer dinners"><svg class="icon icon-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
                   <span class="plan-count-n" x-text="dinners"></span>
-                  <button class="chip" @click="stepDinners(1)" aria-label="More dinners">+</button>
+                  <button class="chip" @click="stepDinners(1)" aria-label="More dinners"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
                 </div>
                 <div class="plan-count">
                   <span class="plan-count-name">Lunches too</span>
-                  <button class="chip" @click="stepLunches(-1)" aria-label="Fewer lunches">−</button>
+                  <button class="chip" @click="stepLunches(-1)" aria-label="Fewer lunches"><svg class="icon icon-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
                   <span class="plan-count-n" x-text="lunches"></span>
-                  <button class="chip" @click="stepLunches(1)" aria-label="More lunches">+</button>
+                  <button class="chip" @click="stepLunches(1)" aria-label="More lunches"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
                 </div>
                 <small class="plan-hint" x-text="people > 1 ? 'For both of you · breakfast-for-dinner counts' : 'Breakfast-for-dinner counts'"></small>
               </div>
@@ -2401,7 +2401,7 @@
         <template x-if="mode === 'list'">
           <div class="plan-stack">
             <div class="plan-bar">
-              <button class="tap" @click="showList = false" aria-label="Back to the week">‹</button>
+              <button class="tap" @click="showList = false" aria-label="Back to the week"><svg class="icon icon-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
               <span class="card-label">Shopping list</span>
             </div>
             <section class="card">
@@ -2484,7 +2484,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2 x-text="`Instead of ${batches[swapIndex] ? batches[swapIndex].title : 'this'}`"></h2>
-                <button class="tap" @click="closeSwap()" aria-label="Close">×</button>
+                <button class="tap" @click="closeSwap()" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
               <div class="search">
                 <input type="search" x-model="swapTerm" placeholder="Search your recipes" aria-label="Search your recipes">
@@ -2508,7 +2508,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2 x-text="usual.key"></h2>
-                <button class="tap" @click="usual = null" aria-label="Close">×</button>
+                <button class="tap" @click="usual = null" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
               <div class="field">
                 <label for="usual-link">Walmart product link</label>
@@ -3141,7 +3141,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2>Targets</h2>
-                <button class="tap" @click="editing = false" aria-label="Close">×</button>
+                <button class="tap" @click="editing = false" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
 
               <div class="field">
@@ -3519,7 +3519,7 @@
                     <video :src="chatPhoto.url" playsinline muted loop preload="metadata" aria-label="Video to send, blurred. Hold to see it."
                            x-effect="chatRevealed === 'pending' ? $el.play?.() : $el.pause?.()"></video>
                   </template>
-                  <button type="button" class="chat-pending-x" @click="clearChatPhoto()" aria-label="Remove photo">×</button>
+                  <button type="button" class="chat-pending-x" @click="clearChatPhoto()" aria-label="Remove photo"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                 </div>
               </template>
               <form class="chat-compose" @submit.prevent="sendChat()">
@@ -3600,7 +3600,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2>Save photo</h2>
-                <button class="tap" @click="addingPhoto = false" aria-label="Close">×</button>
+                <button class="tap" @click="addingPhoto = false" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
               <div class="field">
                 <label for="pp-date">Taken on</label>
@@ -3638,7 +3638,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2 x-text="photoDate(viewingPhoto.taken_on, { long: true })"></h2>
-                <button class="tap" @click="viewingPhoto = null" aria-label="Close">×</button>
+                <button class="tap" @click="viewingPhoto = null" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
               <img class="photo-full" :src="photoUrl(viewingPhoto) || null" alt="Progress photo">
               <p class="stat-sub photo-caption">
@@ -3691,7 +3691,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2>Compare</h2>
-                <button class="tap" @click="closeCompare()" aria-label="Close">×</button>
+                <button class="tap" @click="closeCompare()" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
               <div class="compare-panes">
                 <template x-for="p in comparing" :key="p.id">
@@ -3715,7 +3715,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2>Log weight</h2>
-                <button class="tap" @click="weighing = false" aria-label="Close">×</button>
+                <button class="tap" @click="weighing = false" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
               <div class="field">
                 <label for="w-lb">Pounds</label>
@@ -3741,7 +3741,7 @@
               <div class="grabber"></div>
               <div class="sheet-head">
                 <h2 x-text="weightDate(editingWeight.at, { long: true })"></h2>
-                <button class="tap" @click="editingWeight = null" aria-label="Close">×</button>
+                <button class="tap" @click="editingWeight = null" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
               </div>
               <div class="field">
                 <label for="we-lb">Pounds</label>
@@ -3779,14 +3779,26 @@
             <circle cx="12" cy="13" r="3.4"/>
           </svg>
         </button>
-        <button class="fab" @click="$store.ui.openLog()" aria-label="Add food">+</button>
+        <button class="fab" @click="$store.ui.openLog()" aria-label="Add food"><svg class="icon icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
 
       <nav class="tabbar">
-        <button :class="$store.ui.view === 'today' && 'is-active'" @click="$store.ui.go('today')">Today</button>
-        <button :class="$store.ui.view === 'plan' && 'is-active'" @click="$store.ui.go('plan')">Plan</button>
-        <button :class="$store.ui.view === 'train' && 'is-active'" @click="$store.ui.go('train')">Train</button>
-        <button :class="$store.ui.view === 'stats' && 'is-active'" @click="$store.ui.go('stats')">Stats</button>
+        <button :class="$store.ui.view === 'today' && 'is-active'" @click="$store.ui.go('today')">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></svg>
+          <span>Today</span>
+        </button>
+        <button :class="$store.ui.view === 'plan' && 'is-active'" @click="$store.ui.go('plan')">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14.5" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>
+          <span>Plan</span>
+        </button>
+        <button :class="$store.ui.view === 'train' && 'is-active'" @click="$store.ui.go('train')">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 8v8M17.5 8v8M3.5 10v4M20.5 10v4M6.5 12h11"/></svg>
+          <span>Train</span>
+        </button>
+        <button :class="$store.ui.view === 'stats' && 'is-active'" @click="$store.ui.go('stats')">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V12M12 20V5M19 20v-5"/></svg>
+          <span>Stats</span>
+        </button>
       </nav>
 
       <div class="toast" x-show="$store.ui.toast" x-transition x-cloak x-text="$store.ui.toast"></div>
@@ -3797,7 +3809,7 @@
             <div class="grabber"></div>
             <div class="sheet-head">
               <h2>Notifications</h2>
-              <button class="tap" @click="$store.ui.settingsOpen = false" aria-label="Close">×</button>
+              <button class="tap" @click="$store.ui.settingsOpen = false" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
             </div>
 
             <div class="card-label">Notifications</div>
@@ -3858,7 +3870,7 @@
             <div class="grabber"></div>
             <div class="sheet-head">
               <h2>Profile</h2>
-              <button class="tap" @click="$store.ui.profileOpen = false" aria-label="Close">×</button>
+              <button class="tap" @click="$store.ui.profileOpen = false" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
             </div>
 
             <div class="profile-who">
@@ -3899,7 +3911,7 @@
               <h2 x-text="$store.ui.reminderDraft.isNew
                 ? ($store.ui.reminderDraft.kind === 'meds' ? 'New med reminder' : 'New food reminder')
                 : $store.ui.reminderTitle($store.ui.reminderDraft)"></h2>
-              <button class="tap" @click="$store.ui.reminderDraft = null" aria-label="Close">×</button>
+              <button class="tap" @click="$store.ui.reminderDraft = null" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
             </div>
 
             <label class="field" x-show="['food', 'meds'].includes($store.ui.reminderDraft.kind)">

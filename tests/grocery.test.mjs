@@ -481,7 +481,7 @@ const read = (path) => readFile(fileURLToPath(new URL(path, import.meta.url)), '
 const html = await read('../docs/index.html');
 
 test('Plan is a tab, mounted only while open, and swipeable', async () => {
-  assert.match(html, /<button[^>]*\$store\.ui\.go\('plan'\)">Plan<\/button>/);
+  assert.match(html, /<button[^>]*\$store\.ui\.go\('plan'\)">\s*<svg class="icon"[\s\S]*?<\/svg>\s*<span>Plan<\/span>\s*<\/button>/);
   assert.match(html, /<template x-if="\$store\.ui\.view === 'plan'">\s*<main class="app-main" x-data="planPage">/);
   assert.match(await read('../docs/js/app.js'), /const TABS = \['today', 'plan', 'train', 'stats'\]/);
 });
