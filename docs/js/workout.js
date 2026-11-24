@@ -1222,6 +1222,72 @@ export function usesBarbell(exercise, name = '') {
   return /barbell|bench press|squat|deadlift|overhead press|row|curl|hip thrust/.test(haystack);
 }
 
+export const SMITH_BAR_LB = 20;
+
+/**
+ * Machines that take plates on horns. Nothing in a name or the equipment field
+ * says whether a machine is plate-loaded or a pin stack (Leg Curl, Chest Fly),
+ * and plates on a stack would be nonsense, so these are the ones known to
+ * take plates; anyone can switch the rest on for themselves.
+ */
+const PLATE_MACHINE = /leg press|hack squat|iso-lateral|machine plates|plate[- ]loaded|t-bar|belt squat|pendulum squat|hip thrust \(machine\)/;
+
+/**
+ * Whether an exercise takes plates out of the box, and what the empty bar,
+ * sled or carriage weighs. Read from the name, not the equipment field, which
+ * the Hevy import filled in wrong as often as right ("Shoulder Press (Machine
+ * Plates)" arrived as bands). A machine starts at 0: sleds differ by gym.
+ */
+export function plateDefault(exercise, name = '') {
+  const haystack = `${exercise?.name ?? ''} ${name}`.toLowerCase();
+  if (haystack.includes('smith')) return { loadsPlates: true, startLb: SMITH_BAR_LB, what: 'Smith bar' };
+  if (PLATE_MACHINE.test(haystack)) return { loadsPlates: true, startLb: 0, what: 'machine' };
+  if (usesBarbell(exercise, name)) return { loadsPlates: true, startLb: DEFAULT_BAR_LB, what: 'bar' };
+  return { loadsPlates: false, startLb: 0, what: null };
+}
+
+/**
+ * Your plate setup for an exercise: the default, unless you changed either
+ * half. Kept on your exercise_notes row, so it is yours alone and the other
+ * person's Smith machine can weigh something else.
+ */
+export function plateSetup(notes, ownerEmail, exercise, name = '') {
+  const fallback = plateDefault(exercise, name);
+  const mine = exercise?.id ? ownNote(notes, ownerEmail, exercise.id) : null;
+  return {
+    loadsPlates: mine?.loads_plates ?? fallback.loadsPlates,
+    startLb: Number(mine?.start_weight_lb ?? fallback.startLb),
+    custom: mine?.loads_plates != null || mine?.start_weight_lb != null,
+    fallback,
+  };
+}
+
+/**
+ * A typed starting weight: blank goes back to the default (null), anything
+ * else must be 0 to 500 lb, the range the column allows. Undefined means no.
+ */
+export function cleanStartWeight(value) {
+  const text = String(value ?? '').trim();
+  if (text === '') return null;
+  const lb = Number(text);
+  return Number.isFinite(lb) && lb >= 0 && lb <= 500 ? lb : undefined;
+}
+
+/**
+ * Change your plate setup for an exercise. `changes` is loads_plates and/or
+ * start_weight_lb; null in either puts that half back to the default. The note
+ * on the same row is kept.
+ */
+export async function setPlateSetup(exercise, changes, ownerEmail, existingNotes = []) {
+  const mine = ownNote(existingNotes, ownerEmail, exercise.id);
+  const saved = await local.save('exercise_notes', {
+    ...(mine ?? { exercise_id: exercise.id, notes: null }),
+    ...changes,
+  }, ownerEmail);
+  sync.nudge();
+  return saved;
+}
+
 /**
  * Whether this exercise is measured in distance and time rather than load.
  *

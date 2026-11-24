@@ -816,6 +816,9 @@ button.nf-tap:active { background: var(--color-hover); }
    screen. The input is told to fill its field rather than size to itself. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 
+/* The exercise sheet's switch, starting weight and reset, as one group. */
+.plate-setup { display: flex; flex-direction: column; gap: var(--space-2); }
+
 /* Suggestion chips under a field's input. The field's 4px gap is right for a
    label hugging its box, but a row of tappable chips at 4px reads as part of
    the input — give them the step down that separates control from suggestion. */

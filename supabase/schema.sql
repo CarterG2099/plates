@@ -1055,3 +1055,10 @@ revoke execute on function plates.notify_message() from public, anon, authentica
 drop trigger if exists messages_notify on plates.messages;
 create trigger messages_notify after insert on plates.messages
   for each row execute function plates.notify_message();
+
+-- Plate maths per person per exercise, on the row that already holds your
+-- note. Null in either is the default from workout.plateDefault (barbell 45,
+-- Smith 20, plate machine 0); a value is your own.
+alter table plates.exercise_notes
+  add column if not exists loads_plates boolean,
+  add column if not exists start_weight_lb numeric check (start_weight_lb >= 0 and start_weight_lb <= 500);

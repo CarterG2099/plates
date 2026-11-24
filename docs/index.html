@@ -2044,6 +2044,27 @@
                           @change="saveExerciseNote($event.target.value)"></textarea>
               </div>
 
+              <!-- Plates: the bar, sled or Smith bar's own weight, so each set's
+                   chips show only what goes on. Yours alone, like the note. -->
+              <div class="plate-setup" x-show="detail.exercise.id && !detailIsCardio">
+                <label class="setting">
+                  <span class="setting-text">
+                    <b>Loads plates</b>
+                    <small x-text="detailPlates.usual"></small>
+                  </span>
+                  <input type="checkbox" role="switch" :checked="detailPlates.loadsPlates"
+                         @change="setDetailPlates({ loads_plates: $el.checked })">
+                </label>
+                <div class="field" x-show="detailPlates.loadsPlates">
+                  <label for="ex-start">Starting weight, lb</label>
+                  <input id="ex-start" type="number" inputmode="decimal" step="any" min="0" max="500"
+                         :value="detailPlates.startLb"
+                         @change="setDetailStart($event.target.value)">
+                </div>
+                <button class="btn btn-ghost btn-block" x-show="detailPlates.custom"
+                        @click="resetDetailPlates()">Reset to default</button>
+              </div>
+
               <div class="chips">
                 <!-- Furthest for a run, heaviest for a lift — detailBestLine
                      picks, so this does not have to know which. -->

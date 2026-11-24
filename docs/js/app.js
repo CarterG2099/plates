@@ -3666,7 +3666,9 @@ Alpine.data('trainPage', () => ({
   isRecord(set, group) { return workout.isRecord(set, this.bestBefore(group)); },
 
   /**
-   * What to load per side. Null for anything that isn't a barbell.
+   * What to load per side, after the bar, sled or Smith bar's own weight.
+   * Null for anything that doesn't take plates — see workout.plateDefault, and
+   * the exercise sheet where each person can change both.
    *
    * Works off the effective weight — typed value or the row's placeholder — so
    * the plates show BEFORE the set is checked, which is the only time anyone is
@@ -3674,10 +3676,12 @@ Alpine.data('trainPage', () => ({
    * answering the question after it stopped being one.
    */
   loadout(group, set, i) {
-    if (!workout.usesBarbell(this.exerciseById(group.exerciseId), group.name)) return null;
+    const setup = workout.plateSetup(this.data.exerciseNotes, this.email,
+      this.exerciseById(group.exerciseId), group.name);
+    if (!setup.loadsPlates) return null;
     const eff = workout.effectiveWeight(this.currentSet(set), this.placeholderFor(group, i));
     if (!eff) return null;
-    const load = workout.plateMath(eff.lb);
+    const load = workout.plateMath(eff.lb, setup.startLb);
     return load ? { ...load, ghost: eff.ghost } : null;
   },
 
@@ -3853,6 +3857,35 @@ Alpine.data('trainPage', () => ({
     );
     await Alpine.store('data').refreshTraining();
     Alpine.store('ui').flash(saved.notes ? 'Noted' : 'Note cleared');
+  },
+
+  /** Your plate setup for the open exercise, and the line under its switch. */
+  get detailPlates() {
+    const setup = workout.plateSetup(this.data.exerciseNotes, this.email,
+      this.detail?.exercise, this.detail?.name ?? '');
+    const { what, loadsPlates, startLb } = setup.fallback;
+    const usual = !loadsPlates ? 'Off by default'
+      : what === 'machine' ? 'Default: the plates only'
+      : `Default: ${startLb} lb ${what}`;
+    return { ...setup, usual };
+  },
+
+  async setDetailPlates(changes) {
+    await workout.setPlateSetup(this.detail.exercise, changes, this.email, this.data.exerciseNotes);
+    await Alpine.store('data').refreshTraining();
+  },
+
+  async setDetailStart(value) {
+    const lb = workout.cleanStartWeight(value);
+    if (lb === undefined) {
+      Alpine.store('ui').flash('Starting weight is 0 to 500 lb');
+      return;
+    }
+    await this.setDetailPlates({ start_weight_lb: lb });
+  },
+
+  resetDetailPlates() {
+    return this.setDetailPlates({ loads_plates: null, start_weight_lb: null });
   },
 
   /** The open sheet's note, for its textarea. */
