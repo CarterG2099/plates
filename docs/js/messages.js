@@ -244,14 +244,21 @@ export async function markRead(rows) {
   return local.getMeta(READ_KEY, null);
 }
 
-export async function sendText({ text, ownerEmail, recipientEmail }) {
+/**
+ * `lock`, when the conversation is end-to-end encrypted, is e2ee.seal bound to
+ * the pair key: given { text, file } it returns the ciphertext `body`, the
+ * row's `enc`, and the locked file. Without it the message goes as before.
+ */
+export async function sendText({ text, ownerEmail, recipientEmail, lock = null }) {
   const body = String(text ?? '').trim();
   if (!body) throw new Error('Nothing to send.');
   if (!recipientEmail) throw new Error('No one to send it to.');
 
+  const sealed = lock ? await lock({ text: body, file: null }) : null;
   const row = await local.save('messages', {
     recipient_email: recipientEmail,
-    body,
+    body: sealed ? sealed.body : body,
+    ...(sealed ? { enc: sealed.enc } : {}),
     photo_path: null,
     sent_at: new Date().toISOString(),
   }, ownerEmail);
@@ -268,43 +275,51 @@ export function isVideo(path) {
 export const VIDEO_MAX_BYTES = 25 * 1024 * 1024;
 
 /** Upload + row, split from sendPhoto so the ordering is testable without a canvas. */
-export async function savePhotoMessage({ blob, text, ownerEmail, recipientEmail, ext = 'jpg', contentType = 'image/jpeg' }) {
+export async function savePhotoMessage({ blob, text, ownerEmail, recipientEmail, ext = 'jpg', contentType = 'image/jpeg', lock = null }) {
   if (!recipientEmail) throw new Error('No one to send it to.');
-  const photoPath = `${crypto.randomUUID()}.${ext}`;
+  const caption = String(text ?? '').trim() || null;
+
+  // Sealed, the object is ciphertext named .bin: the bucket learns neither
+  // what kind of file it is nor anything in it. Its real type is inside.
+  const sealed = lock ? await lock({ text: caption, file: blob }) : null;
+  const photoPath = `${crypto.randomUUID()}.${sealed ? 'bin' : ext}`;
+  const object = sealed ? sealed.file : blob;
 
   const { error } = await supabase.storage.from(BUCKET)
-    .upload(photoPath, blob, { contentType });
+    .upload(photoPath, object, { contentType: sealed ? 'application/octet-stream' : contentType });
   if (error) throw new Error(error.message ?? String(error));
 
   const row = await local.save('messages', {
     recipient_email: recipientEmail,
-    body: String(text ?? '').trim() || null,
+    body: sealed ? sealed.body : caption,
+    ...(sealed ? { enc: sealed.enc } : {}),
     photo_path: photoPath,
     sent_at: new Date().toISOString(),
   }, ownerEmail);
-  await local.putBlob(photoPath, blob);
+  // The cached copy is the locked one too; it is opened only to be shown.
+  await local.putBlob(photoPath, object);
 
   sync.nudge();
   return row;
 }
 
-export async function sendPhoto({ file, text, ownerEmail, recipientEmail }) {
+export async function sendPhoto({ file, text, ownerEmail, recipientEmail, lock = null }) {
   if (!file) throw new Error('No photo selected.');
   if (!navigator.onLine) throw new Error('Sending a photo needs a connection.');
 
   const blob = await downscale(file);
-  return savePhotoMessage({ blob, text, ownerEmail, recipientEmail });
+  return savePhotoMessage({ blob, text, ownerEmail, recipientEmail, lock });
 }
 
 /** A clip from the in-page camera. Sent as recorded: no re-encoding in the browser. */
-export async function sendVideo({ blob, text, ownerEmail, recipientEmail }) {
+export async function sendVideo({ blob, text, ownerEmail, recipientEmail, lock = null }) {
   if (!blob) throw new Error('No clip recorded.');
   if (!navigator.onLine) throw new Error('Sending a video needs a connection.');
   if (blob.size > VIDEO_MAX_BYTES) throw new Error('That clip is too big to send. Try a shorter one.');
 
   const contentType = String(blob.type || 'video/webm').split(';')[0];
   const ext = /mp4/i.test(contentType) ? 'mp4' : 'webm';
-  return savePhotoMessage({ blob, text, ownerEmail, recipientEmail, ext, contentType });
+  return savePhotoMessage({ blob, text, ownerEmail, recipientEmail, ext, contentType, lock });
 }
 
 /** Cached blob if we have it, the bucket if not. */
@@ -329,7 +344,7 @@ export async function unsend(message) {
   if (!existing) return null;
 
   const row = await local.save('messages', {
-    ...existing, body: null, deleted_at: new Date().toISOString(),
+    ...existing, body: null, ...(existing.enc ? { enc: null } : {}), deleted_at: new Date().toISOString(),
   }, existing.owner_email);
   if (row.photo_path) await local.deleteBlob(row.photo_path);
   sync.nudge();

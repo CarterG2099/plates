@@ -1109,3 +1109,50 @@ create policy message_reactions_update on plates.message_reactions
   with check (plates.is_owner(owner_email));
 
 alter publication supabase_realtime add table plates.message_reactions;
+
+-- ---- end-to-end encryption for messages ----------------------------------------
+--
+-- See docs/js/e2ee.js. A sealed message keeps ciphertext in `body` (so the
+-- body-or-photo check still holds) and the locked message key plus which two
+-- public keys were used in `enc`. Rows with no `enc` are the older, plain ones.
+alter table plates.messages add column if not exists enc jsonb;
+
+-- Each person's current public key. Every member can read them: a public key
+-- is meant to be public, and the other person needs it to lock for you.
+create table if not exists plates.chat_keys (
+  owner_email text primary key,
+  key_id      text not null,
+  public_key  text not null,
+  updated_at  timestamptz not null default now()
+);
+alter table plates.chat_keys enable row level security;
+create policy chat_keys_read on plates.chat_keys
+  for select using (plates.is_member());
+create policy chat_keys_write on plates.chat_keys
+  for insert with check (plates.is_member() and plates.is_owner(owner_email));
+create policy chat_keys_update on plates.chat_keys
+  for update using (plates.is_owner(owner_email))
+  with check (plates.is_owner(owner_email));
+
+-- Each person's private key, locked with the chat key only their password
+-- manager holds. Useless to the server, and readable by its owner alone anyway.
+create table if not exists plates.chat_key_vault (
+  owner_email     text primary key,
+  key_id          text not null,
+  wrapped_private text not null,
+  wrap_iv         text not null,
+  updated_at      timestamptz not null default now()
+);
+alter table plates.chat_key_vault enable row level security;
+create policy chat_key_vault_read on plates.chat_key_vault
+  for select using (plates.is_member() and plates.is_owner(owner_email));
+create policy chat_key_vault_write on plates.chat_key_vault
+  for insert with check (plates.is_member() and plates.is_owner(owner_email));
+create policy chat_key_vault_update on plates.chat_key_vault
+  for update using (plates.is_owner(owner_email))
+  with check (plates.is_owner(owner_email));
+
+-- Sealed photos and clips are uploaded as opaque .bin objects.
+update storage.buckets
+   set allowed_mime_types = array['image/jpeg','image/webp','image/png','video/mp4','video/webm','application/octet-stream']
+ where id = 'plates-messages';

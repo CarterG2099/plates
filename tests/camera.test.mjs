@@ -16,6 +16,8 @@ const { Alpine, components } = await loadApp();
 const camera = await import('../docs/js/camera.js');
 const progress = await import('../docs/js/progress.js');
 const messages = await import('../docs/js/messages.js');
+const { fakeKeyServer, readyChat } = await import('./helpers/e2ee.mjs');
+const keyServer = fakeKeyServer((await import('../docs/js/supabase.js')).supabase);
 const local = await import('../docs/js/local.js');
 const { supabase } = await import('../docs/js/supabase.js');
 
@@ -453,9 +455,10 @@ test('Use photo puts the shot in the message box, closes the camera, and saves n
   page.closeChat();
 });
 
-test('Send uploads the camera shot to the messages bucket, with its caption', async () => {
+test('Send uploads the camera shot locked, with its caption locked too', async () => {
   fakeCamera();
   const page = chatPage();
+  await readyChat(page, keyServer, AANA);
   await page.openCamera('chat');
   await page.shutter();
   page.useChatShot();
@@ -464,10 +467,23 @@ test('Send uploads the camera shot to the messages bucket, with its caption', as
   await page.sendChat();
   const upload = supabase.storage._uploads.at(-1);
   assert.equal(upload.bucket, messages.BUCKET);
+  assert.match(upload.path, /\.bin$/, 'the bucket learns nothing about the file');
+  assert.equal(upload.blob.type, 'application/octet-stream');
   const sent = (await local.all('messages')).find((m) => m.photo_path === upload.path);
-  assert.equal(sent.body, 'gym selfie');
+  assert.ok(sent.enc);
+  assert.notEqual(sent.body, 'gym selfie', 'the caption is ciphertext');
   assert.equal(sent.recipient_email, AANA);
   assert.equal(page.chatPhoto, null);
+
+  await page.chatUnlockPending();
+  assert.equal(page.chatBody(sent), 'gym selfie');
+  supabase.storage.from = ((orig) => function (bucket) {
+    const b = orig.call(this, bucket);
+    return { ...b, download: async () => ({ data: upload.blob, error: null }) };
+  })(supabase.storage.from);
+  await local.deleteBlob(upload.path);
+  const shown = await page.chatFile(sent);
+  assert.equal(shown.type, 'image/jpeg', 'opened back into the photo it was');
   page.closeChat();
 });
 
@@ -701,14 +717,17 @@ test('Send uploads the clip to the messages bucket as video, never as a progress
   page.useChatShot();
   page.chatText = 'for later';
   const photos = (await local.all('progress_photos')).length;
+  await readyChat(page, keyServer, AANA);
 
   await page.sendChat();
   const upload = supabase.storage._uploads.at(-1);
   assert.equal(upload.bucket, messages.BUCKET);
-  assert.match(upload.path, /\.webm$/);
-  assert.equal(messages.isVideo(upload.path), true);
+  assert.match(upload.path, /\.bin$/);
+  assert.equal(messages.isVideo(upload.path), false, 'from outside, a clip looks like any other file');
   const sent = (await local.all('messages')).find((m) => m.photo_path === upload.path);
-  assert.equal(sent.body, 'for later');
+  await page.chatUnlockPending();
+  assert.equal(page.chatBody(sent), 'for later');
+  assert.equal(page.chatIsVideo(sent), true, 'the phone knows it is a clip once unlocked');
   assert.equal((await local.all('progress_photos')).length, photos);
   page.closeChat();
 });

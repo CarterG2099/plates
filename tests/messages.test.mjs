@@ -14,6 +14,8 @@ const { Alpine, components } = await loadApp();
 const messages = await import('../docs/js/messages.js');
 const local = await import('../docs/js/local.js');
 const { supabase } = await import('../docs/js/supabase.js');
+const { fakeKeyServer, readyChat } = await import('./helpers/e2ee.mjs');
+const keyServer = fakeKeyServer(supabase);
 
 const ME = 'cgividen20@gmail.com';
 const AANA = 'aanabraithwaite@gmail.com';
@@ -284,18 +286,39 @@ test('locking closes the conversation and stops listening', () => {
   assert.equal(channel.removed, true);
 });
 
-test('Send writes to the other person and clears the box', async () => {
+test('Send writes to the other person, locked, even offline, and clears the box', async () => {
   fakeChannel();
   const page = statsPage();
   page.photosLocked = false;
   page.openChat();
+  await readyChat(page, keyServer, AANA);
   page.chatText = 'see you at 6';
 
+  const before = new Set((await local.all('messages')).map((m) => m.id));
   await offline(() => page.sendChat());
   assert.equal(page.chatText, '');
-  const sent = (await local.all('messages')).find((m) => m.body === 'see you at 6');
+  const sent = (await local.all('messages')).find((m) => !before.has(m.id));
   assert.equal(sent.owner_email, ME);
   assert.equal(sent.recipient_email, AANA);
+  assert.ok(sent.enc, 'sealed');
+  assert.doesNotMatch(sent.body, /see you/, 'nothing readable is stored or queued');
+  assert.doesNotMatch(JSON.stringify(await local.outbox()), /see you at 6/);
+  await page.chatUnlockPending();
+  assert.equal(page.chatBody(sent), 'see you at 6');
+  page.closeChat();
+});
+
+test('until encryption is ready, nothing can be sent', async () => {
+  fakeChannel();
+  const page = statsPage();
+  page.photosLocked = false;
+  page.openChat();
+  page.chatCrypto = 'waiting';
+  page.chatText = 'should not go';
+  const before = (await local.all('messages')).length;
+  await page.sendChat();
+  assert.equal((await local.all('messages')).length, before);
+  assert.match(Alpine.store('ui').toast, /isn’t set up/);
   page.closeChat();
 });
 
