@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Nothing on this page talks to a server: connect-src 'none'. The passkey
+     itself is handled by the phone's password manager. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline';
+  connect-src 'none';
+  base-uri 'none';
+  form-action 'none';
+">
+<title>Plates — encryption check</title>
+<meta name="theme-color" content="#0c0a0f">
+<style>
+  :root { --ground:#0c0a0f; --surface:#1c1922; --line:#2c2833; --text:#f3eef4; --muted:#9c94a5;
+          --accent:#e0517e; --green:#4FA96B; --red:#ff6b81;
+          --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+          --sans: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--ground); color:var(--text); font-family:var(--sans); font-size:16px; line-height:1.45;
+         padding: calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 24px); }
+  h1 { font-size:22px; margin:0 0 6px; }
+  p { margin:0 0 14px; color:var(--muted); }
+  button { display:block; width:100%; margin:10px 0; padding:15px; border:0; border-radius:14px;
+           background:var(--accent); color:#fff; font:inherit; font-weight:700; }
+  button.secondary { background:var(--surface); color:var(--text); }
+  button:disabled { opacity:.4; }
+  #verdict { margin:18px 0 10px; padding:16px; border-radius:14px; background:var(--surface); font-weight:700; }
+  #verdict.ok { outline:2px solid var(--green); }
+  #verdict.bad { outline:2px solid var(--red); }
+  #log { margin:0; padding:12px; border-radius:12px; background:#000; color:var(--muted);
+         font-family:var(--mono); font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+</style>
+</head>
+<body>
+<h1>Encryption check</h1>
+<p>Tests whether this phone can lock and unlock chat messages with a passkey
+   (your fingerprint or Face ID), with nothing to type. Nothing is sent anywhere.</p>
+
+<button id="setup">1. Set up</button>
+<button id="again" class="secondary">2. Check again</button>
+
+<div id="verdict">Tap “Set up”.</div>
+<pre id="log"></pre>
+
+<script>
+/*
+ * The question this answers: does this phone's passkey hand back a stable
+ * secret (the WebAuthn PRF extension)? If it does, the chat can lock each
+ * person's private key with that secret and keep only the locked copy on the
+ * server, and any phone that syncs the passkey (Google Password Manager,
+ * iCloud Keychain) can unlock it with a fingerprint.
+ *
+ * "Set up" makes a passkey named "Plates encryption test", gets its secret,
+ * and locks a note with it. "Check again" asks for the passkey from scratch —
+ * no remembered credential, the way a new phone would — and unlocks the note.
+ * The secret's fingerprint is shown so the same passkey on another device
+ * (same Google account or Apple ID) can be compared: it should match.
+ */
+const SALT = new TextEncoder().encode('plates-e2ee-check-v1');
+const NOTE = 'Only your passkey can read this.';
+const STORE = 'plates-e2ee-check';
+const log = document.getElementById('log');
+const verdict = document.getElementById('verdict');
+
+const say = (line) => { log.textContent += `${line}\n`; };
+const judge = (ok, text) => { verdict.textContent = text; verdict.className = ok ? 'ok' : 'bad'; };
+const rand = (n) => crypto.getRandomValues(new Uint8Array(n));
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+say(`Browser: ${navigator.userAgent}`);
+say(`Passkeys: ${window.PublicKeyCredential ? 'yes' : 'NO'}`);
+
+/** A 256-bit AES key from the passkey's secret. */
+async function keyFrom(secret) {
+  const base = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info: new TextEncoder().encode('plates note') },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+  );
+}
+
+async function fingerprint(secret) {
+  return hex(await crypto.subtle.digest('SHA-256', secret)).slice(0, 12);
+}
+
+/** Ask for any Plates passkey on this phone and return its secret. */
+async function secretFromPasskey() {
+  const assertion = await navigator.credentials.get({
+    publicKey: {
+      challenge: rand(32),
+      rpId: location.hostname,
+      allowCredentials: [],          // discoverable: exactly what a new phone does
+      userVerification: 'required',
+      extensions: { prf: { eval: { first: SALT } } },
+    },
+  });
+  const prf = assertion.getClientExtensionResults()?.prf;
+  say(`Passkey used: ${b64(assertion.rawId).slice(0, 16)}…`);
+  if (!prf?.results?.first) throw new Error('This phone signed in with the passkey but gave no secret (no PRF support).');
+  return prf.results.first;
+}
+
+document.getElementById('setup').onclick = async () => {
+  try {
+    judge(false, 'Setting up…');
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        rp: { name: 'Plates', id: location.hostname },
+        user: { id: rand(16), name: 'Plates encryption test', displayName: 'Plates encryption test' },
+        challenge: rand(32),
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+        extensions: { prf: { eval: { first: SALT } } },
+      },
+    });
+    const ext = cred.getClientExtensionResults()?.prf;
+    say(`Passkey made. PRF enabled: ${ext?.enabled ?? 'not reported'}`);
+    if (ext?.enabled === false) throw new Error('This phone made the passkey but cannot give a secret from it (no PRF support).');
+
+    // Some phones return the secret at creation; the rest need one sign-in.
+    const secret = ext?.results?.first ?? await secretFromPasskey();
+    const key = await keyFrom(secret);
+    const iv = rand(12);
+    const locked = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(NOTE));
+    localStorage.setItem(STORE, JSON.stringify({ iv: b64(iv), locked: b64(locked) }));
+    say(`Secret fingerprint: ${await fingerprint(secret)}`);
+    judge(true, 'Step 1 worked. Now tap “Check again”.');
+  } catch (error) {
+    say(`Error: ${error.name}: ${error.message}`);
+    judge(false, `Set up failed: ${error.message}`);
+  }
+};
+
+document.getElementById('again').onclick = async () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE) ?? 'null');
+    judge(false, 'Checking…');
+    const secret = await secretFromPasskey();
+    say(`Secret fingerprint: ${await fingerprint(secret)}`);
+    if (!saved) { judge(true, 'Passkey secret works here. (Run “Set up” on this device to test unlocking too.)'); return; }
+    const key = await keyFrom(secret);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(saved.iv) }, key, unb64(saved.locked));
+    const text = new TextDecoder().decode(plain);
+    say(`Unlocked: "${text}"`);
+    judge(text === NOTE, text === NOTE
+      ? '✅ It works on this phone. Encryption with no phrase is good to go.'
+      : 'Unlocked, but the note came back wrong.');
+  } catch (error) {
+    say(`Error: ${error.name}: ${error.message}`);
+    judge(false, error.name === 'OperationError'
+      ? 'The passkey gave a different secret than before, so the note would not unlock.'
+      : `Check failed: ${error.message}`);
+  }
+};
+</script>
+</body>
+</html>
