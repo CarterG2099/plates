@@ -1,5 +1,5 @@
 /**
- * camera.js — the camera inside the app, for progress photos.
+ * camera.js — the camera inside the app, for progress photos and chat photos.
  *
  * The phone's camera app took two extra screens per photo: its own "use this
  * photo", then a save sheet. Here the viewfinder is a <video> on the page and
@@ -64,9 +64,18 @@ export async function still(stream, video) {
   ));
 }
 
-/** The words for a camera that wouldn't open, from the browser's error name. */
-export function problem(error) {
-  if (error?.name === 'NotAllowedError') return 'Camera access is off for Plates. Allow it in the browser settings, or use the phone camera.';
+/**
+ * The words for a camera that wouldn't open, from the browser's error name.
+ * A chat photo never offers the phone camera: its app keeps a copy in the
+ * gallery, which is the one thing a message photo mustn't do.
+ */
+export function problem(error, purpose = 'progress') {
+  const chat = purpose === 'chat';
+  if (error?.name === 'NotAllowedError') {
+    return chat ? 'Camera access is off for Plates. Allow it in the browser settings.'
+      : 'Camera access is off for Plates. Allow it in the browser settings, or use the phone camera.';
+  }
   if (error?.name === 'NotFoundError') return 'No camera found on this device.';
-  return 'The camera wouldn’t start. Use the phone camera instead.';
+  return chat ? 'The camera wouldn’t start. Close it and try again.'
+    : 'The camera wouldn’t start. Use the phone camera instead.';
 }

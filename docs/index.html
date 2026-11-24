@@ -3217,8 +3217,11 @@
                  hidden @change="pickPhoto($event)">
           <input id="pp-library" type="file" accept="image/*"
                  hidden @change="pickPhoto($event)">
-          <!-- The conversation's photo picker, out here for the same reason. No
-               capture attribute: the phone offers camera or library itself. -->
+          <!-- The conversation's library picker, out here for the same reason.
+               It is for photos already on the phone; new ones come from the
+               Camera button, the in-page camera, so they never reach the
+               gallery. (The phone's chooser may still list its own camera here;
+               a shot taken that way is the phone camera's, and may be kept.) -->
           <input id="pm-photo" type="file" accept="image/*"
                  hidden @change="pickChatPhoto($event)">
 
@@ -3322,10 +3325,14 @@
              freezes the shot in the frame and swaps the bar for the poses;
              tapping one saves it, Retake throws it away. The preview is
              mirrored only for the front camera, so moving left moves left; the
-             frozen shot is shown as saved, never mirrored. -->
+             frozen shot is shown as saved, never mirrored.
+             Opened from Messages (camera.purpose 'chat'), there is no Together
+             or pose: the frozen shot gets Use photo, which puts it in the
+             message box, and no phone-camera fallback, since that app would
+             keep a copy in the gallery. -->
         <template x-if="camera">
           <div class="camera" role="dialog" aria-label="Camera">
-            <div class="camera-top chips">
+            <div class="camera-top chips" x-show="camera.purpose === 'progress'">
               <button class="chip" :class="camera.together && 'is-active'"
                       :aria-pressed="String(camera.together)"
                       @click="camera.together = !camera.together">Together</button>
@@ -3338,15 +3345,19 @@
               <div class="camera-countdown" x-show="camera.countdown" x-text="camera.countdown"></div>
               <div class="camera-error" x-show="cameraError">
                 <p x-text="cameraError"></p>
-                <button class="btn" @click="usePhoneCamera()">Use the phone camera</button>
+                <button class="btn" x-show="camera.purpose === 'progress'" @click="usePhoneCamera()">Use the phone camera</button>
               </div>
             </div>
 
-            <div class="camera-bar camera-poses" x-show="camera.shot">
+            <div class="camera-bar camera-poses" x-show="camera.shot && camera.purpose === 'progress'">
               <button class="camera-side" @click="retake()">Retake</button>
               <template x-for="p in poses" :key="p">
                 <button class="btn" @click="keepShot(p)" x-text="p" :aria-label="`Save as ${p}`"></button>
               </template>
+            </div>
+            <div class="camera-bar camera-poses" x-show="camera.shot && camera.purpose === 'chat'">
+              <button class="camera-side" @click="retake()">Retake</button>
+              <button class="btn btn-primary" @click="useChatShot()">Use photo</button>
             </div>
             <div class="camera-bar" x-show="!camera.shot">
               <button class="camera-side" @click="flipCamera()" aria-label="Switch camera">Flip</button>
@@ -3400,7 +3411,8 @@
                 </div>
               </template>
               <div class="chat-compose-row">
-                <label class="btn" for="pm-photo" @click="pickerHeld = true" aria-label="Add a photo">Photo</label>
+                <button type="button" class="btn" @click="openCamera('chat')" aria-label="Take a photo">Camera</button>
+                <label class="btn" for="pm-photo" @click="pickerHeld = true" aria-label="Send a photo from the library">Library</label>
                 <input type="text" x-model="chatText" placeholder="Message" autocomplete="off"
                        aria-label="Message" enterkeyhint="send">
                 <button class="btn btn-primary" type="submit"

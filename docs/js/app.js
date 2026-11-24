@@ -5220,15 +5220,24 @@ Alpine.data('statsPage', () => ({
   // a photo is than to remember to set it before walking into frame. Saving
   // runs behind the viewfinder, so the next shot doesn't wait on the upload.
 
-  camera: null,        // { facing, together, timer, countdown, shot: { blob, url } | null }
+  // `purpose` is 'progress' (the shot is saved under a pose) or 'chat' (the
+  // shot goes into the message box). A chat photo is taken here, never by the
+  // phone's camera app, because that app keeps its own copy in the gallery —
+  // and a photo that stays only in the conversation is what Messages is for.
+  camera: null,        // { purpose, facing, together, timer, countdown, shot: { blob, url } | null }
   cameraError: '',
   cameraSaving: 0,
   cameraTimers: camera.TIMERS,
 
-  async openCamera() {
+  async openCamera(purpose = 'progress') {
     this.cameraError = '';
-    if (!camera.supported()) { this.usePhoneCamera(); return; }
-    this.camera = { facing: 'environment', together: false, timer: 0, countdown: 0, shot: null };
+    if (!camera.supported()) {
+      // For chat there is no fallback: the phone camera would save to the gallery.
+      if (purpose === 'chat') { Alpine.store('ui').flash('This browser can’t show a camera inside Plates.'); return; }
+      this.usePhoneCamera();
+      return;
+    }
+    this.camera = { purpose, facing: 'environment', together: false, timer: 0, countdown: 0, shot: null };
     await this.startStream();
   },
 
@@ -5241,7 +5250,7 @@ Alpine.data('statsPage', () => ({
       const video = this.$refs?.viewfinder;
       if (video) { video.srcObject = cameraStream; await video.play?.(); }
     } catch (error) {
-      this.cameraError = camera.problem(error);
+      this.cameraError = camera.problem(error, this.camera?.purpose);
     }
   },
 
@@ -5288,7 +5297,7 @@ Alpine.data('statsPage', () => ({
   /** Tapping a pose under the frozen shot is what saves it. */
   async keepShot(pose) {
     const blob = this.camera?.shot?.blob;
-    if (!blob) return;
+    if (!blob || this.camera.purpose !== 'progress') return;
     const { together } = this.camera;
     this.retake();
     this.cameraSaving++;
@@ -5301,6 +5310,22 @@ Alpine.data('statsPage', () => ({
     } finally {
       this.cameraSaving--;
     }
+  },
+
+  /**
+   * The frozen shot goes into the message box, and the camera closes back onto
+   * the conversation. Nothing is sent yet: a caption can still be added, and
+   * the × on the pending photo still throws it away. The bytes exist only in
+   * this page until Send, never as a file on the phone.
+   */
+  useChatShot() {
+    const shot = this.camera?.shot;
+    if (!shot || this.camera.purpose !== 'chat') return;
+    this.camera.shot = null;        // handed over, so closeCamera doesn't revoke its URL
+    this.closeCamera();
+    if (!this.chatOpen) { URL.revokeObjectURL(shot.url); return; }
+    this.clearChatPhoto();
+    this.chatPhoto = { file: shot.blob, url: shot.url };
   },
 
   closeCamera() {

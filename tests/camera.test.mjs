@@ -15,6 +15,7 @@ import { loadApp } from './helpers/app.mjs';
 const { Alpine, components } = await loadApp();
 const camera = await import('../docs/js/camera.js');
 const progress = await import('../docs/js/progress.js');
+const messages = await import('../docs/js/messages.js');
 const local = await import('../docs/js/local.js');
 const { supabase } = await import('../docs/js/supabase.js');
 
@@ -145,7 +146,7 @@ test('Take photo opens the back camera with no shot waiting, timer off', async (
   const cam = fakeCamera();
   const page = statsPage();
   await page.openCamera();
-  assert.deepEqual({ ...page.camera }, { facing: 'environment', together: false, timer: 0, countdown: 0, shot: null });
+  assert.deepEqual({ ...page.camera }, { purpose: 'progress', facing: 'environment', together: false, timer: 0, countdown: 0, shot: null });
   assert.equal(cam.asked[0].video.facingMode, 'environment');
   assert.equal(page.cameraError, '');
   page.closeCamera();
@@ -330,7 +331,7 @@ test('the camera screen: the pose is chosen under the frozen shot, not above the
   const top = cam.slice(cam.indexOf('camera-top'), cam.indexOf('camera-frame'));
   assert.doesNotMatch(top, /poses/, 'no pose to set before the shot');
   assert.match(cam, /<img class="camera-shot" x-show="camera\.shot" :src="camera\.shot\?\.url \|\| null"/);
-  assert.match(cam, /<div class="camera-bar camera-poses" x-show="camera\.shot">/);
+  assert.match(cam, /<div class="camera-bar camera-poses" x-show="camera\.shot && camera\.purpose === 'progress'">/);
   assert.match(cam, /<template x-for="p in poses" :key="p">\s*<button class="btn" @click="keepShot\(p\)"/);
   assert.match(cam, /@click="retake\(\)">Retake<\/button>/);
   assert.match(cam, /<div class="camera-bar" x-show="!camera\.shot">/);
@@ -346,6 +347,143 @@ test('the camera screen: inline video, Together, shutter, flip, timer, Done', ()
   assert.match(cam, /@click="cycleTimer\(\)"/);
   assert.match(cam, /@click="usePhoneCamera\(\)"/);
   assert.match(cam, /@click="closeCamera\(\)">Done<\/button>/);
+});
+
+// ---- the camera in Messages ------------------------------------------------------
+//
+// A chat photo is taken in the page and goes into the message box, never via
+// the phone's camera app, which would leave a copy in the gallery.
+
+/** The Stats screen with Messages open; Realtime is a no-op channel. */
+function chatPage() {
+  supabase.channel = () => ({ on() { return this; }, subscribe() { return this; } });
+  supabase.removeChannel = () => {};
+  const page = statsPage();
+  page.photosLocked = false;
+  page.openChat();
+  assert.equal(page.chatOpen, true);
+  return page;
+}
+
+test('Camera in Messages opens the camera in the page, with no pose or Together to choose', async () => {
+  const cam = fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  assert.equal(page.camera.purpose, 'chat');
+  assert.equal(cam.asked[0].video.facingMode, 'environment');
+  page.closeCamera();
+  page.closeChat();
+});
+
+test('Use photo puts the shot in the message box, closes the camera, and saves nothing', async () => {
+  const cam = fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  const uploads = supabase.storage._uploads.length;
+  const photos = (await local.all('progress_photos')).length;
+
+  await page.shutter();
+  const { blob, url } = page.camera.shot;
+  page.useChatShot();
+
+  assert.equal(page.camera, null, 'back to the conversation');
+  assert.equal(cam.tracks[0].stopped, true, 'the camera light is off');
+  assert.equal(page.chatPhoto.file, blob, 'the shot itself is waiting to send');
+  assert.equal(page.chatPhoto.url, url, 'and its preview was handed over, not revoked');
+  assert.equal(supabase.storage._uploads.length, uploads, 'nothing sent until Send');
+  assert.equal((await local.all('progress_photos')).length, photos, 'not a progress photo');
+  page.closeChat();
+});
+
+test('Send uploads the camera shot to the messages bucket, with its caption', async () => {
+  fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  await page.shutter();
+  page.useChatShot();
+  page.chatText = 'gym selfie';
+
+  await page.sendChat();
+  const upload = supabase.storage._uploads.at(-1);
+  assert.equal(upload.bucket, messages.BUCKET);
+  const sent = (await local.all('messages')).find((m) => m.photo_path === upload.path);
+  assert.equal(sent.body, 'gym selfie');
+  assert.equal(sent.recipient_email, AANA);
+  assert.equal(page.chatPhoto, null);
+  page.closeChat();
+});
+
+test('the pose buttons cannot save a chat shot as a progress photo', async () => {
+  fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  await page.shutter();
+  const uploads = supabase.storage._uploads.length;
+  await page.keepShot('front');
+  assert.equal(supabase.storage._uploads.length, uploads);
+  assert.ok(page.camera.shot, 'the shot is still waiting for Use photo or Retake');
+  page.closeCamera();
+  page.closeChat();
+});
+
+test('Retake in Messages throws the shot away and leaves the message box empty', async () => {
+  fakeCamera();
+  const page = chatPage();
+  await page.openCamera('chat');
+  await page.shutter();
+  page.retake();
+  page.useChatShot();
+  assert.equal(page.chatPhoto, null);
+  assert.ok(page.camera, 'still in the camera, ready for another shot');
+  page.closeCamera();
+  page.closeChat();
+});
+
+test('with no camera in the page, Messages never falls back to the phone camera', async () => {
+  delete navigator.mediaDevices;
+  let clicked = '';
+  const real = document.getElementById;
+  document.getElementById = (id) => ({ click() { clicked = id; } });
+  try {
+    const page = chatPage();
+    await page.openCamera('chat');
+    assert.equal(clicked, '', 'no camera app, so no gallery copy');
+    assert.equal(page.camera, null);
+    assert.match(Alpine.store('ui').toast, /can’t show a camera/);
+    page.closeChat();
+  } finally {
+    document.getElementById = real;
+  }
+});
+
+test('a refused camera in Messages says why without suggesting the phone camera', async () => {
+  fakeCamera({ refuse: 'NotAllowedError' });
+  const page = chatPage();
+  await page.openCamera('chat');
+  assert.match(page.cameraError, /Allow it in the browser settings/);
+  assert.doesNotMatch(page.cameraError, /phone camera/);
+  page.closeCamera();
+  page.closeChat();
+});
+
+test('no chat camera problem ever points at the phone camera', () => {
+  for (const name of ['NotAllowedError', 'NotFoundError', 'NotReadableError', undefined]) {
+    assert.doesNotMatch(camera.problem({ name }, 'chat'), /phone camera/i, String(name));
+  }
+  assert.match(camera.problem({ name: 'NotAllowedError' }), /phone camera/, 'progress photos still offer it');
+});
+
+test('the message box has Camera (in the page) beside Library', () => {
+  const chat = html.slice(html.indexOf('<form class="chat-compose"'), html.indexOf('</form>', html.indexOf('<form class="chat-compose"')));
+  assert.match(chat, /<button type="button" class="btn" @click="openCamera\('chat'\)" aria-label="Take a photo">Camera<\/button>/);
+  assert.match(chat, /<label class="btn" for="pm-photo"[^>]*>Library<\/label>/);
+});
+
+test('the camera screen in chat mode: Use photo, no poses, no Together, no phone-camera button', () => {
+  const cam = html.slice(html.indexOf('<template x-if="camera">'), html.indexOf('<!-- Messages'));
+  assert.match(cam, /<div class="camera-top chips" x-show="camera\.purpose === 'progress'">/);
+  assert.match(cam, /<div class="camera-bar camera-poses" x-show="camera\.shot && camera\.purpose === 'chat'">\s*<button class="camera-side" @click="retake\(\)">Retake<\/button>\s*<button class="btn btn-primary" @click="useChatShot\(\)">Use photo<\/button>/);
+  assert.match(cam, /<button class="btn" x-show="camera\.purpose === 'progress'" @click="usePhoneCamera\(\)">/);
 });
 
 test('Together can be set when saving from the library and changed later', () => {
