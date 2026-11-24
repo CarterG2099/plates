@@ -35,12 +35,22 @@ async function offline(fn) {
   try { return await fn(); } finally { navigator.onLine = true; }
 }
 
-/** A Realtime channel whose handler the test can call, and which records removal. */
+/**
+ * Realtime channels whose handlers the test can call, and which record removal.
+ * `handler` is the messages table's; `handlers` has every table and broadcast
+ * by name, and `sent` what this side broadcast.
+ */
 function fakeChannel() {
-  const channel = { handler: null, removed: false };
+  const channel = { handler: null, handlers: {}, sent: [], removed: false };
   supabase.channel = () => ({
-    on(_kind, _filter, fn) { channel.handler = fn; return this; },
+    on(_kind, filter, fn) {
+      const name = filter?.table ?? filter?.event;
+      channel.handlers[name] = fn;
+      if (name === 'messages') channel.handler = fn;
+      return this;
+    },
     subscribe() { return this; },
+    send(message) { channel.sent.push(message); return Promise.resolve('ok'); },
   });
   supabase.removeChannel = () => { channel.removed = true; };
   return channel;
@@ -327,4 +337,348 @@ test('the push says there is a message and nothing about it', async () => {
   const payload = fn.match(/const payload = JSON\.stringify\((\{[^}]+\})\)/)[1];
   assert.doesNotMatch(payload, /body:\s*message|photo|owner_email|display_name/);
   assert.match(fn, /x-cron-secret/);
+});
+
+// ---- the thread's layout ------------------------------------------------------------
+
+const NOON = new Date(2026, 10, 24, 12, 0);              // local time, so day labels are stable
+const local_ = (h, m, dayOffset = 0) => new Date(2026, 10, 24 + dayOffset, h, m).toISOString();
+const row = (id, sent_at, owner_email = AANA) => ({ id, owner_email, sent_at, body: id, updated_at: sent_at });
+
+test('a new day gets a marker: Today, Yesterday, or the date', () => {
+  const items = messages.layout([
+    row('a', local_(9, 0, -3)), row('b', local_(9, 0, -1)), row('c', local_(9, 0)),
+  ], NOON);
+  const markers = items.filter((i) => i.kind === 'marker').map((i) => i.label);
+  assert.equal(markers.length, 3);
+  assert.notEqual(markers[0], 'Yesterday');
+  assert.deepEqual(markers.slice(1), ['Yesterday', 'Today']);
+});
+
+test('a quiet hour on the same day gets the time as its marker', () => {
+  const items = messages.layout([row('a', local_(8, 0)), row('b', local_(8, 59)), row('c', local_(10, 0))], NOON);
+  const labels = items.map((i) => (i.kind === 'marker' ? `[${i.label}]` : i.m.id));
+  assert.deepEqual(labels.slice(0, 3), ['[Today]', 'a', 'b'], 'under an hour: no marker');
+  assert.equal(labels[3], `[${messages.clockLabel(local_(10, 0))}]`);
+  assert.equal(labels[4], 'c');
+});
+
+test('one person\'s messages within five minutes run together; the other person or a gap breaks the run', () => {
+  const items = messages.layout([
+    row('a1', local_(9, 0)), row('a2', local_(9, 4)), row('a3', local_(9, 8)),   // each within 5 min of the last
+    row('m1', local_(9, 9), ME),                                                  // the other person
+    row('a4', local_(9, 10)), row('a5', local_(9, 16)),                           // 6 minutes apart
+  ], NOON).filter((i) => i.kind === 'msg');
+  assert.deepEqual(items.map((i) => [i.m.id, i.place]), [
+    ['a1', 'first'], ['a2', 'middle'], ['a3', 'last'],
+    ['m1', 'single'],
+    ['a4', 'single'], ['a5', 'single'],
+  ]);
+});
+
+test('a marker always ends a run, even between one person\'s messages', () => {
+  const items = messages.layout([row('a', local_(23, 58, -1)), row('b', local_(0, 1))], NOON)
+    .filter((i) => i.kind === 'msg');
+  assert.deepEqual(items.map((i) => i.place), ['single', 'single'], 'midnight splits them');
+});
+
+test('unsent messages leave no gap in a run', () => {
+  const items = messages.layout([
+    row('a', local_(9, 0)), { ...row('x', local_(9, 1)), deleted_at: local_(9, 2) }, row('b', local_(9, 2)),
+  ], NOON).filter((i) => i.kind === 'msg');
+  assert.deepEqual(items.map((i) => [i.m.id, i.place]), [['a', 'first'], ['b', 'last']]);
+});
+
+// ---- reactions ------------------------------------------------------------------------
+
+const reaction = (id, message_id, owner_email, emoji, updated_at, extra = {}) =>
+  ({ id, message_id, owner_email, emoji, updated_at, ...extra });
+
+test('each person shows their newest live reaction, and only on its own message', () => {
+  const rows = [
+    reaction('r1', 'msg-1', ME, '🔥', '2026-11-24T10:00:00Z'),
+    reaction('r2', 'msg-1', ME, '😍', '2026-11-24T10:05:00Z'),            // a second phone, newer
+    reaction('r3', 'msg-1', AANA, '😈', '2026-11-24T10:01:00Z'),
+    reaction('r4', 'msg-1', AANA, '❤️', '2026-11-24T10:09:00Z', { deleted_at: '2026-11-24T10:09:00Z' }),
+    reaction('r5', 'msg-2', ME, '👍', '2026-11-24T10:00:00Z'),
+  ];
+  const shown = messages.reactionsFor(rows, 'msg-1');
+  assert.deepEqual(shown.map((r) => [r.owner_email, r.emoji]), [[AANA, '😈'], [ME, '😍']]);
+});
+
+test('reacting writes my own row locally and queues it, with no network needed', async () => {
+  const before = (await local.outbox()).length;
+  const r = await offline(() => messages.react({ reactions: [], messageId: 'react-1', emoji: '🔥', ownerEmail: ME }));
+  assert.equal(r.owner_email, ME);
+  assert.equal(r.message_id, 'react-1');
+  assert.equal(r.emoji, '🔥');
+  assert.ok((await local.outbox()).length > before);
+});
+
+test('a different emoji changes my reaction; the same one takes it back', async () => {
+  const first = await offline(() => messages.react({ reactions: [], messageId: 'react-2', emoji: '🔥', ownerEmail: ME }));
+  const changed = await offline(() => messages.react({ reactions: [first], messageId: 'react-2', emoji: '😈', ownerEmail: ME }));
+  assert.equal(changed.id, first.id, 'the same row, changed');
+  assert.equal(changed.emoji, '😈');
+  const gone = await offline(() => messages.react({ reactions: [changed], messageId: 'react-2', emoji: '😈', ownerEmail: ME }));
+  assert.ok(gone.deleted_at, 'taken back');
+  assert.deepEqual(messages.reactionsFor(await local.allRaw('message_reactions'), 'react-2'), []);
+});
+
+test('taking a reaction back also clears an older duplicate from another phone, and never touches theirs', async () => {
+  const old = reaction('dup-old', 'react-3', ME, '🔥', '2026-11-24T09:00:00Z');
+  const newer = reaction('dup-new', 'react-3', ME, '😍', '2026-11-24T09:05:00Z');
+  const theirs = reaction('dup-theirs', 'react-3', AANA, '😍', '2026-11-24T09:06:00Z');
+  await offline(() => messages.react({ reactions: [old, newer, theirs], messageId: 'react-3', emoji: '😍', ownerEmail: ME }));
+  assert.ok((await local.get('message_reactions', 'dup-old')).deleted_at);
+  assert.ok((await local.get('message_reactions', 'dup-new')).deleted_at);
+  assert.equal(await local.get('message_reactions', 'dup-theirs'), undefined, 'their row was never written');
+});
+
+test('a reaction arrives live like a message does', async () => {
+  const channel = fakeChannel();
+  const seen = [];
+  const stop = messages.listen((r) => seen.push(r.id));
+  await channel.handlers.message_reactions({ new: reaction('live-r', 'm', AANA, '🥵', '2026-11-24T11:00:00Z') });
+  assert.equal((await local.get('message_reactions', 'live-r')).emoji, '🥵');
+  assert.deepEqual(seen, ['live-r']);
+  stop();
+});
+
+test('reactions are stored locally, synced, and in a new local database version', async () => {
+  assert.ok(local.TABLES.includes('message_reactions'));
+  assert.match(await read('../docs/js/sync.js'), /'message_reactions',/);
+  assert.match(await read('../docs/js/local.js'), /const DB_VERSION = 9;/);
+});
+
+test('only the two people in a message see or add reactions to it, and only as themselves', async () => {
+  const sql = await read('../supabase/schema.sql');
+  const block = sql.slice(sql.indexOf('-- ---- message reactions'));
+  assert.match(block, /create policy message_reactions_read on plates\.message_reactions\s+for select using \(\s*plates\.is_member\(\)\s+and exists \(select 1 from plates\.messages m where m\.id = message_id\)/,
+    'the exists() runs under messages_read: sender or recipient only');
+  assert.match(block, /for insert with check \(\s*plates\.is_member\(\) and plates\.is_owner\(owner_email\)/);
+  assert.match(block, /for update using \(plates\.is_owner\(owner_email\)\)\s+with check \(plates\.is_owner\(owner_email\)\)/);
+  assert.doesNotMatch(block, /can_read|using \(true\)|allowed_emails|public\./);
+  const code = block.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+  assert.doesNotMatch(code, /unique/i, 'two phones reacting offline must not jam the outbox');
+});
+
+// ---- typing -----------------------------------------------------------------------------
+
+test('a typing signal carries a short tag, never an email', async () => {
+  const mine = await messages.typingTag(ME);
+  assert.match(mine, /^[0-9a-f]{12}$/);
+  assert.equal(mine, await messages.typingTag(ME.toUpperCase()), 'case does not matter');
+  assert.notEqual(mine, await messages.typingTag(AANA));
+});
+
+test('their typing shows, goes after five quiet seconds, and mine or anyone else\'s is ignored', async (t) => {
+  const channel = fakeChannel();
+  const states = [];
+  const typing = messages.typingChannel({ myEmail: ME, partnerEmail: AANA, onChange: (on) => states.push(on) });
+  const [meTag, andraTag, aanaTag] = await Promise.all([ME, ANDRA, AANA].map(messages.typingTag));
+  await new Promise((r) => setTimeout(r, 0));         // the channel hashes its tags asynchronously
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+
+  const fire = channel.handlers.typing;
+  fire({ payload: { from: meTag, on: true } });
+  fire({ payload: { from: andraTag, on: true } });
+  assert.deepEqual(states, [], 'not from them');
+
+  fire({ payload: { from: aanaTag, on: true } });
+  assert.deepEqual(states, [true]);
+  t.mock.timers.tick(messages.TYPING_MS - 1);
+  assert.deepEqual(states, [true]);
+  t.mock.timers.tick(1);
+  assert.deepEqual(states, [true, false], 'gone quiet');
+
+  fire({ payload: { from: aanaTag, on: true } });
+  fire({ payload: { from: aanaTag, on: false } });
+  assert.deepEqual(states, [true, false, true, false], 'they sent or cleared the box');
+  typing.close();
+});
+
+test('my typing is signalled at most every few seconds, stopped once, and nothing names me', async (t) => {
+  const channel = fakeChannel();
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  const typing = messages.typingChannel({ myEmail: ME, partnerEmail: AANA, onChange() {} });
+  typing.typing();
+  typing.typing();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(channel.sent.length, 1, 'throttled');
+  t.mock.timers.tick(3000);
+  typing.typing();
+  typing.stopped();
+  typing.stopped();
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(channel.sent.map((s) => s.payload.on), [true, true, false]);
+  assert.ok(channel.sent.every((s) => s.type === 'broadcast' && s.event === 'typing'));
+  assert.doesNotMatch(JSON.stringify(channel.sent), /@/, 'no email on the wire');
+  typing.close();
+  assert.equal(channel.removed, true);
+});
+
+// ---- the screen: gestures -----------------------------------------------------------------
+
+function openChatPage() {
+  const channel = fakeChannel();
+  const page = statsPage();
+  page.photosLocked = false;
+  page.openChat();
+  return { page, channel };
+}
+
+const text = { id: 'g-text', owner_email: AANA, body: 'hey you', sent_at: '2026-11-24T10:00:00Z' };
+const photo = { id: 'g-photo', owner_email: AANA, photo_path: 'x.jpg', body: null, sent_at: '2026-11-24T10:00:00Z' };
+const at0 = { clientX: 100, clientY: 100 };
+
+test('a tap on a message shows its time; another tap hides it', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { page } = openChatPage();
+  page.chatPressStart(text, at0, 'text');
+  page.chatPressEnd(text);
+  assert.equal(page.chatTimeFor, null, 'waits to see if it is a double-tap');
+  t.mock.timers.tick(page.doubleTapMs);
+  assert.equal(page.chatTimeFor, text.id);
+
+  page.chatPressStart(text, at0, 'text');
+  page.chatPressEnd(text);
+  t.mock.timers.tick(page.doubleTapMs);
+  assert.equal(page.chatTimeFor, null);
+  page.closeChat();
+});
+
+test('a double-tap hearts the message and does not show the time', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { page } = openChatPage();
+  page.chatPressStart(text, at0, 'text'); page.chatPressEnd(text);
+  t.mock.timers.tick(100);
+  page.chatPressStart(text, at0, 'text'); page.chatPressEnd(text);
+  t.mock.timers.tick(1000);
+  t.mock.timers.reset();
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(page.chatTimeFor, null);
+  const mine = messages.reactionsFor(await local.allRaw('message_reactions'), text.id);
+  assert.deepEqual(mine.map((r) => [r.owner_email, r.emoji]), [[ME, '❤️']]);
+  page.closeChat();
+});
+
+test('holding a photo uncovers it only while held, and does not open it', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { page } = openChatPage();
+  page.chatPressStart(photo, at0, 'photo');
+  t.mock.timers.tick(page.revealMs - 1);
+  assert.equal(page.chatRevealed, null, 'not on first touch, so a scroll never flashes it');
+  assert.ok(page.revealMs >= 100);
+  t.mock.timers.tick(1);
+  assert.equal(page.chatRevealed, photo.id);
+  page.chatPressEnd(photo);
+  assert.equal(page.chatRevealed, null, 'covered again on letting go');
+  t.mock.timers.tick(1000);
+  assert.equal(page.chatViewing, null);
+  page.closeChat();
+});
+
+test('a tap on a photo opens it full screen, still covered', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { page } = openChatPage();
+  page.chatPressStart(photo, at0, 'photo'); page.chatPressEnd(photo);
+  t.mock.timers.tick(page.doubleTapMs);
+  assert.equal(page.chatViewing?.id, photo.id);
+  assert.equal(page.chatRevealed, null);
+  page.chatHold('viewer');
+  assert.equal(page.chatRevealed, 'viewer');
+  page.chatRelease();
+  assert.equal(page.chatRevealed, null);
+  page.closeChat();
+});
+
+test('moving the finger is a scroll: it covers the photo and cancels the tap', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { page } = openChatPage();
+  page.chatPressStart(photo, at0, 'photo');
+  t.mock.timers.tick(page.revealMs);
+  page.chatPressMove({ clientX: 100, clientY: 140 });
+  assert.equal(page.chatRevealed, null);
+  page.chatPressEnd(photo);
+  t.mock.timers.tick(1000);
+  assert.equal(page.chatViewing, null);
+  page.closeChat();
+});
+
+test('holding a text bubble opens the reactions menu; choosing one closes it', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { page } = openChatPage();
+  page.chatPressStart(text, at0, 'text');
+  t.mock.timers.tick(page.holdMs);
+  assert.equal(page.chatMenu?.id, text.id);
+  page.chatPressEnd(text);
+  t.mock.timers.tick(1000);
+  assert.equal(page.chatTimeFor, null, 'a hold is not a tap');
+  t.mock.timers.reset();
+  await page.chatReact(text, '🥵');
+  assert.equal(page.chatMenu, null);
+  page.closeChat();
+});
+
+test('typing in the box tells them; sending, clearing or closing stops it', async () => {
+  const { page, channel } = openChatPage();
+  const aanaTag = await messages.typingTag(AANA);
+  await new Promise((r) => setTimeout(r, 0));
+  page.chatText = 'on my';
+  page.chatInput({ target: null });
+  page.chatText = '';
+  page.chatInput({ target: null });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(channel.sent.map((s) => s.payload.on), [true, false]);
+
+  channel.handlers.typing({ payload: { from: aanaTag, on: true } });
+  assert.equal(page.chatTheyType, true);
+  page.closeChat();
+  assert.equal(page.chatTheyType, false);
+  assert.equal(channel.removed, true);
+});
+
+test('locking mid-hold covers the photo and drops the menu', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { page } = openChatPage();
+  page.chatPressStart(photo, at0, 'photo');
+  t.mock.timers.tick(page.revealMs);
+  page.chatMenu = text;
+  page.relockPhotos();
+  assert.equal(page.chatRevealed, null);
+  assert.equal(page.chatMenu, null);
+});
+
+// ---- the screen: markup and styles ----------------------------------------------------------
+
+test('every photo surface is blurred unless held, in the thread, the box, and full screen', async () => {
+  const css = await read('../docs/css/components.css');
+  const covered = css.match(/\.chat-photo img, \.chat-viewer-photo img, \.chat-pending img \{[^}]+\}/)?.[0] ?? '';
+  assert.match(covered, /filter: blur\(\d+px\)/);
+  assert.match(css, /\.chat-photo\.is-revealed img, \.chat-viewer-photo\.is-revealed img, \.chat-pending\.is-revealed img \{\s*filter: none;/);
+
+  const html = await read('../docs/index.html');
+  assert.match(html, /class="chat-photo" :class="chatRevealed === item\.m\.id && 'is-revealed'"/);
+  assert.match(html, /class="chat-pending" :class="chatRevealed === 'pending' && 'is-revealed'"/);
+  assert.match(html, /class="chat-viewer-photo" :class="chatRevealed === 'viewer' && 'is-revealed'"/);
+});
+
+test('the conversation has its own dark colours and Send is an icon', async () => {
+  const css = await read('../docs/css/components.css');
+  assert.match(css, /\.chat, \.chat-scrim, \.chat-viewer \{\s*--chat-ground: #0c0a0f;/);
+  assert.match(css, /color-scheme: dark;/);
+  const html = await read('../docs/index.html');
+  assert.match(html, /<button class="chat-icon chat-send" type="submit" aria-label="Send"/);
+  assert.match(html, /<textarea class="chat-box" x-ref="chatBox"/);
+});
+
+test('the thread draws markers and runs from layout, and reactions under each bubble', async () => {
+  const html = await read('../docs/index.html');
+  assert.match(html, /<template x-for="item in chatItems" :key="item\.key">/);
+  assert.match(html, /<div class="chat-marker" x-text="item\.label"><\/div>/);
+  assert.match(html, /`is-\$\{item\.place\}`/);
+  assert.match(html, /<template x-for="r in chatReactions\(item\.m\)" :key="r\.id">/);
+  assert.match(html, /<template x-for="e in chatReactionBar" :key="e">/);
 });

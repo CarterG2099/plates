@@ -623,7 +623,7 @@ const raw = {
   exercises: [], routines: [], routineExercises: [], sessions: [], sessionSets: [],
   progressPhotos: [],
   mealPlans: [], shoppingItems: [], walmartItems: [],
-  messages: [],
+  messages: [], messageReactions: [],
   index: workout.buildIndex([], [], ''),
   prior: new Map(),
   stalls: new Map(),   // exercise key → stats.stallFor(), see refreshTraining
@@ -680,7 +680,7 @@ Alpine.store('data', {
   /** What Today needs: small, and read first so the app paints immediately. */
   async refreshCore() {
     const [goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks,
-      mealPlans, shoppingItems, walmartItems, messageRows] = await Promise.all([
+      mealPlans, shoppingItems, walmartItems, messageRows, reactionRows] = await Promise.all([
       local.all('goals'),
       local.all('foods'),
       local.all('food_log'),
@@ -693,10 +693,11 @@ Alpine.store('data', {
       local.all('shopping_items'),
       local.all('walmart_items'),
       local.all('messages'),
+      local.all('message_reactions'),
     ]);
 
     Object.assign(raw, { goals, foods, log, combos, templates, weightLog, progressPhotos, dayMarks,
-      mealPlans, shoppingItems, walmartItems, messages: messageRows });
+      mealPlans, shoppingItems, walmartItems, messages: messageRows, messageReactions: reactionRows });
     this.ready = true;
     this.version++;
   },
@@ -5430,13 +5431,145 @@ Alpine.data('statsPage', () => ({
   chatPhoto: null,     // { file, url } waiting in the composer
   chatBusy: false,
   chatReadAt: null,
-  chatViewing: null,   // the message whose sheet is open
+  chatViewing: null,   // the message open full screen (photos)
   chatUrls: {},
   chatUrlQueue: new Set(),
   stopChatListen: null,
+  chatReactionBar: messages.REACTIONS,
+  chatTimeFor: null,   // id of the message whose time a tap is showing
+  chatMenu: null,      // the message a long-press lifted: reactions, Copy, Unsend
+  chatRevealed: null,  // what a held finger is uncovering: a message id, 'pending' or 'viewer'
+  chatTheyType: false,
+  chatTyping: null,    // the typing channel while the conversation is open
+  _press: null,        // the gesture in progress on a bubble
+  _lastTap: null,      // { id, at } for double-tap
 
   get chatThread() {
     return messages.thread(this.data.messages);
+  },
+
+  /** The thread with day/time markers and each bubble's place in its run. */
+  get chatItems() {
+    return messages.layout(this.data.messages);
+  },
+
+  chatReactions(m) {
+    return messages.reactionsFor(this.data.messageReactions, m.id);
+  },
+
+  chatReactedBy(r) {
+    return r.owner_email?.toLowerCase() === this.email.toLowerCase();
+  },
+
+  async chatReact(m, emoji) {
+    this.chatMenu = null;
+    await messages.react({ reactions: this.data.messageReactions, messageId: m.id, emoji, ownerEmail: this.email });
+    await Alpine.store('data').refreshCore();
+  },
+
+  // ---- gestures on a bubble ---------------------------------------------------
+  //
+  // One press decides what it was when it ends or times out, so tap, double-tap
+  // and hold never fight. A held photo is uncovered for as long as the finger
+  // stays down; a held text bubble opens the reactions. Moving the finger is a
+  // scroll, which cancels the lot.
+
+  /** How long a press must last to count as a hold. */
+  holdMs: 420,
+  /** A photo starts uncovering sooner than a hold, so it doesn't feel sticky. */
+  revealMs: 150,
+  doubleTapMs: 300,
+
+  /** `part` is 'photo' or 'text': a caption under a photo behaves as text. */
+  chatPressStart(m, event, part = 'text') {
+    clearTimeout(this._press?.timer);
+    const photo = part === 'photo';
+    this._press = {
+      id: m.id, part, x: event?.clientX ?? 0, y: event?.clientY ?? 0, held: false,
+      timer: setTimeout(() => {
+        if (this._press?.id !== m.id) return;
+        this._press.held = true;
+        if (photo) this.chatRevealed = m.id;
+        else this.chatMenu = m;
+      }, photo ? this.revealMs : this.holdMs),
+    };
+  },
+
+  chatPressMove(event) {
+    if (!this._press) return;
+    const dx = (event?.clientX ?? 0) - this._press.x;
+    const dy = (event?.clientY ?? 0) - this._press.y;
+    if (Math.hypot(dx, dy) > 10) this.chatPressCancel();
+  },
+
+  chatPressCancel() {
+    clearTimeout(this._press?.timer);
+    this._press = null;
+    this.chatRevealed = null;
+  },
+
+  chatPressEnd(m) {
+    const press = this._press;
+    clearTimeout(press?.timer);
+    this._press = null;
+    this.chatRevealed = null;
+    if (!press || press.id !== m.id || press.held) return;
+    const photo = press.part === 'photo';
+
+    const now = Date.now();
+    const last = this._lastTap;
+    if (last?.id === m.id && now - last.at < this.doubleTapMs) {
+      clearTimeout(last.timer);
+      this._lastTap = null;
+      this.chatReact(m, messages.REACTIONS[0]);
+      return;
+    }
+    clearTimeout(last?.timer);
+    this._lastTap = {
+      id: m.id, at: now,
+      timer: setTimeout(() => {
+        this._lastTap = null;
+        if (photo) this.chatViewing = m;
+        else this.chatTimeFor = this.chatTimeFor === m.id ? null : m.id;
+      }, this.doubleTapMs),
+    };
+  },
+
+  /** Hold on the pending photo or the full-screen one: uncovered until let go. */
+  chatHold(what) { this.chatRevealed = what; },
+  chatRelease() { this.chatRevealed = null; },
+
+  async chatCopy(m) {
+    this.chatMenu = null;
+    try {
+      await navigator.clipboard.writeText(m.body ?? '');
+      Alpine.store('ui').flash('Copied');
+    } catch {
+      Alpine.store('ui').flash('Could not copy');
+    }
+  },
+
+  chatClock(m) { return messages.clockLabel(m.sent_at); },
+
+  /** Grow the message box with its text, up to about six lines. */
+  chatGrow(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 148)}px`;
+  },
+
+  chatInput(event) {
+    this.chatGrow(event?.target);
+    if (this.chatText.trim()) this.chatTyping?.typing();
+    else this.chatTyping?.stopped();
+  },
+
+  /** Enter sends on a keyboard; on a phone it is a new line, and Send sends. */
+  chatKey(event) {
+    if (event.key !== 'Enter' || event.shiftKey) return;
+    if (globalThis.matchMedia?.('(pointer: coarse)')?.matches) return;
+    event.preventDefault();
+    this.sendChat();
   },
 
   get chatUnread() {
@@ -5452,6 +5585,12 @@ Alpine.data('statsPage', () => ({
     this.chatOpen = true;
     this.stopChatListen?.();
     this.stopChatListen = messages.listen(() => Alpine.store('data').refreshCore());
+    this.chatTyping?.close();
+    this.chatTyping = messages.typingChannel({
+      myEmail: this.email,
+      partnerEmail: this.chatPartner.email,
+      onChange: (on) => { this.chatTheyType = on; },
+    });
     // The other person's unsends arrive as tombstones; their photos go too.
     messages.purgeUnsent().catch(() => {});
   },
@@ -5459,6 +5598,14 @@ Alpine.data('statsPage', () => ({
   closeChat() {
     this.stopChatListen?.();
     this.stopChatListen = null;
+    this.chatTyping?.close();
+    this.chatTyping = null;
+    this.chatTheyType = false;
+    this.chatPressCancel();
+    clearTimeout(this._lastTap?.timer);
+    this._lastTap = null;
+    this.chatMenu = null;
+    this.chatTimeFor = null;
     this.chatOpen = false;
     this.chatViewing = null;
     this.chatText = '';
@@ -5535,6 +5682,8 @@ Alpine.data('statsPage', () => ({
         await messages.sendText({ text, ownerEmail: this.email, recipientEmail });
       }
       this.chatText = '';
+      this.chatTyping?.stopped();
+      this.chatGrow(this.$refs?.chatBox);
       await Alpine.store('data').refreshCore();
     } catch (error) {
       Alpine.store('ui').flash(describeError(error) || 'Could not send');
@@ -5544,6 +5693,7 @@ Alpine.data('statsPage', () => ({
   },
 
   async unsendChat(m) {
+    this.chatMenu = null;
     if (!confirm('Unsend this? It disappears for both of you.')) return;
     await messages.unsend(m);
     this.chatViewing = null;

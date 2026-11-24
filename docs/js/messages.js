@@ -51,6 +51,180 @@ export function thread(rows) {
     .sort((a, b) => (at(a.sent_at) - at(b.sent_at)) || (a.id < b.id ? -1 : 1));
 }
 
+// ---- how the thread is laid out -------------------------------------------------
+
+/** Messages from one person this close together tuck into one run of bubbles. */
+export const GROUP_MS = 5 * 60_000;
+/** A quiet hour this long gets a time marker even on the same day. */
+export const GAP_MS = 60 * 60_000;
+
+const localDay = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+
+/** "Today", "Yesterday", or "Tue, Nov 4" — the marker on a new day. */
+export function dayLabel(stamp, now = new Date()) {
+  const d = new Date(stamp);
+  if (localDay(d) === localDay(now)) return 'Today';
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (localDay(d) === localDay(yesterday)) return 'Yesterday';
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric',
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  });
+}
+
+export function clockLabel(stamp) {
+  return new Date(stamp).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/**
+ * The thread as the screen draws it: a marker on each new day ("Today") and
+ * after a quiet hour (the time), then the messages, each with its place in a
+ * run — 'single', 'first', 'middle' or 'last' — which is what rounds the
+ * corners where bubbles meet. A run is one person's messages, each within
+ * GROUP_MS of the one before, and a marker always ends it.
+ */
+export function layout(rows, now = new Date()) {
+  const msgs = thread(rows);
+  const items = [];
+  let prev = null;
+
+  for (const m of msgs) {
+    const t = at(m.sent_at);
+    let marker = null;
+    if (!prev || localDay(new Date(prev.t)) !== localDay(new Date(t))) marker = dayLabel(m.sent_at, now);
+    else if (t - prev.t >= GAP_MS) marker = clockLabel(m.sent_at);
+    if (marker) items.push({ key: `marker:${m.id}`, kind: 'marker', label: marker });
+
+    const joins = !marker && prev && prev.owner === m.owner_email?.toLowerCase() && t - prev.t < GROUP_MS;
+    const item = { key: m.id, kind: 'msg', m, place: 'single' };
+    if (joins) {
+      const before = items[items.length - 1];
+      before.place = before.place === 'single' ? 'first' : 'middle';
+      item.place = 'last';
+    }
+    items.push(item);
+    prev = { t, owner: m.owner_email?.toLowerCase() };
+  }
+  return items;
+}
+
+// ---- reactions --------------------------------------------------------------------
+
+/** The bar a long-press or a photo's viewer offers. Double-tap is always the first. */
+export const REACTIONS = ['❤️', '🔥', '😍', '😘', '🥵', '😈', '😂', '👍'];
+
+/**
+ * Each person's current reaction to a message: the newest live row per person.
+ * Two phones reacting offline can leave two rows for one person (see the
+ * schema); only the newest counts.
+ */
+export function reactionsFor(reactions, messageId) {
+  const newest = new Map();
+  for (const r of reactions ?? []) {
+    if (r.deleted_at || r.message_id !== messageId) continue;
+    const who = r.owner_email?.toLowerCase();
+    if (!newest.has(who) || at(r.updated_at) > at(newest.get(who).updated_at)) newest.set(who, r);
+  }
+  return [...newest.values()].sort((a, b) => at(a.updated_at) - at(b.updated_at));
+}
+
+/**
+ * React, change your reaction, or — the same emoji again — take it back.
+ * Your own rows only; stale duplicates from another phone are tombstoned too,
+ * so taking a reaction back never leaves an older one showing.
+ */
+export async function react({ reactions, messageId, emoji, ownerEmail }) {
+  const me = String(ownerEmail ?? '').toLowerCase();
+  const mine = (reactions ?? []).filter((r) => !r.deleted_at && r.message_id === messageId
+    && r.owner_email?.toLowerCase() === me)
+    .sort((a, b) => at(b.updated_at) - at(a.updated_at));
+  const [current, ...stale] = mine;
+  const now = new Date().toISOString();
+
+  for (const r of stale) await local.save('message_reactions', { ...r, deleted_at: now }, r.owner_email);
+
+  let row;
+  if (current?.emoji === emoji) {
+    row = await local.save('message_reactions', { ...current, deleted_at: now }, current.owner_email);
+  } else if (current) {
+    row = await local.save('message_reactions', { ...current, emoji }, current.owner_email);
+  } else {
+    row = await local.save('message_reactions', { message_id: messageId, emoji }, ownerEmail);
+  }
+  sync.nudge();
+  return row;
+}
+
+// ---- typing ---------------------------------------------------------------------
+
+/** How long "typing…" stays up after the last keystroke signal. */
+export const TYPING_MS = 5000;
+/** Don't signal more often than this while someone keeps typing. */
+const TYPING_EVERY_MS = 2500;
+
+/**
+ * Who a typing signal is from, without putting an email on the wire: the
+ * channel is broadcast, so anything in it is readable by anyone who knows the
+ * name. A short hash is enough to tell the two of you apart.
+ */
+export async function typingTag(email) {
+  const bytes = new TextEncoder().encode(String(email ?? '').toLowerCase());
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(hash)].slice(0, 6).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * "Typing…" both ways, while the conversation is open. Nothing is stored:
+ * signals go over a Realtime broadcast and are forgotten. onChange(true) when
+ * the other person starts, and false when they stop, send, or go quiet for
+ * TYPING_MS. Returns { typing(), stopped(), close() } for this side.
+ */
+export function typingChannel({ myEmail, partnerEmail, onChange }) {
+  let theirs = null;
+  let mine = null;
+  let lastSent = 0;
+  let quiet = null;
+  const ready = Promise.all([typingTag(myEmail), typingTag(partnerEmail)])
+    .then(([m, t]) => { mine = m; theirs = t; });
+
+  const set = (on) => {
+    clearTimeout(quiet);
+    if (on) quiet = setTimeout(() => onChange(false), TYPING_MS);
+    onChange(on);
+  };
+
+  const channel = supabase.channel('plates-typing', { config: { broadcast: { self: false } } })
+    .on('broadcast', { event: 'typing' }, ({ payload } = {}) => {
+      if (theirs && payload?.from === theirs) set(Boolean(payload.on));
+    })
+    .subscribe();
+
+  const send = async (on) => {
+    await ready;
+    Promise.resolve(channel.send?.({ type: 'broadcast', event: 'typing', payload: { from: mine, on } }))
+      .catch(() => {});
+  };
+
+  return {
+    typing() {
+      const now = Date.now();
+      if (now - lastSent < TYPING_EVERY_MS) return;
+      lastSent = now;
+      send(true);
+    },
+    stopped() {
+      if (!lastSent) return;
+      lastSent = 0;
+      send(false);
+    },
+    close() {
+      clearTimeout(quiet);
+      if (lastSent) send(false);
+      Promise.resolve(supabase.removeChannel?.(channel)).catch(() => {});
+    },
+  };
+}
+
 /** Messages to me that arrived after I last looked. My own never count. */
 export function unreadCount(rows, email, readAt) {
   const me = String(email ?? '').toLowerCase();
@@ -172,13 +346,15 @@ export async function purgeUnsent() {
  * same row cannot fight. Returns the unsubscribe.
  */
 export function listen(onChange) {
+  const apply = (table) => async (payload) => {
+    const row = payload?.new;
+    if (!row?.id) return;
+    const applied = await local.putManyLocalIfNewer(table, [row]);
+    if (applied) onChange(row);
+  };
   const channel = supabase.channel('plates-messages')
-    .on('postgres_changes', { event: '*', schema: 'plates', table: 'messages' }, async (payload) => {
-      const row = payload?.new;
-      if (!row?.id) return;
-      const applied = await local.putManyLocalIfNewer('messages', [row]);
-      if (applied) onChange(row);
-    })
+    .on('postgres_changes', { event: '*', schema: 'plates', table: 'messages' }, apply('messages'))
+    .on('postgres_changes', { event: '*', schema: 'plates', table: 'message_reactions' }, apply('message_reactions'))
     .subscribe();
 
   return () => { Promise.resolve(supabase.removeChannel?.(channel)).catch(() => {}); };

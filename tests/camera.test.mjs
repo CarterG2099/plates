@@ -473,10 +473,11 @@ test('no chat camera problem ever points at the phone camera', () => {
   assert.match(camera.problem({ name: 'NotAllowedError' }), /phone camera/, 'progress photos still offer it');
 });
 
-test('the message box has Camera (in the page) beside Library', () => {
+test('the message box has a camera icon (in the page) beside a library icon', () => {
   const chat = html.slice(html.indexOf('<form class="chat-compose"'), html.indexOf('</form>', html.indexOf('<form class="chat-compose"')));
-  assert.match(chat, /<button type="button" class="btn" @click="openCamera\('chat'\)" aria-label="Take a photo">Camera<\/button>/);
-  assert.match(chat, /<label class="btn" for="pm-photo"[^>]*>Library<\/label>/);
+  assert.match(chat, /<button type="button" class="chat-icon" @click="openCamera\('chat'\)" aria-label="Take a photo">\s*<svg/);
+  assert.match(chat, /<label class="chat-icon" for="pm-photo" @click="pickerHeld = true" aria-label="Send a photo from the library">\s*<svg/);
+  assert.doesNotMatch(chat, />(Camera|Library|Photo|Send)</, 'icons, not words');
 });
 
 test('the camera screen in chat mode: Use photo, no poses, no Together, no phone-camera button', () => {

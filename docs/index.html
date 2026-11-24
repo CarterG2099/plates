@@ -3377,67 +3377,143 @@
              Full screen over the stats page, opened only from the unlocked
              photos card. relockPhotos() closes it, and the x-if checks the lock
              too, so nothing here can outlive the curtain. -->
+        <!-- Its own dark look, whatever the rest of Plates is wearing. Bubbles
+             from one person within five minutes tuck into a run; a pill marks a
+             new day or a quiet hour, and a tap on a message shows its time.
+             Every photo is blurred until held: press and it uncovers, let go
+             and it covers again. Tap a photo to see it full screen (still
+             blurred until held); double-tap anything to heart it; hold a text
+             bubble for the reactions, Copy and Unsend. -->
         <template x-if="chatOpen && !photosLocked">
           <div class="chat" role="dialog" aria-label="Messages" x-effect="chatSeen()">
             <div class="chat-head">
-              <button class="tap" @click="closeChat()" aria-label="Close">×</button>
-              <h2 x-text="chatPartner?.display_name || 'Messages'"></h2>
-              <button class="btn" @click="relockPhotos()">Lock</button>
+              <button class="chat-icon" @click="closeChat()" aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+              </button>
+              <div class="chat-who">
+                <h2 x-text="chatPartner?.display_name || 'Messages'"></h2>
+                <span class="chat-who-sub">Only you two</span>
+              </div>
+              <button class="chat-icon" @click="relockPhotos()" aria-label="Lock">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
+              </button>
             </div>
 
             <div class="chat-list">
-              <p class="empty" x-show="!chatThread.length">Nothing here yet. Only the two of you can see this.</p>
-              <template x-for="m in chatThread" :key="m.id">
-                <div class="chat-row" :class="chatMine(m) && 'is-mine'">
-                  <button class="chat-bubble" @click="chatViewing = m">
-                    <template x-if="m.photo_path">
-                      <span class="chat-photo">
-                        <img x-show="chatPhotoUrl(m)" :src="chatPhotoUrl(m) || null" alt="Photo">
-                      </span>
-                    </template>
-                    <span class="chat-text" x-show="m.body" x-text="m.body"></span>
-                  </button>
-                  <span class="chat-time" x-text="chatTime(m)"></span>
+              <p class="chat-empty" x-show="!chatThread.length">Nothing here yet. Only the two of you can see this.</p>
+              <template x-for="item in chatItems" :key="item.key">
+                <div class="chat-item">
+                  <template x-if="item.kind === 'marker'">
+                    <div class="chat-marker" x-text="item.label"></div>
+                  </template>
+                  <template x-if="item.kind === 'msg'">
+                    <div class="chat-row" :class="[chatMine(item.m) ? 'is-mine' : 'is-theirs', `is-${item.place}`]"
+                         @contextmenu.prevent>
+                      <span class="chat-time" x-show="chatTimeFor === item.m.id" x-text="chatClock(item.m)"></span>
+                      <template x-if="item.m.photo_path">
+                        <div class="chat-photo" :class="chatRevealed === item.m.id && 'is-revealed'"
+                             @pointerdown="chatPressStart(item.m, $event, 'photo')"
+                             @pointermove="chatPressMove($event)"
+                             @pointerup="chatPressEnd(item.m)"
+                             @pointercancel="chatPressCancel()" @pointerleave="chatPressCancel()">
+                          <img x-show="chatPhotoUrl(item.m)" :src="chatPhotoUrl(item.m) || null" alt="Photo, blurred. Hold to see it." draggable="false">
+                          <span class="chat-hold-hint" aria-hidden="true">Hold to see</span>
+                        </div>
+                      </template>
+                      <div class="chat-bubble" x-show="item.m.body" x-text="item.m.body"
+                           @pointerdown="chatPressStart(item.m, $event, 'text')"
+                           @pointermove="chatPressMove($event)"
+                           @pointerup="chatPressEnd(item.m)"
+                           @pointercancel="chatPressCancel()" @pointerleave="chatPressCancel()"></div>
+                      <div class="chat-reactions" x-show="chatReactions(item.m).length">
+                        <template x-for="r in chatReactions(item.m)" :key="r.id">
+                          <button class="chat-reaction" :class="chatReactedBy(r) && 'is-mine'"
+                                  @click="chatReactedBy(r) && chatReact(item.m, r.emoji)"
+                                  :aria-label="chatReactedBy(r) ? `Your ${r.emoji}, tap to remove` : r.emoji"
+                                  x-text="r.emoji"></button>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
                 </div>
               </template>
               <div x-ref="chatEnd"></div>
             </div>
 
-            <form class="chat-compose" @submit.prevent="sendChat()">
+            <div class="chat-dock">
+              <div class="chat-typing" x-show="chatTheyType" aria-live="polite">
+                <span class="chat-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span x-text="`${chatPartner?.display_name || 'They'} is typing…`"></span>
+              </div>
               <template x-if="chatPhoto">
-                <div class="chat-pending">
-                  <img :src="chatPhoto.url" alt="Photo to send">
-                  <button type="button" class="tap" @click="clearChatPhoto()" aria-label="Remove photo">×</button>
+                <div class="chat-pending" :class="chatRevealed === 'pending' && 'is-revealed'"
+                     @pointerdown="chatHold('pending')" @pointerup="chatRelease()"
+                     @pointercancel="chatRelease()" @pointerleave="chatRelease()" @contextmenu.prevent>
+                  <img :src="chatPhoto.url" alt="Photo to send, blurred. Hold to see it." draggable="false">
+                  <button type="button" class="chat-pending-x" @click="clearChatPhoto()" aria-label="Remove photo">×</button>
                 </div>
               </template>
-              <div class="chat-compose-row">
-                <button type="button" class="btn" @click="openCamera('chat')" aria-label="Take a photo">Camera</button>
-                <label class="btn" for="pm-photo" @click="pickerHeld = true" aria-label="Send a photo from the library">Library</label>
-                <input type="text" x-model="chatText" placeholder="Message" autocomplete="off"
-                       aria-label="Message" enterkeyhint="send">
-                <button class="btn btn-primary" type="submit"
-                        :disabled="chatBusy || (!chatText.trim() && !chatPhoto)"
-                        x-text="chatBusy ? 'Sending…' : 'Send'"></button>
-              </div>
-            </form>
+              <form class="chat-compose" @submit.prevent="sendChat()">
+                <button type="button" class="chat-icon" @click="openCamera('chat')" aria-label="Take a photo">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.2l1.3-2h8l1.3 2h1.2A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12.4" r="3.4"/></svg>
+                </button>
+                <label class="chat-icon" for="pm-photo" @click="pickerHeld = true" aria-label="Send a photo from the library">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2.6"/><circle cx="9" cy="10.5" r="1.7"/><path d="M4.5 16.6 9.6 12l3.4 3 2.6-2.1 4 4"/></svg>
+                </label>
+                <textarea class="chat-box" x-ref="chatBox" rows="1" x-model="chatText" placeholder="Message"
+                          autocomplete="off" aria-label="Message"
+                          @input="chatInput($event)" @keydown="chatKey($event)" @blur="chatTyping?.stopped()"></textarea>
+                <button class="chat-icon chat-send" type="submit" aria-label="Send"
+                        :disabled="chatBusy || (!chatText.trim() && !chatPhoto)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"/><path d="M12.5 6.5 19 12l-6.5 5.5"/></svg>
+                </button>
+              </form>
+            </div>
           </div>
         </template>
 
-        <!-- One message: the photo full size, and Unsend on your own. -->
-        <template x-if="chatViewing && chatOpen && !photosLocked">
-          <div class="sheet-backdrop is-chat" @click.self="chatViewing = null">
-            <div class="sheet" x-init="$swipe($el, () => { chatViewing = null })">
-              <div class="grabber"></div>
-              <div class="sheet-head">
-                <h2 x-text="chatTime(chatViewing)"></h2>
-                <button class="tap" @click="chatViewing = null" aria-label="Close">×</button>
+        <!-- A held text bubble: reactions above it, Copy and Unsend below. -->
+        <template x-if="chatMenu && chatOpen && !photosLocked">
+          <div class="chat-scrim" @click.self="chatMenu = null">
+            <div class="chat-menu">
+              <div class="chat-reaction-bar">
+                <template x-for="e in chatReactionBar" :key="e">
+                  <button @click="chatReact(chatMenu, e)" x-text="e" :aria-label="`React ${e}`"></button>
+                </template>
               </div>
-              <img class="photo-full" x-show="chatViewing.photo_path"
-                   :src="chatPhotoUrl(chatViewing) || null" alt="Photo">
-              <p class="chat-sheet-text" x-show="chatViewing.body" x-text="chatViewing.body"></p>
-              <button class="btn btn-danger btn-block" x-show="chatMine(chatViewing)"
-                      @click="unsendChat(chatViewing)">Unsend</button>
+              <div class="chat-bubble chat-menu-bubble" :class="chatMine(chatMenu) && 'is-mine'" x-text="chatMenu.body"></div>
+              <div class="chat-actions">
+                <span class="chat-actions-time" x-text="chatTime(chatMenu)"></span>
+                <button @click="chatCopy(chatMenu)">Copy</button>
+                <button class="is-danger" x-show="chatMine(chatMenu)" @click="unsendChat(chatMenu)">Unsend</button>
+              </div>
             </div>
+          </div>
+        </template>
+
+        <!-- A photo full screen: blurred until held, with the reactions,
+             its caption, and Unsend on your own. -->
+        <template x-if="chatViewing && chatOpen && !photosLocked">
+          <div class="chat-viewer" role="dialog" aria-label="Photo">
+            <div class="chat-viewer-head">
+              <button class="chat-icon" @click="chatViewing = null" aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+              </button>
+              <span x-text="chatTime(chatViewing)"></span>
+            </div>
+            <div class="chat-viewer-photo" :class="chatRevealed === 'viewer' && 'is-revealed'"
+                 @pointerdown="chatHold('viewer')" @pointerup="chatRelease()"
+                 @pointercancel="chatRelease()" @pointerleave="chatRelease()" @contextmenu.prevent>
+              <img :src="chatPhotoUrl(chatViewing) || null" alt="Photo, blurred. Hold to see it." draggable="false">
+              <span class="chat-hold-hint" aria-hidden="true">Hold to see</span>
+            </div>
+            <p class="chat-viewer-text" x-show="chatViewing.body" x-text="chatViewing.body"></p>
+            <div class="chat-reaction-bar">
+              <template x-for="e in chatReactionBar" :key="e">
+                <button @click="chatReact(chatViewing, e)" x-text="e" :aria-label="`React ${e}`"></button>
+              </template>
+            </div>
+            <button class="chat-unsend" x-show="chatMine(chatViewing)" @click="unsendChat(chatViewing)">Unsend</button>
           </div>
         </template>
 

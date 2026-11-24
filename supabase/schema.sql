@@ -1062,3 +1062,43 @@ create trigger messages_notify after insert on plates.messages
 alter table plates.exercise_notes
   add column if not exists loads_plates boolean,
   add column if not exists start_weight_lb numeric check (start_weight_lb >= 0 and start_weight_lb <= 500);
+
+-- ---- message reactions --------------------------------------------------------
+--
+-- One row per reaction, owned by whoever reacted, so each of you only ever
+-- writes your own rows and the usual one-owner sync applies. Changing your
+-- reaction updates the row; taking it back tombstones it. There is no unique
+-- (message, person) constraint on purpose: two phones reacting offline would
+-- make the second push fail forever in the outbox. The app shows the newest
+-- live row per person instead.
+--
+-- Readable only by the two people in the message. The exists() below runs
+-- under messages_read, so it already holds to sender-or-recipient.
+create table if not exists plates.message_reactions (
+  id          uuid primary key,
+  owner_email text not null,          -- who reacted
+  message_id  uuid not null,
+  emoji       text not null check (char_length(emoji) between 1 and 16),
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+
+create index if not exists message_reactions_updated_at on plates.message_reactions (updated_at);
+
+alter table plates.message_reactions enable row level security;
+
+create policy message_reactions_read on plates.message_reactions
+  for select using (
+    plates.is_member()
+    and exists (select 1 from plates.messages m where m.id = message_id)
+  );
+create policy message_reactions_write on plates.message_reactions
+  for insert with check (
+    plates.is_member() and plates.is_owner(owner_email)
+    and exists (select 1 from plates.messages m where m.id = message_id)
+  );
+create policy message_reactions_update on plates.message_reactions
+  for update using (plates.is_owner(owner_email))
+  with check (plates.is_owner(owner_email));
+
+alter publication supabase_realtime add table plates.message_reactions;

@@ -32,6 +32,7 @@ const PULL_ORDER = [
   'shopping_items',
   'walmart_items',
   'messages',
+  'message_reactions',
 ];
 
 const PAGE_SIZE = 1000;
