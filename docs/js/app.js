@@ -19,6 +19,7 @@ import * as scanner from './scanner.js';
 import * as photo from './photo.js';
 import * as progress from './progress.js';
 import * as messages from './messages.js';
+import * as e2ee from './e2ee.js';
 import * as camera from './camera.js';
 import * as workout from './workout.js';
 import { importHevy } from './import-hevy.js';
@@ -4925,6 +4926,14 @@ let cameraStream = null;
 /** The clip being recorded in the chat camera, and the ticker for its clock. */
 let cameraRecorder = null;
 let cameraTicker = null;
+/**
+ * The conversation's keys while it is open: this phone's identity (with its
+ * non-extractable private key) and pair keys by the other person's key id.
+ * Outside Alpine's store on purpose — CryptoKeys don't belong in a Proxy — and
+ * dropped when the conversation closes or locks.
+ */
+let chatIdentity = null;
+const chatPairs = new Map();
 
 Alpine.data('statsPage', () => ({
   weighing: false,
@@ -6176,7 +6185,18 @@ Alpine.data('statsPage', () => ({
     });
   },
 
-  chatIsVideo(m) { return messages.isVideo(m?.photo_path); },
+  chatIsVideo(m) {
+    if (m?.enc) return /^video\//.test(this.chatOpened[m.id]?.media ?? '');
+    return messages.isVideo(m?.photo_path);
+  },
+
+  /** A message's text: as stored, or unlocked if it is sealed. */
+  chatBody(m) {
+    if (!m?.enc) return m?.body ?? '';
+    const opened = this.chatOpened[m.id];
+    if (!opened) return '';
+    return opened.failed ? '🔒 This message can’t be unlocked on this phone.' : (opened.text ?? '');
+  },
 
   /** Hold on the pending photo or the full-screen one: uncovered until let go. */
   chatHold(what) { this.chatRevealed = what; },
@@ -6185,7 +6205,7 @@ Alpine.data('statsPage', () => ({
   async chatCopy(m) {
     this.chatMenu = null;
     try {
-      await navigator.clipboard.writeText(m.body ?? '');
+      await navigator.clipboard.writeText(this.chatBody(m) ?? '');
       Alpine.store('ui').flash('Copied');
     } catch {
       Alpine.store('ui').flash('Could not copy');
@@ -6223,9 +6243,209 @@ Alpine.data('statsPage', () => ({
     return messages.partnerFor(Alpine.store('auth').members, this.email);
   },
 
+  // ---- end-to-end encryption ------------------------------------------------------
+  //
+  // `chatCrypto` is where this phone stands:
+  //   checking      looking up keys
+  //   setup         I have no key yet: make one, save the chat key
+  //   saved-check   made; the chat key is still on screen until I say it's saved
+  //   unlock        I have a key, this phone doesn't: let the manager fill it in
+  //   waiting       the other person hasn't set up, so there's no one to lock for
+  //   needs-network offline on a phone that has never been unlocked
+  //   ready         sealing and opening
+  // Sending is only offered when ready, so nothing goes out unlocked by mistake.
+
+  chatCrypto: 'checking',
+  chatNewKey: '',        // the chat key being set up, in memory until it's saved
+  chatKeyEntry: '',      // what the password manager filled in, to unlock
+  chatCryptoBusy: false,
+  chatCryptoError: '',
+  chatPartnerChanged: false,
+  chatPartnerVerified: false,
+  chatSafety: '',        // the safety code while its sheet is open
+  chatOpened: {},        // message id → { text, media } | { failed: true }
+
+  async loadChatCrypto() {
+    const me = this.email.toLowerCase();
+    const partner = this.chatPartner?.email?.toLowerCase();
+    if (!partner) return;
+    this.chatCryptoError = '';
+
+    chatIdentity = await e2ee.savedIdentity();
+    if (chatIdentity && chatIdentity.email !== me) chatIdentity = null;   // someone else's, on a shared phone
+
+    let server = null;
+    try { server = await e2ee.fetchPublicKeys([me, partner]); } catch { server = null; }
+
+    if (server) {
+      const mine = server[me];
+      if (!mine) {
+        chatIdentity = null;
+        if (this.chatCrypto !== 'setup') this.chatNewKey = e2ee.newChatKey();
+        this.chatCrypto = 'setup';
+        return;
+      }
+      if (!chatIdentity || chatIdentity.keyId !== mine.keyId) {
+        chatIdentity = null;
+        this.chatCrypto = 'unlock';
+        return;
+      }
+      if (server[partner]) {
+        const changed = await e2ee.keepPartner(partner, server[partner]);
+        if (changed) { this.chatPartnerChanged = true; chatPairs.clear(); }
+      }
+    } else if (!chatIdentity) {
+      this.chatCrypto = 'needs-network';
+      return;
+    }
+
+    const known = await e2ee.savedPartner();
+    if (!known || known.email !== partner) { this.chatCrypto = 'waiting'; return; }
+    this.chatPartnerVerified = Boolean(known.verified);
+    this.chatCrypto = 'ready';
+    this.chatUnlockPending();
+  },
+
+  /**
+   * Make my keys and put them on the server. Submitting the form is also what
+   * makes the password manager offer to save the chat key; the submit itself
+   * goes nowhere. The key stays on screen until I confirm it is saved.
+   */
+  async setUpChatCrypto() {
+    if (this.chatCryptoBusy || !this.chatNewKey) return;
+    this.chatCryptoBusy = true;
+    this.chatCryptoError = '';
+    try {
+      const me = this.email.toLowerCase();
+      const identity = await e2ee.createIdentity(this.chatNewKey);
+      await e2ee.publish(me, identity);
+      await e2ee.keepIdentity(me, identity);
+      chatIdentity = { email: me, ...identity };
+      this.chatCrypto = 'saved-check';
+    } catch (error) {
+      this.chatCryptoError = describeError(error) || 'Could not turn on encryption — are you online?';
+    } finally {
+      this.chatCryptoBusy = false;
+    }
+  },
+
+  async chatKeySaved() {
+    this.chatNewKey = '';
+    this.chatCrypto = 'checking';
+    await this.loadChatCrypto();
+  },
+
+  async copyChatKey() {
+    try {
+      await navigator.clipboard.writeText(this.chatNewKey);
+      Alpine.store('ui').flash(`Copied. Save it as the password of “${e2ee.KEY_LABEL}”.`);
+    } catch {
+      Alpine.store('ui').flash('Could not copy');
+    }
+  },
+
+  /** A new phone: the password manager fills the chat key, which opens my locked private key. */
+  async unlockChatCrypto() {
+    if (this.chatCryptoBusy) return;
+    this.chatCryptoBusy = true;
+    this.chatCryptoError = '';
+    const entered = this.chatKeyEntry;
+    this.chatKeyEntry = '';
+    try {
+      const me = this.email.toLowerCase();
+      const vault = await e2ee.fetchVault(me);
+      if (!vault) { this.chatCrypto = 'checking'; await this.loadChatCrypto(); return; }
+      const privateKey = await e2ee.unlockIdentity(vault, entered);
+      const mine = (await e2ee.fetchPublicKeys([me]))[me];
+      await e2ee.keepIdentity(me, { keyId: vault.keyId, publicKey: mine.publicKey, privateKey });
+      this.chatCrypto = 'checking';
+      await this.loadChatCrypto();
+    } catch (error) {
+      this.chatCryptoError = describeError(error) || 'Could not unlock — are you online?';
+    } finally {
+      this.chatCryptoBusy = false;
+    }
+  },
+
+  /** Lost the chat key everywhere: a new one. What the old one locked stays locked. */
+  startChatCryptoOver() {
+    if (!confirm('Make a new chat key? Messages locked with the old one can’t be opened again on any phone.')) return;
+    this.chatNewKey = e2ee.newChatKey();
+    this.chatCryptoError = '';
+    this.chatCrypto = 'setup';
+  },
+
+  async showSafetyCode() {
+    const partner = await e2ee.savedPartner();
+    if (!chatIdentity || !partner) return;
+    this.chatSafety = await e2ee.safetyCode(chatIdentity.publicKey, partner.publicKey);
+  },
+
+  async confirmSafetyCode() {
+    await e2ee.markVerified();
+    this.chatPartnerVerified = true;
+    this.chatPartnerChanged = false;
+    this.chatSafety = '';
+  },
+
+  /** The pair key for a sealed row: mine with whichever of their keys it names. */
+  async chatPairFor(enc) {
+    if (!chatIdentity || !enc) return null;
+    const mine = chatIdentity.keyId;
+    const theirs = enc.from === mine ? enc.to : enc.to === mine ? enc.from : null;
+    if (!theirs) return null;   // locked for a key this phone doesn't have
+    if (!chatPairs.has(theirs)) {
+      const publicKey = await e2ee.partnerKey(theirs);
+      if (!publicKey) return null;
+      chatPairs.set(theirs, await e2ee.pairKey(chatIdentity.privateKey, publicKey));
+    }
+    return chatPairs.get(theirs);
+  },
+
+  /** What sending passes to messages.js: seal with the current pair key. */
+  async chatLock() {
+    if (this.chatCrypto !== 'ready' || !chatIdentity) throw new Error('Encryption isn’t set up on this phone yet.');
+    const partner = await e2ee.savedPartner();
+    const ids = { from: chatIdentity.keyId, to: partner.keyId };
+    const pair = await this.chatPairFor(ids);
+    if (!pair) throw new Error('Could not lock for the other person’s key.');
+    return (content) => e2ee.seal(pair, content, ids);
+  },
+
+  /** Unlock any sealed rows not yet opened. Text lives only in memory. */
+  async chatUnlockPending() {
+    if (this.chatCrypto !== 'ready') return;
+    for (const m of this.chatThread) {
+      if (!m.enc || this.chatOpened[m.id]) continue;
+      let opened;
+      try {
+        const pair = await this.chatPairFor(m.enc);
+        opened = pair ? await e2ee.open(pair, m) : { failed: true };
+      } catch {
+        opened = { failed: true };
+      }
+      if (!this.chatOpen) return;
+      this.chatOpened = { ...this.chatOpened, [m.id]: opened };
+    }
+  },
+
+  /** A message's file, unlocked if sealed. */
+  async chatFile(m) {
+    const stored = await messages.photoBlob(m.photo_path);
+    if (!m.enc) return stored;
+    const pair = await this.chatPairFor(m.enc);
+    if (!pair) throw new Error('Locked for another key');
+    const opened = this.chatOpened[m.id] ?? await e2ee.open(pair, m);
+    return e2ee.openFile(pair, m, stored, opened.media);
+  },
+
   openChat() {
     if (this.photosLocked || !this.chatPartner) return;
     this.chatOpen = true;
+    this.chatCrypto = 'checking';
+    this.loadChatCrypto().catch((error) => {
+      this.chatCryptoError = describeError(error) || 'Could not check encryption';
+    });
     this.stopChatListen?.();
     this.stopChatListen = messages.listen(() => Alpine.store('data').refreshCore());
     this.chatTyping?.close();
@@ -6253,6 +6473,14 @@ Alpine.data('statsPage', () => ({
     this.chatOpen = false;
     this.chatViewing = null;
     this.chatText = '';
+    // Keys and unlocked text leave memory with the conversation.
+    chatIdentity = null;
+    chatPairs.clear();
+    this.chatOpened = {};
+    this.chatNewKey = '';
+    this.chatKeyEntry = '';
+    this.chatSafety = '';
+    this.chatPartnerChanged = false;
     this.clearChatPhoto();
     for (const url of Object.values(this.chatUrls)) URL.revokeObjectURL(url);
     this.chatUrls = {};
@@ -6264,6 +6492,7 @@ Alpine.data('statsPage', () => ({
   async chatSeen() {
     const rows = this.chatThread;
     if (!this.chatOpen) return;
+    this.chatUnlockPending();
     this.chatReadAt = await messages.markRead(rows);
     Alpine.store('ui').messagesReadAt = this.chatReadAt;
     await this.$nextTick?.();
@@ -6289,7 +6518,7 @@ Alpine.data('statsPage', () => ({
 
     if (!this.chatUrlQueue.has(m.id)) {
       this.chatUrlQueue.add(m.id);
-      messages.photoBlob(m.photo_path)
+      this.chatFile(m)
         .then((blob) => {
           if (!this.chatOpen) return; // closed or relocked while downloading
           this.chatUrls = { ...this.chatUrls, [m.id]: URL.createObjectURL(blob) };
@@ -6342,14 +6571,15 @@ Alpine.data('statsPage', () => ({
 
     this.chatBusy = true;
     try {
+      const lock = await this.chatLock();
       if (this.chatPhoto?.kind === 'video') {
-        await messages.sendVideo({ blob: this.chatPhoto.file, text, ownerEmail: this.email, recipientEmail });
+        await messages.sendVideo({ blob: this.chatPhoto.file, text, ownerEmail: this.email, recipientEmail, lock });
         this.clearChatPhoto();
       } else if (this.chatPhoto) {
-        await messages.sendPhoto({ file: this.chatPhoto.file, text, ownerEmail: this.email, recipientEmail });
+        await messages.sendPhoto({ file: this.chatPhoto.file, text, ownerEmail: this.email, recipientEmail, lock });
         this.clearChatPhoto();
       } else {
-        await messages.sendText({ text, ownerEmail: this.email, recipientEmail });
+        await messages.sendText({ text, ownerEmail: this.email, recipientEmail, lock });
       }
       this.chatText = '';
       this.chatTyping?.stopped();

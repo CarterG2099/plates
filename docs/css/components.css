@@ -941,6 +941,43 @@
 .chat-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .chat-who h2 { margin: 0; font-size: var(--text-lg); color: var(--chat-text); }
 .chat-who-sub { font-size: var(--text-xs); color: var(--chat-muted); }
+button.chat-who-sub { align-self: flex-start; padding: 0; border: 0; background: none; font-family: inherit; cursor: pointer; }
+
+/* ---- encryption: setting up, unlocking, waiting ---- */
+.chat-crypto { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); color: var(--chat-muted); }
+.chat-crypto p { margin: 0; }
+.chat-crypto strong { color: var(--chat-text); }
+.chat-crypto-form { display: flex; flex-direction: column; gap: var(--space-2); }
+.chat-crypto-go, .chat-crypto-alt {
+  padding: 12px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--chat-accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.chat-crypto-alt { background: var(--chat-surface); color: var(--chat-text); }
+.chat-crypto-go:disabled { opacity: .5; cursor: default; }
+.chat-crypto-link { align-self: center; padding: 6px; border: 0; background: none; color: var(--chat-muted); font: inherit; text-decoration: underline; cursor: pointer; }
+.chat-crypto-error { color: #ff6b81; }
+.chat-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--chat-surface);
+  font-size: 12px;
+  color: var(--chat-muted);
+}
+.chat-notice span { flex: 1; }
+.chat-notice button { flex: none; padding: 6px 10px; border: 0; border-radius: 999px; background: var(--chat-theirs); color: var(--chat-text); font: inherit; font-weight: 700; cursor: pointer; }
+.chat-safety { text-align: center; color: var(--chat-muted); }
+.chat-safety h2 { margin: 0; color: var(--chat-text); }
+.chat-safety p { margin: 0; }
+.chat-safety-code { font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-weight: 700; font-size: 28px; word-spacing: .3em; color: var(--chat-text) !important; }
 
 /* Round icon buttons: header, composer. 42px, the Givi Den size. */
 .chat-icon {

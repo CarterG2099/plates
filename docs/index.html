@@ -3604,7 +3604,8 @@
               </button>
               <div class="chat-who">
                 <h2 x-text="chatPartner?.display_name || 'Messages'"></h2>
-                <span class="chat-who-sub">Only you two</span>
+                <button class="chat-who-sub" x-show="chatCrypto === 'ready'" @click="showSafetyCode()">🔒 End-to-end encrypted</button>
+                <span class="chat-who-sub" x-show="chatCrypto !== 'ready'">Only you two</span>
               </div>
               <button class="chat-icon" @click="lockFromChat()" aria-label="Lock">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
@@ -3643,7 +3644,7 @@
                         </div>
                       </template>
                       <span class="chat-photo-error" x-show="chatUrlFailed[item.m.id]" x-text="chatUrlFailed[item.m.id]"></span>
-                      <div class="chat-bubble" x-show="item.m.body" x-text="item.m.body"
+                      <div class="chat-bubble" x-show="chatBody(item.m)" x-text="chatBody(item.m)"
                            @pointerdown="chatPressStart(item.m, $event, 'text')"
                            @pointermove="chatPressMove($event)"
                            @pointerup="chatPressEnd(item.m)"
@@ -3664,11 +3665,67 @@
             </div>
 
             <div class="chat-dock">
+              <!-- Until this phone can lock messages for both of you, the
+                   composer is replaced by what it takes to get there. The key
+                   forms are real username + password pairs so the password
+                   manager saves and fills the chat key; neither submits
+                   anywhere. -->
+              <div class="chat-crypto" x-show="chatCrypto !== 'ready'">
+                <p x-show="chatCrypto === 'checking'">Checking encryption…</p>
+
+                <template x-if="chatCrypto === 'setup'">
+                  <form class="chat-crypto-form" autocomplete="on" @submit.prevent="setUpChatCrypto()">
+                    <p><strong>Turn on end-to-end encryption.</strong> Your password manager will save a
+                       “Plates chat key”. On a new phone it fills it back in — nothing to remember.</p>
+                    <input class="chat-box" name="username" autocomplete="username" value="Plates chat key" aria-label="Key name">
+                    <input class="chat-box" name="password" type="password" autocomplete="new-password"
+                           x-model="chatNewKey" aria-label="Chat key">
+                    <button class="chat-crypto-go" type="submit" :disabled="chatCryptoBusy"
+                            x-text="chatCryptoBusy ? 'Turning on…' : 'Turn on encryption'"></button>
+                  </form>
+                </template>
+
+                <template x-if="chatCrypto === 'saved-check'">
+                  <div class="chat-crypto-form">
+                    <p><strong>Check your password manager has “Plates chat key”.</strong> If it didn’t offer to
+                       save it, copy the key and add it as a login for this site. Without it, a new phone
+                       can’t open your messages.</p>
+                    <button class="chat-crypto-alt" @click="copyChatKey()">Copy key</button>
+                    <button class="chat-crypto-go" @click="chatKeySaved()">It’s saved</button>
+                  </div>
+                </template>
+
+                <template x-if="chatCrypto === 'unlock'">
+                  <form class="chat-crypto-form" autocomplete="on" @submit.prevent="unlockChatCrypto()">
+                    <p><strong>Unlock your messages on this phone.</strong> Tap the box and pick
+                       “Plates chat key” from your password manager.</p>
+                    <input class="chat-box" name="username" autocomplete="username" value="Plates chat key" aria-label="Key name">
+                    <input class="chat-box" name="password" type="password" autocomplete="current-password"
+                           x-model="chatKeyEntry" placeholder="Tap here, let it fill in" aria-label="Chat key">
+                    <button class="chat-crypto-go" type="submit" :disabled="chatCryptoBusy || !chatKeyEntry"
+                            x-text="chatCryptoBusy ? 'Unlocking…' : 'Unlock'"></button>
+                    <button type="button" class="chat-crypto-link" @click="startChatCryptoOver()">Lost your key? Start over</button>
+                  </form>
+                </template>
+
+                <p x-show="chatCrypto === 'waiting'"
+                   x-text="`${chatPartner?.display_name || 'The other person'} needs to open Messages once to turn on encryption. Until then, sending is paused.`"></p>
+                <p x-show="chatCrypto === 'needs-network'">Connect to the internet once to set up encryption on this phone.</p>
+                <p class="chat-crypto-error" x-show="chatCryptoError" x-text="chatCryptoError"></p>
+              </div>
+
+              <div class="chat-notice" x-show="chatCrypto === 'ready' && !chatPartnerVerified">
+                <span x-text="chatPartnerChanged
+                  ? `${chatPartner?.display_name ? `${chatPartner.display_name}’s` : 'Their'} key changed. Compare safety codes before sending anything private.`
+                  : `Compare safety codes with ${chatPartner?.display_name || 'them'} once, to be sure nobody is in between.`"></span>
+                <button @click="showSafetyCode()">Safety code</button>
+              </div>
+
               <div class="chat-typing" x-show="chatTheyType" aria-live="polite">
                 <span class="chat-dots" aria-hidden="true"><i></i><i></i><i></i></span>
                 <span x-text="`${chatPartner?.display_name || 'They'} is typing…`"></span>
               </div>
-              <template x-if="chatPhoto">
+              <template x-if="chatPhoto && chatCrypto === 'ready'">
                 <div class="chat-pending" :class="chatRevealed === 'pending' && 'is-revealed'"
                      @pointerdown="chatHold('pending')" @pointerup="chatRelease()"
                      @pointercancel="chatRelease()" @pointerleave="chatRelease()" @contextmenu.prevent>
@@ -3680,7 +3737,7 @@
                   <button type="button" class="chat-pending-x" @click="clearChatPhoto()" aria-label="Remove photo"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                 </div>
               </template>
-              <form class="chat-compose" @submit.prevent="sendChat()">
+              <form class="chat-compose" x-show="chatCrypto === 'ready'" @submit.prevent="sendChat()">
                 <button type="button" class="chat-icon" @click="openCamera('chat')" aria-label="Take a photo">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.2l1.3-2h8l1.3 2h1.2A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12.4" r="3.4"/></svg>
                 </button>
@@ -3699,6 +3756,22 @@
           </div>
         </template>
 
+        <!-- The safety code: the same twelve digits on both phones means nobody,
+             the server included, has swapped in a key of their own. -->
+        <template x-if="chatSafety && chatOpen && !photosLocked">
+          <div class="chat-scrim" @click.self="chatSafety = ''">
+            <div class="chat-menu chat-safety">
+              <h2>Safety code</h2>
+              <p class="chat-safety-code" x-text="chatSafety"></p>
+              <p x-text="`Compare this with ${chatPartner?.display_name || 'the other phone'}’s screen, in person. If it’s the same, only your two phones can read these messages.`"></p>
+              <div class="chat-actions">
+                <button @click="confirmSafetyCode()">They match</button>
+                <button @click="chatSafety = ''">Not now</button>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <!-- A held text bubble: reactions above it, Copy and Unsend below. -->
         <template x-if="chatMenu && chatOpen && !photosLocked">
           <div class="chat-scrim" @click.self="chatMenu = null">
@@ -3708,7 +3781,7 @@
                   <button @click="chatReact(chatMenu, e)" x-text="e" :aria-label="`React ${e}`"></button>
                 </template>
               </div>
-              <div class="chat-bubble chat-menu-bubble" :class="chatMine(chatMenu) && 'is-mine'" x-text="chatMenu.body"></div>
+              <div class="chat-bubble chat-menu-bubble" :class="chatMine(chatMenu) && 'is-mine'" x-text="chatBody(chatMenu)"></div>
               <div class="chat-actions">
                 <span class="chat-actions-time" x-text="chatTime(chatMenu)"></span>
                 <button @click="chatCopy(chatMenu)">Copy</button>
@@ -3741,7 +3814,7 @@
               </template>
               <span class="chat-hold-hint" aria-hidden="true" x-text="chatIsVideo(chatViewing) ? '▶ Hold to play' : 'Hold to see'"></span>
             </div>
-            <p class="chat-viewer-text" x-show="chatViewing.body" x-text="chatViewing.body"></p>
+            <p class="chat-viewer-text" x-show="chatBody(chatViewing)" x-text="chatBody(chatViewing)"></p>
             <div class="chat-reaction-bar">
               <template x-for="e in chatReactionBar" :key="e">
                 <button @click="chatReact(chatViewing, e)" x-text="e" :aria-label="`React ${e}`"></button>
