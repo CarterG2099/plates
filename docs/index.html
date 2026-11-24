@@ -3443,9 +3443,13 @@
                                    aria-label="Video, blurred. Hold to play it."
                                    x-effect="chatPlay($el, chatRevealed === item.m.id)"></video>
                           </template>
-                          <span class="chat-hold-hint" aria-hidden="true" x-text="chatIsVideo(item.m) ? '▶ Hold to play' : 'Hold to see'"></span>
+                          <span class="chat-hold-hint" aria-hidden="true"
+                                x-text="chatPhotoState(item.m) === 'failed' ? 'Couldn’t load · tap to try again'
+                                  : chatPhotoState(item.m) === 'loading' ? 'Loading…'
+                                  : chatIsVideo(item.m) ? '▶ Hold to play' : 'Hold to see'"></span>
                         </div>
                       </template>
+                      <span class="chat-photo-error" x-show="chatUrlFailed[item.m.id]" x-text="chatUrlFailed[item.m.id]"></span>
                       <div class="chat-bubble" x-show="item.m.body" x-text="item.m.body"
                            @pointerdown="chatPressStart(item.m, $event, 'text')"
                            @pointermove="chatPressMove($event)"

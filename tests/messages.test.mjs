@@ -502,15 +502,21 @@ test('my typing is signalled at most every few seconds, stopped once, and nothin
   const channel = fakeChannel();
   t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
   const typing = messages.typingChannel({ myEmail: ME, partnerEmail: AANA, onChange() {} });
+  // Signals wait on hashing the tags, which can take more than one tick under
+  // a full test run: wait for what was sent, then give a straggler a chance.
+  const sentUntil = async (n) => {
+    for (let i = 0; i < 200 && channel.sent.length < n; i++) await new Promise((r) => setImmediate(r));
+    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+  };
   typing.typing();
   typing.typing();
-  await new Promise((r) => setImmediate(r));
+  await sentUntil(1);
   assert.equal(channel.sent.length, 1, 'throttled');
   t.mock.timers.tick(3000);
   typing.typing();
   typing.stopped();
   typing.stopped();
-  await new Promise((r) => setImmediate(r));
+  await sentUntil(3);
   assert.deepEqual(channel.sent.map((s) => s.payload.on), [true, true, false]);
   assert.ok(channel.sent.every((s) => s.type === 'broadcast' && s.event === 'typing'));
   assert.doesNotMatch(JSON.stringify(channel.sent), /@/, 'no email on the wire');
@@ -681,4 +687,79 @@ test('the thread draws markers and runs from layout, and reactions under each bu
   assert.match(html, /`is-\$\{item\.place\}`/);
   assert.match(html, /<template x-for="r in chatReactions\(item\.m\)" :key="r\.id">/);
   assert.match(html, /<template x-for="e in chatReactionBar" :key="e">/);
+});
+
+// ---- a photo that won't load -----------------------------------------------------------
+//
+// It used to vanish: the error was dropped and the empty box had no height.
+
+/** The bucket's download, answering from `answer` and counting calls. */
+function fakeDownload(answer) {
+  const calls = [];
+  const real = supabase.storage.from;
+  supabase.storage.from = function (bucket) {
+    return { ...real.call(this, bucket), download: async (path) => { calls.push(path); return answer(path); } };
+  };
+  return { calls, restore() { supabase.storage.from = real; } };
+}
+
+const settle = () => new Promise((r) => setImmediate(r));
+
+test('a photo that won\'t load says why, and is not retried on every redraw', async () => {
+  const dl = fakeDownload(() => ({ data: null, error: { message: 'Object not found' } }));
+  try {
+    const { page } = openChatPage();
+    const m = { id: 'nf-1', owner_email: ME, photo_path: 'never-cached.jpg', body: 'caption', sent_at: '2026-11-24T22:05:00Z' };
+    assert.equal(page.chatPhotoUrl(m), '');
+    assert.equal(page.chatPhotoState(m), 'loading');
+    await settle(); await settle();
+    assert.equal(page.chatPhotoState(m), 'failed');
+    assert.match(page.chatUrlFailed[m.id], /Object not found/);
+
+    page.chatPhotoUrl(m); page.chatPhotoUrl(m);
+    await settle();
+    assert.equal(dl.calls.length, 1, 'no retry loop');
+    page.closeChat();
+    assert.deepEqual(page.chatUrlFailed, {}, 'closing forgets it');
+  } finally {
+    dl.restore();
+  }
+});
+
+test('tapping a photo that failed tries again instead of opening it', async (t) => {
+  let ok = false;
+  const dl = fakeDownload(() => (ok
+    ? { data: new Blob(['jpeg'], { type: 'image/jpeg' }), error: null }
+    : { data: null, error: { message: 'Failed to fetch' } }));
+  try {
+    const { page } = openChatPage();
+    const m = { id: 'nf-2', owner_email: ME, photo_path: 'flaky.jpg', body: null, sent_at: '2026-11-24T22:05:00Z' };
+    page.chatPhotoUrl(m);
+    await settle(); await settle();
+    assert.equal(page.chatPhotoState(m), 'failed');
+
+    ok = true;
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    page.chatPressStart(m, { clientX: 0, clientY: 0 }, 'photo');
+    page.chatPressEnd(m);
+    t.mock.timers.tick(page.doubleTapMs);
+    t.mock.timers.reset();
+    await settle(); await settle();
+
+    assert.equal(page.chatViewing, null, 'a retry, not the viewer');
+    assert.equal(dl.calls.length, 2);
+    assert.equal(page.chatPhotoState(m), 'ready');
+    assert.equal(page.chatUrlFailed[m.id], undefined);
+    page.closeChat();
+  } finally {
+    dl.restore();
+  }
+});
+
+test('the photo box keeps its size and says what is happening before the photo arrives', async () => {
+  const css = await read('../docs/css/components.css');
+  assert.match(css, /\.chat-photo \{ width: 220px; max-width: 100%; min-height: 160px;/);
+  const html = await read('../docs/index.html');
+  assert.match(html, /chatPhotoState\(item\.m\) === 'failed' \? 'Couldn’t load · tap to try again'/);
+  assert.match(html, /<span class="chat-photo-error" x-show="chatUrlFailed\[item\.m\.id\]" x-text="chatUrlFailed\[item\.m\.id\]"><\/span>/);
 });

@@ -5526,6 +5526,7 @@ Alpine.data('statsPage', () => ({
   chatViewing: null,   // the message open full screen (photos)
   chatUrls: {},
   chatUrlQueue: new Set(),
+  chatUrlFailed: {},   // message id → why its photo wouldn't load; a tap retries
   stopChatListen: null,
   chatReactionBar: messages.REACTIONS,
   chatTimeFor: null,   // id of the message whose time a tap is showing
@@ -5621,7 +5622,8 @@ Alpine.data('statsPage', () => ({
       id: m.id, at: now,
       timer: setTimeout(() => {
         this._lastTap = null;
-        if (photo) this.chatViewing = m;
+        if (photo && this.chatUrlFailed[m.id]) this.chatRetryPhoto(m);
+        else if (photo) this.chatViewing = m;
         else this.chatTimeFor = this.chatTimeFor === m.id ? null : m.id;
       }, this.doubleTapMs),
     };
@@ -5719,6 +5721,7 @@ Alpine.data('statsPage', () => ({
     for (const url of Object.values(this.chatUrls)) URL.revokeObjectURL(url);
     this.chatUrls = {};
     this.chatUrlQueue.clear();
+    this.chatUrlFailed = {};
   },
 
   /** Run from an x-effect on the open conversation: whatever is on screen has been seen. */
@@ -5754,9 +5757,30 @@ Alpine.data('statsPage', () => ({
           if (!this.chatOpen) return; // closed or relocked while downloading
           this.chatUrls = { ...this.chatUrls, [m.id]: URL.createObjectURL(blob) };
         })
-        .catch(() => this.chatUrlQueue.delete(m.id));
+        // A photo that won't load says so and waits for a tap to try again.
+        // It stays in the queue meanwhile: retrying on every render would loop.
+        // This used to drop the error, and the empty box had no height, so a
+        // failed photo simply wasn't there.
+        .catch((error) => {
+          console.warn('Message photo would not load', m.photo_path, error);
+          if (!this.chatOpen) { this.chatUrlQueue.delete(m.id); return; }
+          this.chatUrlFailed = { ...this.chatUrlFailed, [m.id]: describeError(error) || error?.message || 'Unknown error' };
+        });
     }
     return '';
+  },
+
+  /** 'ready', 'loading' or 'failed', for the photo box's placeholder. */
+  chatPhotoState(m) {
+    if (this.chatUrls[m.id]) return 'ready';
+    return this.chatUrlFailed[m.id] ? 'failed' : 'loading';
+  },
+
+  chatRetryPhoto(m) {
+    const { [m.id]: _was, ...rest } = this.chatUrlFailed;
+    this.chatUrlFailed = rest;
+    this.chatUrlQueue.delete(m.id);
+    this.chatPhotoUrl(m);
   },
 
   pickChatPhoto(event) {

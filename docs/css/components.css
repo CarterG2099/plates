@@ -1005,7 +1005,10 @@
   user-select: none;
   -webkit-user-select: none;
 }
-.chat-photo { width: 220px; max-width: 100%; border-radius: 16px; cursor: pointer; }
+/* A floor under the box: until the photo arrives (or if it can't), the box
+   still shows, with its hint, instead of shrinking to nothing. */
+.chat-photo { width: 220px; max-width: 100%; min-height: 160px; border-radius: 16px; cursor: pointer; }
+.chat-photo-error { max-width: 220px; padding: 0 6px; font-size: 11px; color: #ff6b81; overflow-wrap: anywhere; }
 .chat-photo img, .chat-photo video { display: block; width: 100%; max-height: 58vh; object-fit: cover; }
 .chat-photo img, .chat-viewer-photo img, .chat-pending img,
 .chat-photo video, .chat-viewer-photo video, .chat-pending video {
