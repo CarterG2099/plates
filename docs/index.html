@@ -3534,6 +3534,7 @@
               <div class="camera-countdown" x-show="camera.countdown" x-text="camera.countdown"></div>
               <div class="camera-error" x-show="cameraError">
                 <p x-text="cameraError"></p>
+                <small class="camera-detail" x-show="cameraDetail" x-text="cameraDetail"></small>
                 <button class="btn" x-show="camera.purpose === 'progress'" @click="usePhoneCamera()">Use the phone camera</button>
               </div>
             </div>

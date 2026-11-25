@@ -39,6 +39,60 @@ export function open(facing, options) {
   return navigator.mediaDevices.getUserMedia(constraints(facing, options));
 }
 
+/**
+ * Put the stream in the viewfinder and start it. Muted and inline are set on
+ * the element itself, as the scanner does: the attributes in the markup are
+ * cloned in from a template, and Safari doesn't take a cloned muted attribute
+ * as muting the element, so it may refuse to play it.
+ */
+export async function attach(video, stream) {
+  video.muted = true;
+  video.playsInline = true;
+  video.setAttribute?.('playsinline', '');
+  video.srcObject = stream;
+  await video.play?.();
+}
+
+/** How long a live camera gets to show its first frame before the page says so. */
+export const FRAME_WAIT_MS = 3000;
+
+/**
+ * Resolves true once the viewfinder shows a frame, false if none comes in
+ * time. An iPhone has turned the camera on (the green dot) and still handed the
+ * page nothing but black, with no error anywhere.
+ */
+export function waitForFrame(video, ms = FRAME_WAIT_MS) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const callback = typeof video?.requestVideoFrameCallback === 'function';
+    // Without the frame callback, a size and a moving clock are the next best sign.
+    const timer = setTimeout(() => finish(!callback && Boolean(video?.videoWidth) && Number(video?.currentTime) > 0), ms);
+    if (callback) video.requestVideoFrameCallback(() => finish(true));
+  });
+}
+
+/** One line on what the viewfinder and the camera are doing, for a screenshot of a black camera. */
+export function diagnose(video, stream) {
+  const track = stream?.getVideoTracks?.()[0];
+  const settings = track?.getSettings?.() ?? {};
+  return [
+    `video ${video?.videoWidth ?? '?'}×${video?.videoHeight ?? '?'}`,
+    `ready ${video?.readyState ?? '?'}`,
+    video?.paused ? 'paused' : 'playing',
+    video?.muted ? 'muted' : 'not muted',
+    video?.isConnected === false ? 'off page' : 'on page',
+    video?.srcObject === stream ? 'stream on it' : 'stream not on it',
+    `track ${track?.readyState ?? 'none'}${track?.muted ? ' muted' : ''}${track?.enabled === false ? ' disabled' : ''}`,
+    settings.width ? `camera ${settings.width}×${settings.height}` : '',
+  ].filter(Boolean).join(' · ');
+}
+
 // ---- video clips (Messages) ------------------------------------------------------
 //
 // Recorded from the same in-page stream as the stills, so a clip never passes

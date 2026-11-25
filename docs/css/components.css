@@ -786,6 +786,7 @@
   padding: var(--space-6);
   text-align: center;
 }
+.camera-detail { font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-size: 11px; opacity: .7; overflow-wrap: anywhere; }
 .camera-bar { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--space-4); }
 /* Same height as the shutter, so the frame doesn't jump when the poses replace it. */
 .camera-poses { min-height: 72px; gap: var(--space-2); padding: 0; }

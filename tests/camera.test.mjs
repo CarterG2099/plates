@@ -49,12 +49,21 @@ function fakeCamera({ refuse = null } = {}) {
   return { asked, tracks };
 }
 
+/** A viewfinder that shows its first frame straight away, as a working camera does. */
+function liveVideo(extra = {}) {
+  return {
+    videoWidth: 1080, videoHeight: 1920, play: async () => {},
+    requestVideoFrameCallback(done) { queueMicrotask(done); },
+    ...extra,
+  };
+}
+
 function statsPage() {
   Alpine.store('auth').session = { user: { email: ME } };
   Alpine.store('auth').members = [{ email: ME, sharing: true }, { email: AANA, sharing: true, display_name: 'Aana' }];
   const page = Alpine.reactive(components.statsPage());
   // The viewfinder: a video element the canvas fallback can read a frame from.
-  page.$refs = { viewfinder: { videoWidth: 1080, videoHeight: 1920, play: async () => {} } };
+  page.$refs = { viewfinder: liveVideo() };
   page.$nextTick = async () => {};
   return page;
 }
@@ -836,4 +845,147 @@ test('Together can be set when saving from the library and changed later', () =>
 test('the camera module is precached', async () => {
   const sw = await readFile(fileURLToPath(new URL('../docs/sw.js', import.meta.url)), 'utf8');
   assert.match(sw, /'\/js\/camera\.js',/);
+});
+
+// ---- a camera that is on but shows nothing (Aana's iPhone) ----------------------------
+
+test('the stream goes on the viewfinder muted and inline, set on the element, then plays', async () => {
+  const attrs = {};
+  let played = false;
+  const video = { setAttribute: (k, v) => { attrs[k] = v; }, play: async () => { played = true; } };
+  const stream = { id: 's' };
+  await camera.attach(video, stream);
+  assert.equal(video.muted, true, 'a cloned muted attribute does not mute the element in Safari');
+  assert.equal(video.playsInline, true);
+  assert.equal(attrs.playsinline, '');
+  assert.equal(video.srcObject, stream);
+  assert.equal(played, true);
+});
+
+test('waitForFrame says yes on the first frame, and no when none comes in time', async () => {
+  assert.equal(await camera.waitForFrame({ requestVideoFrameCallback: (done) => done() }, 50), true);
+  assert.equal(await camera.waitForFrame({ requestVideoFrameCallback: () => {}, videoWidth: 1080, currentTime: 3 }, 10), false,
+    'the frame callback is the word on it: a size alone is not a picture');
+  assert.equal(await camera.waitForFrame({ videoWidth: 640, currentTime: 0.4 }, 10), true, 'no callback: size and a moving clock');
+  assert.equal(await camera.waitForFrame({ videoWidth: 640, currentTime: 0 }, 10), false);
+  assert.equal(await camera.waitForFrame({ videoWidth: 0, currentTime: 2 }, 10), false);
+});
+
+test('the readout says what the viewfinder and the camera are doing', () => {
+  const track = { readyState: 'live', muted: true, enabled: true, getSettings: () => ({ width: 1920, height: 1080 }) };
+  const stream = { getVideoTracks: () => [track] };
+  const video = { videoWidth: 1920, videoHeight: 1080, readyState: 4, paused: true, muted: false, isConnected: true, srcObject: stream };
+  assert.equal(camera.diagnose(video, stream),
+    'video 1920×1080 · ready 4 · paused · not muted · on page · stream on it · track live muted · camera 1920×1080');
+  assert.equal(camera.diagnose({ isConnected: false, muted: true }, null),
+    'video ?×? · ready ? · playing · muted · off page · stream not on it · track none');
+});
+
+test('a camera with no picture after three seconds says so, with the readout', async (t) => {
+  fakeCamera();
+  const page = statsPage();
+  page.$refs = { viewfinder: liveVideo({ requestVideoFrameCallback() {} }) };   // never a frame
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await page.openCamera('chat');
+  assert.equal(page.cameraError, '', 'not before the wait is up');
+  t.mock.timers.tick(camera.FRAME_WAIT_MS);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(page.cameraError, 'No picture from the camera. Close it and try again.');
+  assert.match(page.cameraDetail, /^video 1080×1920 · ready \? · playing · muted · on page · /, 'what the viewfinder was doing');
+  page.closeCamera();
+  assert.equal(page.cameraDetail, '');
+});
+
+test('a camera that shows a frame says nothing, and the progress one offers the phone camera when it does not', async (t) => {
+  fakeCamera();
+  let page = statsPage();
+  await page.openCamera();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(page.cameraError, '');
+  page.closeCamera();
+
+  page = statsPage();
+  page.$refs = { viewfinder: liveVideo({ requestVideoFrameCallback() {} }) };
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await page.openCamera('progress');
+  t.mock.timers.tick(camera.FRAME_WAIT_MS);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(page.cameraError, /use the phone camera/);
+  page.closeCamera();
+});
+
+test('two opens at once: the one overtaken is shut, never put on the viewfinder', async () => {
+  const pending = [];
+  const tracks = [];
+  navigator.mediaDevices = {
+    getUserMedia: () => new Promise((resolve) => {
+      const track = { stopped: false, stop() { this.stopped = true; } };
+      tracks.push(track);
+      pending.push(() => resolve({ getTracks: () => [track], getVideoTracks: () => [track] }));
+    }),
+  };
+  const page = statsPage();
+  const video = liveVideo();
+  page.$refs = { viewfinder: video };
+  const first = page.openCamera();
+  const second = page.flipCamera();     // a second open before the first has landed
+  pending[1]();                         // the newer one lands first…
+  await second;
+  pending[0]();                         // …then the older one
+  await first;
+  assert.equal(tracks[0].stopped, true, 'the older stream is shut');
+  assert.equal(tracks[1].stopped, false);
+  assert.equal(video.srcObject.getTracks()[0], tracks[1], 'the viewfinder has the live one');
+  page.closeCamera();
+  assert.equal(tracks[1].stopped, true);
+});
+
+test('closing the camera while it is still opening shuts the stream when it lands', async () => {
+  let land;
+  const track = { stopped: false, stop() { this.stopped = true; } };
+  navigator.mediaDevices = { getUserMedia: () => new Promise((resolve) => { land = () => resolve({ getTracks: () => [track], getVideoTracks: () => [track] }); }) };
+  const page = statsPage();
+  const opening = page.openCamera('chat');
+  page.closeCamera();
+  land();
+  await opening;
+  assert.equal(track.stopped, true, 'the light goes off');
+  assert.equal(page.camera, null);
+});
+
+test('the stream goes on the viewfinder that is on the page, not one that fell off it', async () => {
+  fakeCamera();
+  const page = statsPage();
+  const onPage = liveVideo();
+  page.$refs = { viewfinder: liveVideo({ isConnected: false }) };
+  const original = document.querySelector;
+  document.querySelector = (sel) => (sel === '.camera-frame video[x-ref="viewfinder"]' ? onPage : null);
+  try {
+    await page.openCamera('chat');
+    assert.ok(onPage.srcObject, 'attached to the one on screen');
+  } finally {
+    document.querySelector = original;
+    page.closeCamera();
+  }
+});
+
+test('the camera error shows the readout under its message', async () => {
+  const html = await readFile(fileURLToPath(new URL('../docs/index.html', import.meta.url)), 'utf8');
+  assert.match(html, /<div class="camera-error" x-show="cameraError">\s*<p x-text="cameraError"><\/p>\s*<small class="camera-detail" x-show="cameraDetail" x-text="cameraDetail"><\/small>/);
+});
+
+test('a camera only slow to start clears the message when its first frame comes', async (t) => {
+  fakeCamera();
+  const page = statsPage();
+  const callbacks = [];
+  page.$refs = { viewfinder: liveVideo({ requestVideoFrameCallback(done) { callbacks.push(done); } }) };
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await page.openCamera('chat');
+  t.mock.timers.tick(camera.FRAME_WAIT_MS);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(page.cameraError, /No picture/);
+  callbacks.at(-1)();
+  assert.equal(page.cameraError, '');
+  assert.equal(page.cameraDetail, '');
+  page.closeCamera();
 });

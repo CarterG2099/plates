@@ -4973,6 +4973,12 @@ Alpine.data('planPage', () => ({
  * stops being a MediaStream the <video> will accept.
  */
 let cameraStream = null;
+/**
+ * Counts camera opens, so one that finishes after a newer open is shut instead
+ * of used (one that lands after the camera closed finds it gone, and is shut too). An iPhone runs one camera stream at a time: a second
+ * open silences the first, and the page was left showing the silenced one.
+ */
+let cameraOpening = 0;
 /** The clip being recorded in the chat camera, and the ticker for its clock. */
 let cameraRecorder = null;
 let cameraTicker = null;
@@ -5831,6 +5837,7 @@ Alpine.data('statsPage', () => ({
   // handed over exactly like a photo.
   camera: null,        // { purpose, mode, facing, together, timer, countdown, recording, elapsed, shot: { blob, url, kind } | null }
   cameraError: '',
+  cameraDetail: '',    // under a black camera's message: what the viewfinder and stream are doing
   cameraNote: '',      // e.g. no microphone: the clip records without sound
   cameraSaving: 0,
   cameraTimers: camera.TIMERS,
@@ -5857,24 +5864,54 @@ Alpine.data('statsPage', () => ({
   },
 
   async startStream() {
+    const opening = ++cameraOpening;
     camera.close(cameraStream);
     cameraStream = null;
+    this.cameraDetail = '';
     const audio = this.camera.mode === 'video';
+    let stream = null;
     try {
       try {
-        cameraStream = await camera.open(this.camera.facing, { audio });
+        stream = await camera.open(this.camera.facing, { audio });
       } catch (error) {
         // A refused microphone shouldn't cost the clip: record it silent.
         if (!audio) throw error;
-        cameraStream = await camera.open(this.camera.facing);
+        stream = await camera.open(this.camera.facing);
         this.cameraNote = 'No sound: the microphone is off for Plates.';
       }
+      if (opening !== cameraOpening || !this.camera) { camera.close(stream); return; }   // overtaken
+      cameraStream = stream;
       await this.$nextTick?.();
-      const video = this.$refs?.viewfinder;
-      if (video) { video.srcObject = cameraStream; await video.play?.(); }
+      const video = this.viewfinder();
+      if (!video) return;
+      await camera.attach(video, stream);
+      this.watchForFrames(video, stream, opening);
     } catch (error) {
-      this.cameraError = camera.problem(error, this.camera?.purpose);
+      if (opening === cameraOpening) this.cameraError = camera.problem(error, this.camera?.purpose);
     }
+  },
+
+  /** The viewfinder on screen: the ref, unless that has fallen off the page. */
+  viewfinder() {
+    const ref = this.$refs?.viewfinder;
+    if (ref && ref.isConnected !== false) return ref;
+    return document.querySelector?.('.camera-frame video[x-ref="viewfinder"]') ?? ref ?? null;
+  },
+
+  /** A camera that is on but shows nothing says so, with the details to send. */
+  async watchForFrames(video, stream, opening) {
+    if (await camera.waitForFrame(video)) return;
+    if (opening !== cameraOpening || !this.camera || this.cameraError) return;
+    this.cameraError = this.camera.purpose === 'chat'
+      ? 'No picture from the camera. Close it and try again.'
+      : 'No picture from the camera. Close it and try again, or use the phone camera.';
+    this.cameraDetail = camera.diagnose(video, stream);
+    // Only slow, not broken: a frame arriving late takes the message away again.
+    video.requestVideoFrameCallback?.(() => {
+      if (opening !== cameraOpening || !this.cameraDetail) return;
+      this.cameraError = '';
+      this.cameraDetail = '';
+    });
   },
 
   /** Photo or Video, from the chips above the viewfinder. Not mid-clip. */
@@ -6020,6 +6057,7 @@ Alpine.data('statsPage', () => ({
     cameraStream = null;
     this.camera = null;
     this.cameraError = '';
+    this.cameraDetail = '';
     this.cameraNote = '';
   },
 
