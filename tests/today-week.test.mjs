@@ -210,6 +210,36 @@ test('the Today markup draws the strip, the rings, the meds and the tiles from t
   assert.match(todayHtml, /x-for="m in meds"/);
   assert.match(todayHtml, /\$store\.ui\.toggleTaken\(m\)/);
   assert.match(todayHtml, /x-for="t in weekAverages\.tiles"/);
-  assert.doesNotMatch(todayHtml, /Average day/, 'the week tiles replace it');
+  assert.match(todayHtml, /x-for="r in weekLabel\.printedRows"/, 'the average complete day is still there as a full label');
+  assert.match(todayHtml, /@click="weekLabelOpen = !weekLabelOpen"/);
+  assert.match(todayHtml, /@click="\$store\.ui\.shiftDay\(-1\)" aria-label="Previous day"/, 'a day back without a swipe');
+  assert.match(todayHtml, /@click="\$store\.ui\.shiftDay\(1\)" aria-label="Next day"/);
   assert.doesNotMatch(todayHtml, /class="rack"/, 'the rings replace the bar');
+});
+
+test('the food suggestion is for today only: a past day has nothing left to fill', async () => {
+  // A food eaten recently, so there is something to suggest. Sunday: unmarked,
+  // so it changes neither the averages nor the marks the tests above read.
+  const rice = await local.save('foods', { name: 'Rice bowl', serving_qty: 1, serving_unit: 'bowl', calories: 800, protein_g: 20, carbs_g: 150, fat_g: 10 }, ME);
+  await eat('2026-11-22', { food_id: rice.id, description: 'Rice bowl', calories: 800 });
+
+  const now = await today(food.toDateOnly(new Date()));
+  assert.match(now.remainingInFood, /Rice bowl/, 'today: what would fill the rest of the day');
+  const past = await today('2026-11-18');   // 1,200 kcal under, a past day
+  assert.equal(past.remainingInFood, '');
+});
+
+test('the average day label covers the complete days of the week on screen, up to today', async () => {
+  const page = await today('2026-11-19');
+  assert.equal(page.weekLabel.loggedDays, 2, 'Monday and Tuesday; the incomplete and unreviewed days stay out');
+  assert.equal(page.weekLabel.calories, 2205, '(2,100 + 2,310) / 2');
+});
+
+test('planned food shows on the rings and in their spoken label', async () => {
+  const day = food.toDateOnly(new Date());
+  await local.save('food_log', { logged_at: at(day), description: 'Dinner', quantity: 1, unit: 'serving',
+    calories: 500, protein_g: 40, carbs_g: 50, fat_g: 15, is_planned: true }, ME);
+  const page = await today(day);
+  assert.match(page.ringsSvg, /class="ring-plan ring-cal"/);
+  assert.match(page.ringsSvg, /plus 500 kcal planned/);
 });

@@ -117,6 +117,10 @@ export function seriesOf(list) {
     const sub = [];
     if (named) sub.push(rows.map((r) => r.label?.trim()).filter(Boolean).join(', ') || `${rows.length} times`);
     sub.push(sameDays ? daysLabel(first.days) : 'Different days per time');
+    if (first.kind === 'food') {
+      const quiet = first.quiet_if_logged_min ?? DEFAULT_QUIET_MIN;
+      sub.push(quiet ? `quiet if you logged in the last ${quiet} min` : 'always');
+    }
     if (first.kind === 'evening') sub.push('only if the day looks unfinished');
     if (first.kind === 'weigh_in') sub.push('skips once you weigh in');
     if (first.kind === 'training') sub.push('skips once you start');

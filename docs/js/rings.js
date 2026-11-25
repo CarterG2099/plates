@@ -47,14 +47,32 @@ export function arc({ value, target, r, width, centre }) {
   };
 }
 
-/** The four rings' values from a day's totals and targets (food.dayAgainstGoal's shape). */
-export function fromTotals(totals, targets) {
-  return {
-    cal: { value: totals?.calories, target: targets?.calories },
-    p:   { value: totals?.protein_g, target: targets?.protein_g },
-    c:   { value: totals?.carbs_g, target: targets?.carbs_g },
-    f:   { value: totals?.fat_g, target: targets?.fat_g },
-  };
+/**
+ * The four rings' values from a day's totals and targets (food.dayAgainstGoal's
+ * shape), and optionally what is planned but not yet eaten.
+ */
+export function fromTotals(totals, targets, planned = null) {
+  const ring = (key) => ({ value: totals?.[key], target: targets?.[key], plan: planned?.[key] ?? 0 });
+  return { cal: ring('calories'), p: ring('protein_g'), c: ring('carbs_g'), f: ring('fat_g') };
+}
+
+/**
+ * Where the plan sits on a ring: faded segments from the end of what was eaten
+ * to where it would be if the plan were eaten too, on whichever laps that
+ * crosses. Each is [start, length] along the circle, as the dash pattern wants.
+ */
+export function planSegments({ value, plan, target, r }) {
+  if (!(target > 0) || !(Number(plan) > 0)) return [];
+  const C = 2 * Math.PI * r;
+  const eaten = Math.max(0, Number(value) || 0) / target;
+  const total = Math.min(2, eaten + Number(plan) / target);
+  const out = [];
+  for (const lap of [0, 1]) {
+    const from = Math.min(1, Math.max(0, eaten - lap));
+    const to = Math.min(1, Math.max(0, total - lap));
+    if (to > from) out.push([fixed(from * C), fixed((to - from) * C)]);
+  }
+  return out;
 }
 
 /**
@@ -94,6 +112,9 @@ export function svg(values, { kind = 'big', label = '' } = {}) {
     parts.push(`<circle class="ring-track ${ring}" cx="${c}" cy="${c}" r="${r}" stroke-width="${width}"/>`);
     if (a.first > 0) {
       parts.push(`<circle class="ring-arc ${ring}" cx="${c}" cy="${c}" r="${r}" stroke-width="${width}" stroke-dasharray="${a.first} ${a.circumference}"/>`);
+    }
+    for (const [start, length] of planSegments({ value: v.value, plan: v.plan, target: v.target, r })) {
+      parts.push(`<circle class="ring-plan ${ring}" cx="${c}" cy="${c}" r="${r}" stroke-width="${width}" stroke-dasharray="0 ${start} ${length} ${a.circumference}"/>`);
     }
     if (a.over) {
       const tick = Math.max(1, width / 6);

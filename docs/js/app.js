@@ -1221,6 +1221,7 @@ Alpine.store('ui', {
 
   reminderTitle(r) { return reminders.title(r); },
   reminderDetail(r) { return reminders.detail(r); },
+  reminderTime(r) { return reminders.timeLabel(r.at_time); },
   dayNames: reminders.DAY_NAMES,
 
   /** "Taken 8:02am" for a med, "Done 12:40pm" for food, checked off today; or ''. */
@@ -1536,7 +1537,10 @@ Alpine.data('todayPage', () => ({
     const t = this.totals;
     const label = `${this.round(t.calories)} kcal, ${this.round(t.protein_g)} g protein, `
       + `${this.round(t.carbs_g)} g carbs, ${this.round(t.fat_g)} g fat`;
-    return rings.svg(rings.fromTotals(t, this.dayTargets), { kind: 'big', label });
+    // The plan rides on the rings as a faded segment, as it did on the old bars.
+    const planned = this.plannedEntries.length ? this.plannedTotals : null;
+    const plan = planned ? `, plus ${this.round(planned.calories)} kcal planned` : '';
+    return rings.svg(rings.fromTotals(t, this.dayTargets, planned), { kind: 'big', label: label + plan });
   },
 
   /** The four lines beside the rings: amount, target, share, and how far over. */
@@ -1570,6 +1574,22 @@ Alpine.data('todayPage', () => ({
     if (!this.entries.length) return 'Nothing logged';
     if (left === 0) return 'Right on the calorie target';
     return left > 0 ? `${left.toLocaleString()} kcal under target` : `${(-left).toLocaleString()} kcal over target`;
+  },
+
+  /**
+   * The average complete day of the week on screen, as a full label — what the
+   * Average day card showed before the tiles. Counted up to today, so a week
+   * still running is not divided by days that haven't happened.
+   */
+  weekLabelOpen: false,
+  get weekLabel() {
+    const days = this.weekDays;
+    const today = food.toDateOnly(new Date());
+    const upTo = days.filter((d) => d.key <= today);
+    if (!upTo.length) return { ...food.weeklyNutritionLabel([], this.email), loggedDays: 0 };
+    return food.weeklyNutritionLabel(this.data.log, this.email, {
+      end: upTo.at(-1).date, days: upTo.length, marks: this.data.dayMarks,
+    });
   },
 
   /** The week's tiles: each macro's average share of target, complete days only. */
@@ -1662,6 +1682,9 @@ Alpine.data('todayPage', () => ({
   round(n) { return Math.round(Number(n) || 0); },
 
   get remainingInFood() {
+    // "What would fill the rest of today" means nothing for a day already gone,
+    // or for one that hasn't started.
+    if (!Alpine.store('ui').isToday) return '';
     const ranked = food.rankFoods(this.data.foods, this.data.log, this.email);
     return food.remainingAsFoods(this.remaining, ranked)
       .map((x) => x.label)

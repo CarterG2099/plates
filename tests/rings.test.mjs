@@ -97,7 +97,26 @@ test('a label cannot break out of its attribute', () => {
 
 test('fromTotals pairs each ring with its macro and target', () => {
   const v = rings.fromTotals({ calories: 1, protein_g: 2, carbs_g: 3, fat_g: 4 }, { calories: 5, protein_g: 6, carbs_g: 7, fat_g: 8 });
-  assert.deepEqual(v, { cal: { value: 1, target: 5 }, p: { value: 2, target: 6 }, c: { value: 3, target: 7 }, f: { value: 4, target: 8 } });
+  assert.deepEqual(v, { cal: { value: 1, target: 5, plan: 0 }, p: { value: 2, target: 6, plan: 0 }, c: { value: 3, target: 7, plan: 0 }, f: { value: 4, target: 8, plan: 0 } });
+  assert.equal(rings.fromTotals({}, {}, { calories: 300 }).cal.plan, 300);
+});
+
+test('the plan is a faded segment from what was eaten to where the plan would take it', () => {
+  const C = 2 * Math.PI * 10;
+  const near = (a, b) => Math.abs(a - b) < 0.02;
+  const [one] = rings.planSegments({ value: 50, plan: 25, target: 100, r: 10 });
+  assert.ok(near(one[0], C * 0.5) && near(one[1], C * 0.25), JSON.stringify(one));
+  const cross = rings.planSegments({ value: 80, plan: 40, target: 100, r: 10 });
+  assert.equal(cross.length, 2, 'past 100% the plan carries on round the second lap');
+  assert.ok(near(cross[0][1], C * 0.2) && near(cross[1][0], 0) && near(cross[1][1], C * 0.2));
+  const over = rings.planSegments({ value: 130, plan: 20, target: 100, r: 10 });
+  assert.equal(over.length, 1);
+  assert.ok(near(over[0][0], C * 0.3), 'already over: the plan starts where the second lap ends');
+  assert.deepEqual(rings.planSegments({ value: 50, plan: 0, target: 100, r: 10 }), []);
+  assert.deepEqual(rings.planSegments({ value: 50, plan: 30, target: null, r: 10 }), [], 'no target, nothing to measure against');
+  const svg = rings.svg(rings.fromTotals({ calories: 1000 }, { calories: 2000 }, { calories: 500 }));
+  assert.equal((svg.match(/class="ring-plan ring-cal"/g) ?? []).length, 1);
+  assert.match(svg, /stroke-dasharray="0 \d/, 'a gap first, so the faded part starts where eating stopped');
 });
 
 test('each day status has its mark, and an empty or future day has none', () => {

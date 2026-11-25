@@ -130,7 +130,9 @@ test('rows gather into reminders, in the member\'s order, then by time of day', 
   assert.equal(creatine.sub, 'Different days per time');
   assert.equal(creatine.enabled, true, 'on while any of its times is on');
   assert.equal(s[2].title, 'Log food');
-  assert.equal(s[2].sub, 'Breakfast, Lunch · Every day');
+  assert.equal(s[2].sub, 'Breakfast, Lunch · Every day · quiet if you logged in the last 60 min',
+    'food still says what keeps it quiet, as the old detail line did');
+  assert.match(r.seriesOf([{ ...rows[4], quiet_if_logged_min: 0 }])[0].sub, /· always$/);
   assert.equal(s[3].sub, 'Every day · only if the day looks unfinished');
 });
 
@@ -364,7 +366,9 @@ const html = await readFile(fileURLToPath(new URL('../docs/index.html', import.m
 test('Notifications lists each reminder with its times, a switch, and New reminder', () => {
   const settings = html.slice(html.indexOf('<template x-if="$store.ui.settingsOpen">'), html.indexOf('<!-- What a new reminder is for.'));
   assert.match(settings, /x-for="s in \$store\.ui\.reminderSeries"/);
-  assert.match(settings, /x-for="\(t, i\) in s\.times"/);
+  assert.match(settings, /x-for="r in s\.rows"/);
+  assert.match(settings, /@click\.stop="\$store\.ui\.toggleTaken\(r\)"/, 'each time of a reminder can be checked off');
+  assert.match(settings, /:disabled="\$store\.ui\.reminderOrdering \|\| s\.rows\.length < 2 \|\| !\$store\.ui\.checksOff\(r\) \|\| !r\.enabled"/);
   assert.match(settings, /@change="await \$store\.ui\.toggleReminder\(s\)/);
   assert.match(settings, /@click="\$store\.ui\.kindPicking = true"/);
   assert.match(settings, /\$store\.ui\.moveReminder\(key, to\)/);
