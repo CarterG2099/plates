@@ -259,7 +259,7 @@
           <div class="readout-foot" x-show="(entries.length && dayNutrition.hasDetail) || hasMeds">
             <button class="chip" x-show="entries.length && dayNutrition.hasDetail" :class="labelOpen && 'is-active'"
                     @click="labelOpen = !labelOpen"
-                    x-text="labelOpen ? 'Hide full label' : 'Full label'"></button>
+                    x-text="dayLabelButton"></button>
             <!-- The day's doses as one row of pills, small enough that the week's
                  numbers stay on screen. A tap checks one off (or undoes it), as the
                  notification's button does, on today or a day gone; on a day ahead
@@ -353,8 +353,8 @@
             </div>
             <button class="chip" x-show="weekLabel.loggedDays && weekLabel.hasAny"
                     :class="weekLabelOpen && 'is-active'" @click="weekLabelOpen = !weekLabelOpen"
-                    :aria-label="weekLabelOpen ? 'Hide the average day label' : 'Full label for the average day'"
-                    x-text="weekLabelOpen ? 'Hide label' : 'Full label'"></button>
+                    :aria-label="weekLabelOpen ? 'Hide the weekly label' : 'Weekly label: the average complete day'"
+                    x-text="weekLabelOpen ? 'Hide weekly label' : 'Weekly label'"></button>
           </div>
           <div class="avg-tiles">
             <template x-for="t in weekAverages.tiles" :key="t.key">

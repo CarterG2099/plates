@@ -1705,6 +1705,15 @@ Alpine.data('todayPage', () => ({
   labelOpen: false,
   get dayNutrition() { return food.dayNutritionLabel(this.entries); },
 
+  /**
+   * Its button, named apart from the Weekly label beside the averages:
+   * "Today's label" on today, "Day label" on any other day.
+   */
+  get dayLabelButton() {
+    const name = Alpine.store('ui').isToday ? 'today\'s label' : 'day label';
+    return this.labelOpen ? `Hide ${name}` : name[0].toUpperCase() + name.slice(1);
+  },
+
   /** The tapped label row — opens the who-contributed sheet. */
   nutrientDetail: null,
   openNutrient(row) { this.nutrientDetail = { key: row.key, name: row.name, unit: row.unit }; },

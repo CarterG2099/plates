@@ -276,11 +276,28 @@ test('the Today markup: strip, rings, a single row of meds, the averages, and no
   const averages = todayHtml.indexOf('class="week-avg"');
   const rings = todayHtml.indexOf('class="card readout"');
   assert.ok(rings < meds && meds < averages, 'meds sit between the rings and the averages');
-  assert.match(todayHtml, /<div class="readout-foot"[^>]*>\s*<button class="chip"[^>]*>?[\s\S]*?'Full label'"><\/button>\s*<!--[\s\S]*?-->\s*<div class="meds-strip"/,
-    'the meds share the Full label row, after it, so they sit on its right');
+  assert.match(todayHtml, /<div class="readout-foot"[^>]*>\s*<button class="chip"[^>]*>?[\s\S]*?x-text="dayLabelButton"><\/button>\s*<!--[\s\S]*?-->\s*<div class="meds-strip"/,
+    'the meds share the day label\'s row, after it, so they sit on its right');
   assert.ok(meds < todayHtml.indexOf('<div class="nutrition" x-show="labelOpen'), 'inside the rings card, above the label it opens');
   assert.match(todayHtml, /<div class="readout-foot" x-show="\(entries\.length && dayNutrition\.hasDetail\) \|\| hasMeds">/,
     'the row stays for the meds on a day with nothing logged');
+});
+
+test('the two label buttons are named apart: the day\'s and the weekly one', async () => {
+  let page = await today(D(0));
+  assert.equal(page.dayLabelButton, 'Today\'s label');
+  page.labelOpen = true;
+  assert.equal(page.dayLabelButton, 'Hide today\'s label');
+  page = await today(D(2));
+  assert.equal(page.dayLabelButton, 'Day label', 'not "today" on another day');
+  page.labelOpen = true;
+  assert.equal(page.dayLabelButton, 'Hide day label');
+
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../docs/index.html', import.meta.url), 'utf8');
+  const todayHtml = html.slice(html.indexOf('x-data="todayPage"'), html.indexOf('<!-- Edit a logged amount'));
+  assert.match(todayHtml, /x-text="weekLabelOpen \? 'Hide weekly label' : 'Weekly label'"/);
+  assert.doesNotMatch(todayHtml, /Full label'/, 'no button is called Full label any more');
 });
 
 test('Today has no "about N of a food" suggestion', async () => {
