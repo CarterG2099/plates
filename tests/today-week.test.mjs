@@ -266,7 +266,9 @@ test('the Today markup: strip, rings, a single row of meds, the averages, and no
   assert.doesNotMatch(todayHtml, /trained-card|x-show="trained"/, 'no workout card on Today');
   assert.match(todayHtml, /x-for="t in weekAverages\.tiles"/);
   assert.match(todayHtml, /x-for="r in weekLabel\.printedRows"/, 'the average complete day is still there as a full label');
-  assert.match(todayHtml, /@click="weekLabelOpen = !weekLabelOpen"/);
+  assert.match(todayHtml, /<div class="section-row">\s*<div class="section-title">\s*<span class="card-label" x-text="weekAverages\.title"><\/span>\s*<small x-text="weekAverages\.sub"><\/small>\s*<\/div>\s*<button class="chip"[^>]*@click="weekLabelOpen = !weekLabelOpen"/,
+    'the average day\'s label button sits in the Last 7 days heading, not on a row of its own');
+  assert.doesNotMatch(todayHtml, /Average day label ·/);
   assert.match(todayHtml, /@click="\$store\.ui\.shiftDay\(-1\)" aria-label="Previous day"/, 'a day back without a swipe');
   assert.match(todayHtml, /@click="\$store\.ui\.shiftDay\(1\)" aria-label="Next day"/);
   assert.doesNotMatch(todayHtml, /class="rack"/, 'the rings replace the bar');

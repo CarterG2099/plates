@@ -342,9 +342,19 @@
         <!-- The week's averages, from complete days only: a half-logged day
              would read as eating less than really happened. -->
         <div class="week-avg">
+          <!-- The average complete day as a full label, as the Average day card
+               showed it: the tiles answer "how close", this answers "what in".
+               Its button sits in the heading, so it costs no row of its own;
+               the heading already says how many complete days it covers. -->
           <div class="section-row">
-            <span class="card-label" x-text="weekAverages.title"></span>
-            <small x-text="weekAverages.sub"></small>
+            <div class="section-title">
+              <span class="card-label" x-text="weekAverages.title"></span>
+              <small x-text="weekAverages.sub"></small>
+            </div>
+            <button class="chip" x-show="weekLabel.loggedDays && weekLabel.hasAny"
+                    :class="weekLabelOpen && 'is-active'" @click="weekLabelOpen = !weekLabelOpen"
+                    :aria-label="weekLabelOpen ? 'Hide the average day label' : 'Full label for the average day'"
+                    x-text="weekLabelOpen ? 'Hide label' : 'Full label'"></button>
           </div>
           <div class="avg-tiles">
             <template x-for="t in weekAverages.tiles" :key="t.key">
@@ -354,12 +364,6 @@
                 <span class="avg-bar"><i :class="`is-${t.key}`" :style="`width: ${t.width}%`"></i></span>
               </div>
             </template>
-          </div>
-          <!-- The average complete day as a full label, as the Average day card
-               showed it: the tiles answer "how close", this answers "what in". -->
-          <div class="chips" x-show="weekLabel.loggedDays && weekLabel.hasAny">
-            <button class="chip" :class="weekLabelOpen && 'is-active'" @click="weekLabelOpen = !weekLabelOpen"
-                    x-text="weekLabelOpen ? 'Hide average day' : `Average day label · ${weekLabel.loggedDays} complete`"></button>
           </div>
           <div class="nutrition" x-show="weekLabelOpen && weekLabel.hasAny" x-cloak>
             <div class="nf-title">Nutrition Facts</div>
