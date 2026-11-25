@@ -49,12 +49,12 @@ test('the profile opens on its own, with no old watch code showing', () => {
 
 // ---- the markup -------------------------------------------------------------
 
-test('the bar has a bell to notifications and the initial to the profile, not the name', () => {
+test('the bar has a bell to notifications and the initial to whose day it is, not the name', () => {
   assert.match(header, /<button class="tap" @click="\$store\.ui\.openSettings\(\)" aria-label="Notifications">\s*<svg/);
-  assert.match(header, /<button class="tap avatar" @click="\$store\.ui\.openProfile\(\)"/);
-  assert.match(header, /x-text="\$store\.auth\.initial"/);
-  assert.match(header, /:aria-label="`Profile, \$\{\$store\.auth\.displayName\}`"/,
-    'a screen reader still hears whose profile it is');
+  assert.match(header, /<button class="tap avatar" @click="\$store\.ui\.openWho\(\)"/);
+  assert.match(header, /x-text="\$store\.ui\.viewInitial"/);
+  assert.match(header, /`\$\{\$store\.auth\.displayName\}, switch person or profile`/,
+    'a screen reader still hears whose it is');
   assert.doesNotMatch(header, /app-bar-meta/);
 });
 

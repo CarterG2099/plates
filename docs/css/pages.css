@@ -2675,3 +2675,37 @@ i.is-fat_g { background: var(--color-fat); }
 .sheet-actions { display: flex; gap: var(--space-2); }
 .sheet-actions .btn { flex: 1; }
 .sheet-actions .btn-primary { flex: 2; }
+
+/* ---- each other's day ------------------------------------------------------------ */
+
+/* Anything that would write is the signed-in person's alone; viewing hides it. */
+.app.is-viewing .mine-only { display: none !important; }
+
+.viewing-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0 var(--space-4) var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: 14px;
+  background: rgba(245, 183, 0, .13);
+  border: 1px solid rgba(245, 183, 0, .35);
+}
+.viewing-bar b { color: var(--color-carbs); }
+.viewing-bar small { font-size: var(--text-xs); color: var(--color-text-muted); }
+.viewing-bar .btn { padding: 6px 11px; font-size: var(--text-sm); }
+
+.avatar.is-other { color: var(--color-carbs); background: #3A2E0A; box-shadow: inset 0 0 0 2px var(--color-carbs); }
+
+.nudge-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.nudge-card > span { color: var(--color-text-muted); font-size: var(--text-sm); }
+.nudge-actions { display: flex; gap: var(--space-2); }
+.nudge-actions .btn { flex: 1; }
+.trained-card { display: flex; align-items: center; gap: var(--space-3); }
+
+.notify-row.is-current { background: rgba(61, 111, 224, .1); }
+.who-check { color: var(--color-success); display: grid; }
+.nudge-presets { display: flex; flex-direction: column; gap: var(--space-2); }
+.nudge-presets .setting { width: 100%; text-align: left; font: inherit; color: inherit; }
+.nudge-presets .setting.is-picked { border-color: var(--color-primary); background: rgba(61, 111, 224, .1); }

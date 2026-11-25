@@ -436,6 +436,32 @@ function writeReadyEstimate(entry) {
 
 const MEMBERSHIP_KEY = 'plates:membership';
 
+/**
+ * The training index for someone else, for their Stats. Built from the same
+ * synced sessions as yours (RLS already lets the two of you read each other's)
+ * and kept until the training data changes, so switching back and forth is free.
+ */
+let otherIndex = null;   // { email, version, index }
+
+function indexFor(email) {
+  const auth = Alpine.store('auth');
+  if (!email || email === auth.email) return raw.index;
+  const version = Alpine.store('data').trainVersion;
+  if (otherIndex?.email !== email || otherIndex.version !== version) {
+    otherIndex = { email, version, index: workout.buildIndex(raw.sessionSets, raw.sessions, email) };
+  }
+  return otherIndex.index;
+}
+
+/** The first session someone started on a day, or null. */
+function trainedOn(data, email, date) {
+  const key = food.toDateOnly(date);
+  return (data.sessions ?? [])
+    .filter((s) => s.owner_email === email && !s.deleted_at && s.started_at
+      && food.toDateOnly(new Date(s.started_at)) === key)
+    .sort((a, b) => (a.started_at < b.started_at ? -1 : 1))[0] ?? null;
+}
+
 /** The Stats tabs' order and which are hidden: a per-phone preference. */
 const STATS_TABS_KEY = 'plates:stats-tabs';
 
@@ -1015,6 +1041,104 @@ Alpine.store('ui', {
     }
   },
 
+  // ---- each other's day ----------------------------------------------------------
+  //
+  // The two of you see everything of each other's: tap the avatar, pick the
+  // other person, and Today, Train and Stats show their day, read-only, under a
+  // bar that says so. Nothing here writes as them — every control that would is
+  // hidden while viewing (.mine-only), and RLS would refuse it anyway.
+
+  viewAs: '',        // the other person's email while viewing their day; '' is you
+  whoOpen: false,    // the "whose day?" sheet
+
+  /** The person you share with, or null — the test account has nobody. */
+  get partner() {
+    const auth = Alpine.store('auth');
+    return auth.email ? partnerOf(auth.members ?? [], auth.email) ?? null : null;
+  },
+
+  /** Whose data the screens show: the other person while viewing, otherwise you. */
+  get viewEmail() { return this.viewAs || Alpine.store('auth').email; },
+
+  get viewName() {
+    if (!this.viewAs) return Alpine.store('auth').displayName;
+    return this.partner?.display_name || this.viewAs.split('@')[0];
+  },
+
+  get viewInitial() { return this.viewName.trim().charAt(0).toUpperCase(); },
+
+  /** The avatar: the switcher when there is someone to switch to, else straight to your profile. */
+  openWho() {
+    if (!this.partner) return this.openProfile();
+    this.whoOpen = true;
+    this.loadReminders();
+  },
+
+  viewPerson(email) {
+    const me = Alpine.store('auth').email;
+    this.viewAs = !email || email.toLowerCase() === me.toLowerCase() ? '' : email;
+    this.whoOpen = false;
+    this.nudgeOpen = false;
+  },
+
+  backToMe() { this.viewPerson(''); },
+
+  /** One person's day in a line or two, for the switcher. */
+  daySummary(email) {
+    const data = snapshotAll();
+    const today = new Date();
+    const entries = food.entriesForDay(data.log, email, today);
+    const kcal = Math.round(food.sumTotals(entries).calories);
+    const target = Number(food.currentGoal(data.goals, email, today)?.calorie_target) || null;
+    const food1 = entries.length
+      ? `${kcal.toLocaleString()}${target ? ` of ${target.toLocaleString()}` : ''} kcal`
+      : 'No food logged today';
+
+    const meds = reminders.ownedBy(this.reminderAll, email)
+      .filter((r) => r.kind === 'meds' && r.enabled && (r.days ?? []).includes(today.getDay()));
+    const taken = meds.filter((r) => this.reminderToday[r.id]?.taken_at).length;
+    const medsLine = meds.length ? `${taken} of ${meds.length} meds taken` : '';
+
+    const trained = trainedOn(data, email, today);
+    return [food1, medsLine, trained ? `Trained: ${trained.name}` : ''].filter(Boolean);
+  },
+
+  // Nudges and cheers: one tap sends a push to the other person, through the
+  // send-nudge function, which spaces nudges an hour apart.
+  nudgeOpen: false,
+  nudgeText: '',
+  nudgeBusy: false,
+  nudgePresets: ['Log what you ate today?', 'Weigh in this morning?', 'Gym today?', 'Take your meds?'],
+
+  openNudge(text = '') {
+    this.nudgeText = text;
+    this.nudgeOpen = true;
+  },
+
+  async sendNudge(kind, body) {
+    if (!this.viewAs || this.nudgeBusy) return;
+    this.nudgeBusy = true;
+    try {
+      const { data, error } = await supabase.functions.invoke('send-nudge', {
+        body: { to: this.viewAs, kind, body },
+      });
+      if (error) {
+        // The function's own words ("One nudge an hour…") are in the response body.
+        let message = describeError(error);
+        try { message = (await error.context?.json())?.error || message; } catch { /* keep the generic one */ }
+        throw new Error(message);
+      }
+      this.nudgeOpen = false;
+      this.flash(kind === 'nudge'
+        ? (data?.sent ? `Nudged ${this.viewName}` : `Saved, but ${this.viewName} has notifications off`)
+        : `Cheered ${this.viewName}`);
+    } catch (e) {
+      this.flash(e.message || describeError(e));
+    } finally {
+      this.nudgeBusy = false;
+    }
+  },
+
   // ---- the Stats tabs ----------------------------------------------------------
   //
   // Here rather than on statsPage because the swipe handler moves between them
@@ -1313,7 +1437,7 @@ function averageTiles(avg) {
 }
 
 Alpine.data('todayPage', () => ({
-  get email() { return Alpine.store('auth').email; },
+  get email() { return Alpine.store('ui').viewEmail; },   // the other person's while viewing their day
   get date() { return Alpine.store('ui').date; },
   get data() { return snapshot(); },
 
@@ -1468,7 +1592,16 @@ Alpine.data('todayPage', () => ({
     const ui = Alpine.store('ui');
     if (!ui.isToday) return [];
     const weekday = new Date().getDay();
-    return ui.reminderList.filter((r) => r.kind === 'meds' && r.enabled && (r.days ?? []).includes(weekday));
+    const list = ui.viewAs ? reminders.ownedBy(ui.reminderAll, ui.viewAs) : ui.reminderList;
+    return list.filter((r) => r.kind === 'meds' && r.enabled && (r.days ?? []).includes(weekday));
+  },
+
+  /** The workout started on the day on screen, for the card under the rings. */
+  get trained() {
+    const s = trainedOn(snapshotAll(), this.email, this.date);
+    if (!s) return null;
+    const mins = s.ended_at ? Math.round((Date.parse(s.ended_at) - Date.parse(s.started_at)) / 60_000) : null;
+    return { name: s.name || 'Workout', line: mins ? `${mins} min` : 'In progress' };
   },
 
   get medsSummary() {
@@ -1555,6 +1688,8 @@ Alpine.data('todayPage', () => ({
   sizeUnit: 'g',
 
   openEdit(entry) {
+    // Their entries are theirs to change: viewing someone's day is read-only.
+    if (Alpine.store('ui').viewAs) return;
     const item = this.data.foods.find((f) => f.id === entry.food_id) ?? null;
     const basis = this.basisFor(entry, item);
     this.edit = {
@@ -4049,7 +4184,7 @@ Alpine.data('trainPage', () => ({
     ];
   },
 
-  get viewingOwner() { return this.historyOwner || this.email; },
+  get viewingOwner() { return Alpine.store('ui').viewAs || this.historyOwner || this.email; },
   get viewingSelf() { return this.viewingOwner.toLowerCase() === this.email.toLowerCase(); },
 
   get history() {
@@ -4803,8 +4938,14 @@ Alpine.data('statsPage', () => ({
     Alpine.store('ui').flash('Weigh-in deleted');
   },
 
-  get email() { return Alpine.store('auth').email; },
-  get data() { return snapshotAll(); },
+  // While viewing the other person, their email, and their training index in
+  // place of yours: every card below reads through these two.
+  get email() { return Alpine.store('ui').viewEmail; },
+  get data() {
+    const all = snapshotAll();
+    const who = Alpine.store('ui').viewEmail;
+    return who === Alpine.store('auth').email ? all : { ...all, index: indexFor(who) };
+  },
 
   // ---- body weight ---------------------------------------------------------
 

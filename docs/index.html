@@ -74,7 +74,7 @@
 
 <!-- Bare x-data roots the Alpine component tree. Without it Alpine never walks
      these templates and the page renders empty. -->
-<div class="app" x-data :class="$store.ui.logOpen && 'has-panel'">
+<div class="app" x-data :class="{ 'has-panel': $store.ui.logOpen, 'is-viewing': $store.ui.viewAs }">
 
   <!-- Booting ------------------------------------------------------------- -->
   <!-- Held until the local read finishes too, not just auth. Painting the shell
@@ -153,11 +153,20 @@
               <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>
             </svg>
           </button>
-          <button class="tap avatar" @click="$store.ui.openProfile()"
-                  :aria-label="`Profile, ${$store.auth.displayName}`"
-                  x-text="$store.auth.initial"></button>
+          <!-- Whose day: you, or the other person. With nobody to switch to it
+               goes straight to the profile, as it always did. -->
+          <button class="tap avatar" @click="$store.ui.openWho()"
+                  :class="$store.ui.viewAs && 'is-other'"
+                  :aria-label="$store.ui.viewAs ? `Viewing ${$store.ui.viewName}, switch person` : `${$store.auth.displayName}, switch person or profile`"
+                  x-text="$store.ui.viewInitial"></button>
         </div>
       </header>
+
+      <!-- Says whose day this is, the whole time it is someone else's. -->
+      <div class="viewing-bar" x-show="$store.ui.viewAs" x-cloak role="status">
+        <span><b x-text="`Viewing ${$store.ui.viewName}`"></b> <small>read-only</small></span>
+        <button class="btn" @click="$store.ui.backToMe()">Back to me</button>
+      </div>
 
       <!-- Today ------------------------------------------------------------ -->
       <main class="app-main" x-data="todayPage" x-show="$store.ui.view === 'today'">
@@ -184,7 +193,7 @@
             <b x-text="$store.ui.dayLabel"></b>
           </button>
           <span class="status-chip" :class="`is-${status.key}`" x-text="status.text"></span>
-          <button class="tap day-mark" x-show="!$store.ui.isFuture"
+          <button class="mine-only tap day-mark" x-show="!$store.ui.isFuture"
                   :class="{ 'is-complete': viewMark === true, 'is-incomplete': viewMark === false }"
                   @click="toggleDayMark()"
                   :aria-label="viewMark === true ? 'Mark day incomplete' : 'Mark day complete'"><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
@@ -299,6 +308,26 @@
           </div>
         </div>
 
+        <!-- While viewing the other person: a nudge, or a cheer. -->
+        <div class="card nudge-card" x-show="$store.ui.viewAs && $store.ui.isToday" x-cloak>
+          <span x-text="entries.length ? `${$store.ui.viewName} is logging today` : `${$store.ui.viewName} hasn't logged food today`"></span>
+          <div class="nudge-actions">
+            <button class="btn btn-primary" @click="$store.ui.openNudge()">Nudge</button>
+            <button class="btn" :disabled="$store.ui.nudgeBusy"
+                    @click="$store.ui.sendNudge('cheer', trained ? `Nice work on ${trained.name}!` : 'Keep it up today!')">Cheer</button>
+          </div>
+        </div>
+
+        <!-- The workout that day, if there was one: half of what the day was. -->
+        <div class="card trained-card" x-show="trained" x-cloak>
+          <span class="med-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6.5 8v8M17.5 8v8M3.5 10v4M20.5 10v4M6.5 12h11"/></svg></span>
+          <span class="med-text">
+            <small>Trained</small>
+            <b x-text="trained && trained.name"></b>
+            <small x-text="trained && trained.line"></small>
+          </span>
+        </div>
+
         <!-- Today's doses, checked off here or from the notification's button. -->
         <div class="card meds" x-show="meds.length" x-cloak>
           <div class="section-row">
@@ -312,7 +341,7 @@
                 <b x-text="$store.ui.reminderTitle(m)"></b>
                 <small x-text="medLine(m)"></small>
               </span>
-              <button class="btn" :class="!$store.ui.takenLabel(m) && 'btn-success'"
+              <button class="mine-only btn" :class="!$store.ui.takenLabel(m) && 'btn-success'"
                       @click="$store.ui.toggleTaken(m)"
                       x-text="$store.ui.takenLabel(m) ? 'Undo' : 'Taken'"></button>
             </div>
@@ -352,7 +381,7 @@
                 <small x-text="amountLabel(entry.quantity, entry.unit)"></small>
               </button>
               <span class="row-num" x-text="round(entry.calories)"></span>
-              <button class="tap" @click="removeEntry(entry.id)" :aria-label="`Remove ${entry.description}`"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+              <button class="mine-only tap" @click="removeEntry(entry.id)" :aria-label="`Remove ${entry.description}`"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
             </div>
 
           </template>
@@ -373,9 +402,9 @@
                     <small x-text="amountLabel(entry.quantity, entry.unit)"></small>
                   </button>
                   <span class="row-num" x-text="round(entry.calories)"></span>
-                  <button class="tap tap-primary" @click="confirmPlanned(entry)"
+                  <button class="mine-only tap tap-primary" @click="confirmPlanned(entry)"
                           :aria-label="`Ate ${entry.description}`"><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
-                  <button class="tap" @click="removeEntry(entry.id)"
+                  <button class="mine-only tap" @click="removeEntry(entry.id)"
                           :aria-label="`Remove ${entry.description}`"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                 </div>
               </template>
@@ -516,8 +545,8 @@
         </template>
 
         <!-- Meal prep --------------------------------------------------------- -->
-        <div class="section-head" style="margin-top: var(--space-4);"><span>Meal prep</span></div>
-        <div class="chips">
+        <div class="mine-only section-head" style="margin-top: var(--space-4);"><span>Meal prep</span></div>
+        <div class="mine-only chips">
           <button class="chip" x-show="entries.length" @click="openPrep('copy')">Copy day forward</button>
           <button class="chip" x-show="entries.length" @click="openPrep('save')">Save as template</button>
           <button class="chip" x-show="templates.length" @click="openPrep('apply')">Apply template</button>
@@ -1463,9 +1492,9 @@
               <button class="chip" @click="menu = true" aria-label="More options"><svg class="icon icon-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg></button>
             </div>
 
-            <button class="btn btn-primary btn-block" @click="startEmpty()">Start workout</button>
+            <button class="mine-only btn btn-primary btn-block" @click="startEmpty()">Start workout</button>
 
-            <div class="stack">
+            <div class="mine-only stack">
               <div class="section-head">
                 <span>Routines</span>
                 <div class="chips">
@@ -2638,7 +2667,7 @@
                   <span x-text="weightSummary && weightSummary.toGo > 0 ? 'to go' : 'past target'"></span>
                 </div>
               </div>
-              <button class="btn" @click="openWeighing()">Log</button>
+              <button class="mine-only btn" @click="openWeighing()">Log</button>
             </div>
 
             <!-- One series, so the heading names it and no legend is needed.
@@ -3250,7 +3279,7 @@
                   </span>
                 </div>
               </div>
-              <button class="btn" @click="editGoal()" x-text="goal ? 'Edit' : 'Set'"></button>
+              <button class="mine-only btn" @click="editGoal()" x-text="goal ? 'Edit' : 'Set'"></button>
             </div>
 
             <div class="macros" x-show="goal && goal.protein_target_g">
@@ -3862,7 +3891,7 @@
 
       <!-- The way food gets added. Log is a panel over this screen, not a
            destination you navigate to and come back from. -->
-      <div class="fab-stack" x-show="$store.ui.view === 'today' && !$store.ui.logOpen">
+      <div class="fab-stack" x-show="$store.ui.view === 'today' && !$store.ui.logOpen && !$store.ui.viewAs">
         <button class="fab fab-secondary" x-show="$store.ui.canScan"
                 @click="$store.ui.startScan()" aria-label="Scan a barcode">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -4008,6 +4037,69 @@
               </template>
             </div>
             <p class="setting-meta">Morning motivation and the evening check-in are built in: one of each, changed from the list.</p>
+          </div>
+        </div>
+      </template>
+      <!-- Whose day? You or the other person, each with where their day stands. -->
+      <template x-if="$store.ui.whoOpen">
+        <div class="sheet-backdrop" @click.self="$store.ui.whoOpen = false">
+          <div class="sheet" x-init="$swipe($el, () => { $store.ui.whoOpen = false })">
+            <div class="grabber"></div>
+            <div class="sheet-head">
+              <h2>Whose day?</h2>
+              <button class="tap" @click="$store.ui.whoOpen = false" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            </div>
+            <div class="card list-card">
+              <button class="notify-row" @click="$store.ui.viewPerson('')" :class="!$store.ui.viewAs && 'is-current'">
+                <span class="tap avatar" aria-hidden="true" x-text="$store.auth.initial"></span>
+                <span class="notify-text">
+                  <b x-text="`${$store.auth.displayName} · you`"></b>
+                  <template x-for="(l, i) in $store.ui.daySummary($store.auth.email)" :key="i"><small x-text="l"></small></template>
+                </span>
+                <span class="who-check" x-show="!$store.ui.viewAs"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+              </button>
+              <button class="notify-row" @click="$store.ui.viewPerson($store.ui.partner.email)"
+                      x-show="$store.ui.partner" :class="$store.ui.viewAs && 'is-current'">
+                <span class="tap avatar is-other" aria-hidden="true"
+                      x-text="($store.ui.partner?.display_name || '?').charAt(0).toUpperCase()"></span>
+                <span class="notify-text">
+                  <b x-text="$store.ui.partner?.display_name"></b>
+                  <template x-for="(l, i) in ($store.ui.partner ? $store.ui.daySummary($store.ui.partner.email) : [])" :key="i"><small x-text="l"></small></template>
+                </span>
+                <span class="who-check" x-show="$store.ui.viewAs"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+              </button>
+            </div>
+            <p class="setting-meta">Switching shows their Today, Train and Stats, read-only, until you switch back.</p>
+            <div class="card list-card">
+              <button class="notify-row" @click="$store.ui.whoOpen = false; $store.ui.openProfile()">
+                <span class="notify-text"><b>Profile and settings</b><small>Watch, sign out</small></span>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+      <!-- A nudge to the other person: a ready line, or your own words. -->
+      <template x-if="$store.ui.nudgeOpen && $store.ui.viewAs">
+        <div class="sheet-backdrop" @click.self="$store.ui.nudgeOpen = false">
+          <div class="sheet" x-init="$swipe($el, () => { $store.ui.nudgeOpen = false })">
+            <div class="grabber"></div>
+            <div class="sheet-head">
+              <h2 x-text="`Nudge ${$store.ui.viewName}`"></h2>
+              <button class="tap" @click="$store.ui.nudgeOpen = false" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            </div>
+            <div class="nudge-presets">
+              <template x-for="p in $store.ui.nudgePresets" :key="p">
+                <button class="setting" :class="$store.ui.nudgeText === p && 'is-picked'" @click="$store.ui.nudgeText = p" x-text="p"></button>
+              </template>
+            </div>
+            <label class="field">
+              <span>Or your own words</span>
+              <input type="text" maxlength="120" x-model="$store.ui.nudgeText" placeholder="Dinner plans?">
+            </label>
+            <button class="btn btn-primary btn-block" :disabled="!$store.ui.nudgeText.trim() || $store.ui.nudgeBusy"
+                    @click="$store.ui.sendNudge('nudge', $store.ui.nudgeText)">Send nudge</button>
+            <p class="setting-meta">One nudge an hour, so it stays a nudge.</p>
           </div>
         </div>
       </template>
