@@ -46,8 +46,18 @@ export function localParts(now: Date, zone: string) {
   };
 }
 
+/**
+ * The kinds of reminder. The fixed two (morning, evening) are one each per
+ * member; the rest can be added freely, and several rows that share a
+ * series_id are one reminder at several times, each with its own days.
+ *   weigh_in  quiet once a weight is logged for the day
+ *   training  quiet once a session has started that day
+ *   custom    says the member's own words
+ */
+export type Kind = "food" | "meds" | "morning" | "evening" | "weigh_in" | "training" | "custom";
+
 export interface Reminder {
-  kind: "food" | "meds" | "morning" | "evening";
+  kind: Kind;
   at_time: string;          // "HH:MM" or "HH:MM:SS"
   days: number[];
   enabled: boolean;
@@ -117,4 +127,19 @@ export function foodMessage(label: string, nag = false): string {
 export function medsMessage(label: string, nag: boolean): string {
   const name = label.trim() || "your meds";
   return nag ? `Still need to take ${name}? Tap Taken once you have.` : `Time to take ${name}.`;
+}
+
+export function weighInMessage(nag = false): string {
+  return nag ? "Still need to weigh in? Tap Done once you have." : "Time to weigh in.";
+}
+
+export function trainingMessage(label: string, nag = false): string {
+  const name = label.trim();
+  if (nag) return `Still training today${name ? ` (${name})` : ""}? Tap Done once you have.`;
+  return name ? `${name}: time to train.` : "Training day: time to lift.";
+}
+
+/** The member's own words, which are the whole point of this kind. */
+export function customMessage(label: string): string {
+  return label.trim() || "Reminder";
 }

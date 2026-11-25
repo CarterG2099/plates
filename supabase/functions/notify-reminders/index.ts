@@ -12,6 +12,15 @@
 //   meds     always; asked again every 30 minutes until Taken, three times at most
 //   morning  the motivation line (morning.ts)
 //   evening  only when the day looks unfinished (nudge.ts)
+//   weigh_in quiet once a weight is logged today
+//   training quiet once a session has started today
+//   custom   the member's own words
+//
+// A reminder at several times is several rows sharing a series_id; each row is
+// sent, nagged and checked off on its own, so a med twice a day is two doses.
+//
+// A signed-in member may also call this with { test: <reminder id> } for one
+// of their own: it is sent at once and nothing is recorded for the day.
 //
 // Food and meds can be set to keep reminding (persistent): then it comes back
 // every 15 minutes, uncapped, until checked off — Taken for a med, Done for
@@ -24,7 +33,9 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // relative path out of this directory does not resolve once uploaded. The
 // copies are byte-identical and must stay that way.
 import { sendPush } from "./webpush.ts";
-import { foodMessage, localParts, medsMessage, quietForFood, whatIsDue, ZONE } from "./due.ts";
+import {
+  customMessage, foodMessage, localParts, medsMessage, quietForFood, trainingMessage, weighInMessage, whatIsDue, ZONE,
+} from "./due.ts";
 import type { Reminder, Send } from "./due.ts";
 import { nudge } from "./nudge.ts";
 import { morningMessage } from "./morning.ts";
@@ -96,6 +107,38 @@ async function lastEatenAt(db: SupabaseLike, owner: string, now: Date): Promise<
   return data?.[0]?.logged_at ?? null;
 }
 
+/**
+ * Whether this member already did the thing today, in Denver dates: a weight
+ * logged (weigh_in) or a session started (training). A UTC window wide enough
+ * for any offset, then filtered to the local date, as eveningMessage does.
+ */
+async function doneToday(db: SupabaseLike, table: "weight_log" | "sessions", owner: string, today: string, now: Date) {
+  const column = table === "weight_log" ? "measured_at" : "started_at";
+  const since = new Date(now.getTime() - 36 * 3_600_000).toISOString();
+  const { data } = await db
+    .from(table)
+    .select(column)
+    .eq("owner_email", owner)
+    .is("deleted_at", null)
+    .gte(column, since);
+  return (data ?? []).some((row: Record<string, string>) => localParts(new Date(row[column]), ZONE).date === today);
+}
+
+/**
+ * Who is asking for a test send, from their own sign-in: a member's email, or
+ * null. Lets the app's "Send a test" button work without the cron secret, and
+ * only ever for the caller's own reminders (checked where it is used).
+ */
+async function testerOf(db: SupabaseLike, req: Request): Promise<string | null> {
+  const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!jwt) return null;
+  const { data } = await db.auth.getUser(jwt);
+  const email = data?.user?.email?.toLowerCase();
+  if (!email) return null;
+  const { data: member } = await db.from("members").select("email").eq("email", email).maybeSingle();
+  return member ? email : null;
+}
+
 async function sha256(text: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -113,9 +156,18 @@ Deno.serve(async (req) => {
   const config = Object.fromEntries((configRows ?? []).map((r: { key: string; value: string }) => [r.key, r.value]));
 
   // Same shared secret as the other jobs. It runs as service role across every
-  // member, so it must not be invocable by anyone who finds the URL.
-  if (!config.cron_secret || req.headers.get("x-cron-secret") !== config.cron_secret) {
-    return json({ error: "forbidden" }, 403);
+  // member, so it must not be invocable by anyone who finds the URL. The one
+  // exception is a member testing one of their own reminders: signed in, and
+  // limited below to a reminder they own, sent once and left out of the day's
+  // record, so a test never counts as today's reminder or stops a real one.
+  const cron = Boolean(config.cron_secret) && req.headers.get("x-cron-secret") === config.cron_secret;
+  const tester = cron ? null : await testerOf(db, req);
+  if (!cron && !tester) return json({ error: "forbidden" }, 403);
+  let test: string | null = null;
+  if (tester) {
+    const asked = await req.json().catch(() => ({}));
+    test = typeof asked?.test === "string" ? asked.test : null;
+    if (!test) return json({ error: "which reminder?" }, 400);
   }
   if (!config.vapid_public_key || !config.vapid_private_key) {
     // notify-idle-workouts mints these; nothing here should be creating keys.
@@ -128,11 +180,14 @@ Deno.serve(async (req) => {
   // ?force=<reminder id> sends that one now, due or not, for testing.
   const force = new URL(req.url).searchParams.get("force");
 
-  const { data: reminders, error: remindersError } = await db
+  let query = db
     .from("reminders")
     .select("id, owner_email, kind, label, at_time, days, quiet_if_logged_min, enabled, deleted_at, persistent")
-    .eq("enabled", true)
     .is("deleted_at", null);
+  // A test may be of a reminder that is switched off: that is how you try one
+  // before turning it on. Only ever the caller's own.
+  query = test ? query.eq("id", test).eq("owner_email", tester) : query.eq("enabled", true);
+  const { data: reminders, error: remindersError } = await query;
   if (remindersError) return json({ error: remindersError.message }, 500);
   if (!reminders?.length) return json({ today, sent: 0, note: "no reminders on" });
 
@@ -157,7 +212,10 @@ Deno.serve(async (req) => {
 
   for (const r of reminders as Row[]) {
     const send = sends.get(r.id) ?? null;
-    const due = force === r.id ? (send?.sends ? "nag" : "first") : force ? null : whatIsDue(r, send, local, now);
+    const due = test ? "first"
+      : force === r.id ? (send?.sends ? "nag" : "first")
+      : force ? null
+      : whatIsDue(r, send, local, now);
     if (!due) continue;
 
     if (!subsByOwner.has(r.owner_email)) {
@@ -171,22 +229,48 @@ Deno.serve(async (req) => {
     const subs = subsByOwner.get(r.owner_email)!;
     if (!subs.length) continue;
 
+    // Each kind's words, and whether it speaks at all. A test always speaks:
+    // being quiet because you already logged would make "Send a test" look broken.
     let body: string | null;
     if (r.kind === "food" && due === "nag") {
       // Quiet was decided at the first send; from here only Done stops it.
       body = foodMessage(r.label, true);
     } else if (r.kind === "food") {
-      body = quietForFood(r.quiet_if_logged_min, await lastEatenAt(db, r.owner_email, now), now)
+      body = !test && quietForFood(r.quiet_if_logged_min, await lastEatenAt(db, r.owner_email, now), now)
         ? null
         : foodMessage(r.label);
     } else if (r.kind === "meds") {
       body = medsMessage(r.label, due === "nag");
+    } else if (r.kind === "weigh_in") {
+      body = !test && due === "first" && await doneToday(db, "weight_log", r.owner_email, today, now)
+        ? null
+        : weighInMessage(due === "nag");
+    } else if (r.kind === "training") {
+      body = !test && due === "first" && await doneToday(db, "sessions", r.owner_email, today, now)
+        ? null
+        : trainingMessage(r.label, due === "nag");
+    } else if (r.kind === "custom") {
+      body = customMessage(r.label);
     } else if (r.kind === "evening") {
-      body = await eveningMessage(db, r.owner_email, today, now);
+      body = await eveningMessage(db, r.owner_email, today, now)
+        ?? (test ? "Evening check-in: tonight it would stay quiet, the day looks finished." : null);
     } else {
       body = await morningMessage(db, r.owner_email, today, ZONE);
     }
     decisions[r.id] = body;
+
+    if (test) {
+      const payload = JSON.stringify({
+        title: r.kind === "meds" ? "Meds" : "Plates",
+        body,
+        tag: `reminder-test-${r.id}`,
+        url: r.kind === "morning" || r.kind === "training" ? "/#train" : "/#today",
+      });
+      for (const sub of subs) {
+        if ((await sendPush(sub, payload, vapid)).ok) sent++;
+      }
+      continue;
+    }
 
     // A new token per send, so only the latest notification's button counts;
     // only its hash is kept. Anything that can be checked off carries one.
@@ -228,7 +312,7 @@ Deno.serve(async (req) => {
       body,
       // One notification per reminder per day: a nag replaces the last one.
       tag: `reminder-${r.id}-${today}`,
-      url: r.kind === "morning" ? "/#train" : "/#today",
+      url: r.kind === "morning" || r.kind === "training" ? "/#train" : "/#today",
       ...(token ? { actions: [{ action: "taken", title: checkOff(r) }], taken: { url: takenUrl, token } } : {}),
     });
 

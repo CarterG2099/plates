@@ -148,6 +148,14 @@ Deno.serve(async (req) => {
   let pruned = 0;
 
   for (const { session, idleMinutes } of stale) {
+    // Switched off on the notifications page. No row means on, as it always was.
+    const { data: prefs } = await db
+      .from("notification_prefs")
+      .select("idle_workouts")
+      .eq("owner_email", session.owner_email)
+      .maybeSingle();
+    if (prefs?.idle_workouts === false) continue;
+
     const { data: subs } = await db
       .from("push_subscriptions")
       .select("id, endpoint, p256dh, auth")

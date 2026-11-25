@@ -3897,64 +3897,120 @@
 
       <template x-if="$store.ui.settingsOpen">
         <div class="sheet-backdrop" @click.self="$store.ui.settingsOpen = false">
-          <div class="sheet" x-init="$swipe($el, () => { $store.ui.settingsOpen = false })">
+          <div class="sheet sheet-tall notify" x-init="$swipe($el, () => { $store.ui.settingsOpen = false })">
             <div class="grabber"></div>
             <div class="sheet-head">
               <h2>Notifications</h2>
               <button class="tap" @click="$store.ui.settingsOpen = false" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
             </div>
 
-            <div class="card-label">Notifications</div>
-
-            <!-- Permission is the browser's, not ours: once denied it cannot be
+            <!-- This phone first: nothing below reaches it while this is off.
+                 Permission is the browser's, not ours: once denied it cannot be
                  asked for again from script, so the row says so rather than
                  offering a switch that would do nothing. -->
-            <label class="setting" :class="{ 'is-dead': ['unsupported', 'blocked'].includes($store.ui.notifications) }">
-              <span class="setting-text">
-                <b>Push notifications</b>
-                <small x-text="$store.ui.notifications === 'on'
-                  ? 'Forgotten workouts, and anything below you turn on'
-                  : $store.ui.notificationLabel"></small>
-              </span>
-              <input type="checkbox" role="switch"
-                     :checked="$store.ui.notifications === 'on'"
-                     :disabled="['unsupported', 'blocked', 'unknown'].includes($store.ui.notifications)"
-                     @change="await $store.ui.toggleNotifications();
-                              $el.checked = $store.ui.notifications === 'on'">
-            </label>
-
-            <!-- Each person's own; nobody sees the other's. The switch saves at
-                 once, and the row opens the reminder to change its time or days. -->
-            <div class="card-label" style="margin-top: var(--space-4)">Reminders</div>
-            <p class="setting-meta" x-show="$store.ui.notifications !== 'on'">
-              Reminders only reach a browser with notifications on.
-            </p>
-            <template x-for="r in $store.ui.reminderList" :key="r.id">
-              <div class="setting reminder-row" :class="{ 'is-off': !r.enabled }">
-                <button class="setting-text" @click="$store.ui.editReminder(r)">
-                  <b x-text="$store.ui.reminderTitle(r)"></b>
-                  <small x-text="$store.ui.reminderDetail(r)"></small>
-                  <small class="reminder-taken" x-show="$store.ui.takenLabel(r)"
-                         x-text="$store.ui.takenLabel(r)"></small>
-                </button>
-                <button class="chip" x-show="$store.ui.checksOff(r) && r.enabled"
-                        @click="$store.ui.toggleTaken(r)"
-                        x-text="$store.ui.takenLabel(r) ? 'Undo' : $store.ui.checkOffWord(r)"></button>
-                <input type="checkbox" role="switch" :checked="r.enabled"
-                       :aria-label="`${$store.ui.reminderTitle(r)} on`"
-                       @change="await $store.ui.toggleReminder(r); $el.checked = r.enabled">
+            <div class="card notify-status">
+              <label class="setting" :class="{ 'is-dead': ['unsupported', 'blocked'].includes($store.ui.notifications) }">
+                <span class="setting-text">
+                  <b x-text="$store.ui.notifications === 'on' ? 'On for this phone' : 'Off for this phone'"></b>
+                  <small x-text="$store.ui.notifications === 'on'
+                    ? 'Each phone or browser turns it on once'
+                    : $store.ui.notificationLabel"></small>
+                </span>
+                <input type="checkbox" role="switch"
+                       :checked="$store.ui.notifications === 'on'"
+                       :disabled="['unsupported', 'blocked', 'unknown'].includes($store.ui.notifications)"
+                       @change="await $store.ui.toggleNotifications();
+                                $el.checked = $store.ui.notifications === 'on'">
+              </label>
+              <div class="notify-next" x-show="$store.ui.reminderNext">
+                <small>Next up</small>
+                <b x-text="$store.ui.reminderNext && `${$store.ui.reminderNext.title} · ${$store.ui.reminderNext.when}`"></b>
               </div>
-            </template>
+            </div>
+
+            <!-- Each person's own; nobody sees the other's. A reminder can go off
+                 at several times; its switch turns all of them on or off, and
+                 the row opens it to change times, days or words. -->
+            <div class="section-row notify-sec">
+              <span class="card-label" x-text="`Reminders · ${$store.ui.reminderSeries.filter((x) => x.enabled).length} on`"></span>
+              <button class="link-btn" x-show="$store.ui.reminderSeries.length > 1"
+                      @click="$store.ui.reminderOrdering = !$store.ui.reminderOrdering"
+                      x-text="$store.ui.reminderOrdering ? 'Done' : 'Edit order'"></button>
+            </div>
+            <p class="setting-meta" x-show="$store.ui.notifications !== 'on'">
+              Reminders only reach a phone with notifications on.
+            </p>
+            <div class="card list-card cardstack" x-ref="reminderstack">
+              <template x-for="s in $store.ui.reminderSeries" :key="s.key">
+                <div class="notify-row" data-card :data-key="s.key" :class="{ 'is-off': !s.enabled }">
+                  <span class="grip" aria-hidden="true" x-show="$store.ui.reminderOrdering"
+                        x-init="$dragCard($el,
+                                  () => [...$refs.reminderstack.querySelectorAll('[data-card]')],
+                                  (to, key) => $store.ui.moveReminder(key, to))">⠿</span>
+                  <span class="notify-icon" :class="`is-${s.kind}`" aria-hidden="true"></span>
+                  <button class="notify-text" @click="$store.ui.editReminder(s)" :disabled="$store.ui.reminderOrdering">
+                    <b x-text="s.title"></b>
+                    <span class="time-chips">
+                      <template x-for="(t, i) in s.times" :key="i"><span class="time-chip" x-text="t"></span></template>
+                    </span>
+                    <small x-text="s.sub"></small>
+                    <small class="reminder-taken" x-show="s.rows.length === 1 && $store.ui.takenLabel(s.rows[0])"
+                           x-text="$store.ui.takenLabel(s.rows[0])"></small>
+                  </button>
+                  <button class="chip" x-show="!$store.ui.reminderOrdering && s.rows.length === 1 && $store.ui.checksOff(s.rows[0]) && s.enabled"
+                          @click="$store.ui.toggleTaken(s.rows[0])"
+                          x-text="$store.ui.takenLabel(s.rows[0]) ? 'Undo' : $store.ui.checkOffWord(s.rows[0])"></button>
+                  <input type="checkbox" role="switch" :checked="s.enabled" x-show="!$store.ui.reminderOrdering"
+                         :aria-label="`${s.title} on`"
+                         @change="await $store.ui.toggleReminder(s); $el.checked = s.enabled">
+                </div>
+              </template>
+            </div>
             <p class="notice notice-error" x-show="$store.ui.reminderError && !$store.ui.reminderDraft"
                x-text="$store.ui.reminderError"></p>
-            <div class="chips">
-              <button class="chip" @click="$store.ui.newReminder('food')">+ Food reminder</button>
-              <button class="chip" @click="$store.ui.newReminder('meds')">+ Med reminder</button>
+            <button class="btn btn-primary btn-block" @click="$store.ui.kindPicking = true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> New reminder</button>
+
+            <!-- Not scheduled: these fire when something happens. -->
+            <div class="card-label notify-sec">Automatic alerts</div>
+            <div class="card list-card">
+              <label class="notify-row">
+                <span class="notify-icon is-message" aria-hidden="true"></span>
+                <span class="notify-text"><b>Messages</b><small>Says “New message”, never the text</small></span>
+                <input type="checkbox" role="switch" :checked="$store.ui.prefs.messages !== false"
+                       :disabled="$store.ui.prefsBusy" @change="$store.ui.togglePref('messages')">
+              </label>
+              <label class="notify-row">
+                <span class="notify-icon is-training" aria-hidden="true"></span>
+                <span class="notify-text"><b>Forgotten workout</b><small>After 20 minutes with nothing logged</small></span>
+                <input type="checkbox" role="switch" :checked="$store.ui.prefs.idle_workouts !== false"
+                       :disabled="$store.ui.prefsBusy" @change="$store.ui.togglePref('idle_workouts')">
+              </label>
             </div>
           </div>
         </div>
       </template>
-
+      <!-- What a new reminder is for. Picking one opens the editor. -->
+      <template x-if="$store.ui.settingsOpen && $store.ui.kindPicking">
+        <div class="sheet-backdrop" @click.self="$store.ui.kindPicking = false">
+          <div class="sheet" x-init="$swipe($el, () => { $store.ui.kindPicking = false })">
+            <div class="grabber"></div>
+            <div class="sheet-head">
+              <h2>New reminder</h2>
+              <button class="tap" @click="$store.ui.kindPicking = false" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            </div>
+            <div class="card list-card">
+              <template x-for="k in $store.ui.newKinds" :key="k.kind">
+                <button class="notify-row" @click="$store.ui.newReminder(k.kind)">
+                  <span class="notify-icon" :class="`is-${k.kind}`" aria-hidden="true"></span>
+                  <span class="notify-text"><b x-text="k.title"></b><small x-text="k.sub"></small></span>
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+              </template>
+            </div>
+            <p class="setting-meta">Morning motivation and the evening check-in are built in: one of each, changed from the list.</p>
+          </div>
+        </div>
+      </template>
       <!-- Profile: who is signed in, the watch, and signing out. -->
       <template x-if="$store.ui.profileOpen">
         <div class="sheet-backdrop" @click.self="$store.ui.profileOpen = false">
@@ -3994,75 +4050,79 @@
         </div>
       </template>
 
-      <!-- One reminder, opened from Settings. A copy until Save. -->
+      <!-- One reminder, opened from Notifications. A copy until Save. Each time
+           has its own days; food times have their own names. -->
       <template x-if="$store.ui.settingsOpen && $store.ui.reminderDraft">
         <div class="sheet-backdrop" @click.self="$store.ui.reminderDraft = null">
-          <div class="sheet" x-init="$swipe($el, () => { $store.ui.reminderDraft = null })">
+          <div class="sheet sheet-tall" x-init="$swipe($el, () => { $store.ui.reminderDraft = null })">
             <div class="grabber"></div>
             <div class="sheet-head">
               <h2 x-text="$store.ui.reminderDraft.isNew
-                ? ($store.ui.reminderDraft.kind === 'meds' ? 'New med reminder' : 'New food reminder')
-                : $store.ui.reminderTitle($store.ui.reminderDraft)"></h2>
+                ? `New: ${($store.ui.newKinds.find((k) => k.kind === $store.ui.reminderDraft.kind) || { title: 'reminder' }).title.toLowerCase()}`
+                : $store.ui.reminderTitle({ ...$store.ui.reminderDraft, ...$store.ui.reminderDraft.times[0], label: $store.ui.reminderDraft.label || $store.ui.reminderDraft.times[0].label })"></h2>
               <button class="tap" @click="$store.ui.reminderDraft = null" aria-label="Close"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
             </div>
-
-            <label class="field" x-show="['food', 'meds'].includes($store.ui.reminderDraft.kind)">
-              <span x-text="$store.ui.reminderDraft.kind === 'meds' ? 'Med' : 'Name'"></span>
+            <label class="field" x-show="['meds', 'custom', 'training'].includes($store.ui.reminderDraft.kind)">
+              <span x-text="{ meds: 'Med', custom: 'What should it say?', training: 'Name (optional)' }[$store.ui.reminderDraft.kind]"></span>
               <input type="text" maxlength="60" autocomplete="off" x-model="$store.ui.reminderDraft.label"
-                     :placeholder="$store.ui.reminderDraft.kind === 'meds' ? 'Vitamin D' : 'Lunch'">
+                     :placeholder="{ meds: 'Vitamin D', custom: 'Stretch for ten minutes', training: 'Leg day' }[$store.ui.reminderDraft.kind]">
             </label>
-
-            <label class="field">
-              <span>Time</span>
-              <input type="time" x-model="$store.ui.reminderDraft.at_time">
-            </label>
-
             <div class="field">
-              <span>Days</span>
-              <div class="chips">
-                <template x-for="(name, day) in $store.ui.dayNames" :key="day">
-                  <button class="chip" :class="$store.ui.reminderDraft.days.includes(day) && 'is-active'"
-                          :aria-pressed="$store.ui.reminderDraft.days.includes(day)"
-                          @click="$store.ui.toggleReminderDay(day)" x-text="name"></button>
-                </template>
-              </div>
+              <span>Times</span>
+              <template x-for="(t, i) in $store.ui.reminderDraft.times" :key="t.id">
+                <div class="time-card">
+                  <div class="time-card-head">
+                    <input type="time" x-model="t.at_time" aria-label="Time">
+                    <input type="text" class="time-name" maxlength="60" x-model="t.label" placeholder="Name, like Lunch"
+                           x-show="$store.ui.reminderDraft.kind === 'food'" aria-label="Name for this time">
+                    <button class="tap" x-show="$store.ui.reminderDraft.times.length > 1"
+                            @click="$store.ui.removeReminderTime(i)" aria-label="Remove this time"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+                  </div>
+                  <div class="day-pills">
+                    <template x-for="(name, day) in $store.ui.dayNames" :key="day">
+                      <button class="day-pill" :class="t.days.includes(day) && 'is-active'"
+                              :aria-pressed="t.days.includes(day)"
+                              @click="$store.ui.toggleReminderDay(i, day)" x-text="name.slice(0, 1)"
+                              :aria-label="name"></button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+              <button class="btn btn-block" x-show="$store.ui.reminderCanAddTime" @click="$store.ui.addReminderTime()"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Add another time</button>
             </div>
-
             <label class="field" x-show="$store.ui.reminderDraft.kind === 'food'">
               <span>Stay quiet if I logged food in the last … minutes (0 = always remind)</span>
               <input type="number" inputmode="numeric" min="0" max="720" step="5"
                      x-model.number="$store.ui.reminderDraft.quiet_if_logged_min">
             </label>
-
             <label class="setting" x-show="$store.ui.canPersist($store.ui.reminderDraft)">
               <span class="setting-text">
-                <b>Keep reminding until checked off</b>
+                <b x-text="`Keep reminding until ${$store.ui.checkOffWord($store.ui.reminderDraft)}`"></b>
                 <small x-text="`Every 15 minutes, all day, until you tap ${$store.ui.checkOffWord($store.ui.reminderDraft)} here or on the notification`"></small>
               </span>
               <input type="checkbox" role="switch" x-model="$store.ui.reminderDraft.persistent">
             </label>
-
             <p class="setting-meta" x-show="$store.ui.reminderDraft.kind === 'meds' && !$store.ui.reminderDraft.persistent">
               Comes back every 30 minutes, up to 3 more times, until you tap Taken.
             </p>
             <p class="setting-meta" x-show="$store.ui.reminderDraft.kind === 'evening'">
               Only sent when the day looks unfinished: nothing logged, or well under your calories.
             </p>
-
             <p class="notice notice-error" x-show="$store.ui.reminderError || $store.ui.reminderProblem"
                x-text="$store.ui.reminderError || $store.ui.reminderProblem"></p>
-
-            <button class="btn btn-primary btn-block" @click="$store.ui.saveReminder()"
-                    :disabled="$store.ui.reminderBusy || Boolean($store.ui.reminderProblem)">Save</button>
+            <div class="sheet-actions">
+              <button class="btn" x-show="!$store.ui.reminderDraft.isNew"
+                      @click="$store.ui.testReminder($store.ui.reminderSeries.find((x) => x.key === $store.ui.reminderDraft.key))">Send a test</button>
+              <button class="btn btn-primary" @click="$store.ui.saveReminder()"
+                      :disabled="$store.ui.reminderBusy || Boolean($store.ui.reminderProblem)">Save</button>
+            </div>
             <button class="btn btn-ghost btn-block"
-                    x-show="!$store.ui.reminderDraft.isNew && ['food', 'meds'].includes($store.ui.reminderDraft.kind)"
+                    x-show="!$store.ui.reminderDraft.isNew && !['morning', 'evening'].includes($store.ui.reminderDraft.kind)"
                     :disabled="$store.ui.reminderBusy"
                     @click="$store.ui.deleteReminder()">Delete reminder</button>
           </div>
         </div>
       </template>
-
-
       <!-- Post-workout. Sits at the app root, not inside the Train screen: by the
            time this shows there is no session left for that component to hang off. -->
       <template x-if="$store.ui.finished">

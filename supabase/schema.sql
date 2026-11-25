@@ -1109,3 +1109,50 @@ create policy message_reactions_update on plates.message_reactions
   with check (plates.is_owner(owner_email));
 
 alter publication supabase_realtime add table plates.message_reactions;
+
+-- ---- reminders, the second pass (added 2026-11-24) -----------------------------
+-- One reminder at several times: each time is its own row, sharing a series_id,
+-- so the per-minute sender needs no change and a med twice a day is two doses,
+-- each with its own Taken. sort_order is the member's own order for the list.
+-- Three more kinds: weigh_in (quiet once weighed), training (quiet once a session
+-- has started) and custom (the member's own words). And a switch for message
+-- alerts, beside the one the forgotten-workout alert already had.
+alter table plates.reminders add column if not exists series_id uuid;
+alter table plates.reminders add column if not exists sort_order integer;
+grant update (series_id, sort_order) on plates.reminders to authenticated;
+
+alter table plates.reminders drop constraint if exists reminders_kind_check;
+alter table plates.reminders add constraint reminders_kind_check
+  check (kind in ('food', 'meds', 'morning', 'evening', 'weigh_in', 'training', 'custom'));
+
+drop policy if exists reminders_add on plates.reminders;
+create policy reminders_add on plates.reminders for insert
+  with check (plates.is_member() and owner_email = auth.email()
+              and kind in ('food', 'meds', 'weigh_in', 'training', 'custom'));
+drop policy if exists reminders_edit on plates.reminders;
+create policy reminders_edit on plates.reminders for update
+  using (plates.is_member() and owner_email = auth.email())
+  with check (plates.is_member() and owner_email = auth.email()
+              and (deleted_at is null or kind not in ('morning', 'evening')));
+
+create or replace function plates.set_reminder_taken(p_reminder uuid, p_day date, p_taken boolean)
+  returns timestamptz
+  language plpgsql security definer set search_path = ''
+as $$
+declare
+  stamp timestamptz := case when p_taken then now() end;
+begin
+  if not plates.is_member() or not exists (
+    select 1 from plates.reminders
+    where id = p_reminder and owner_email = auth.email() and kind not in ('morning', 'evening')
+  ) then
+    raise exception 'not your reminder';
+  end if;
+  insert into plates.reminder_sends (reminder_id, owner_email, local_date, taken_at)
+    values (p_reminder, auth.email(), p_day, stamp)
+    on conflict (reminder_id, local_date) do update set taken_at = stamp;
+  return stamp;
+end;
+$$;
+
+alter table plates.notification_prefs add column if not exists messages boolean not null default true;

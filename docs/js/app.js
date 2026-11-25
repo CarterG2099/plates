@@ -1107,29 +1107,50 @@ Alpine.store('ui', {
   checkOffWord(r) { return reminders.checkOffWord(r); },
   canPersist(r) { return reminders.canPersist(r); },
 
+  /** The rows gathered into reminders, each with all its times, in the member's order. */
+  get reminderSeries() { return reminders.seriesOf(this.reminderList); },
+
+  /** What fires next, for the top of the page. */
+  get reminderNext() { return reminders.nextUp(this.reminderList); },
+
+  newKinds: reminders.NEW_KINDS,
+  kindPicking: false,      // the "what should it remind you about?" sheet
+  reminderOrdering: false, // the list in drag-to-reorder mode
+
   newReminder(kind) {
+    this.kindPicking = false;
     this.reminderDraft = reminders.blank(kind);
     this.reminderError = '';
   },
 
-  editReminder(r) {
-    this.reminderDraft = { ...r, at_time: String(r.at_time).slice(0, 5), days: [...r.days] };
+  editReminder(series) {
+    this.reminderDraft = reminders.draftOf(series);
     this.reminderError = '';
   },
 
-  toggleReminderDay(day) {
-    const days = this.reminderDraft.days;
-    this.reminderDraft.days = days.includes(day) ? days.filter((d) => d !== day) : [...days, day];
+  addReminderTime() { this.reminderDraft = reminders.addTime(this.reminderDraft); },
+  removeReminderTime(index) { this.reminderDraft = reminders.removeTime(this.reminderDraft, index); },
+
+  toggleReminderDay(index, day) {
+    const time = this.reminderDraft.times[index];
+    time.days = time.days.includes(day) ? time.days.filter((d) => d !== day) : [...time.days, day];
   },
 
   get reminderProblem() { return this.reminderDraft ? reminders.problem(this.reminderDraft) : ''; },
 
+  /** The fixed two have one time each — the server keeps one row of each kind. */
+  get reminderCanAddTime() {
+    return Boolean(this.reminderDraft) && !reminders.isFixed(this.reminderDraft);
+  },
+
   async saveReminder() {
     if (this.reminderProblem) return;
     this.reminderBusy = true;
+    const { key, removed } = this.reminderDraft;
     try {
-      const saved = await reminders.save(this.reminderDraft);
-      this.reminderList = reminders.sorted([...this.reminderList.filter((r) => r.id !== saved.id), saved]);
+      const saved = await reminders.saveSeries(this.reminderDraft);
+      const keep = this.reminderList.filter((r) => (r.series_id ?? r.id) !== key && !removed.includes(r.id));
+      this.reminderList = reminders.sorted([...keep, ...saved]);
       this.reminderDraft = null;
       this.flash('Reminder saved');
     } catch (e) {
@@ -1139,31 +1160,83 @@ Alpine.store('ui', {
     }
   },
 
-  /** The switch on a row: saves straight away, and puts it back on failure. */
-  async toggleReminder(r) {
-    const next = !r.enabled;
-    this.reminderList = this.reminderList.map((x) => (x.id === r.id ? { ...x, enabled: next } : x));
+  /** The switch on a reminder: every time of it at once, saved straight away, put back on failure. */
+  async toggleReminder(series) {
+    const next = !series.enabled;
+    const ids = series.rows.map((r) => r.id);
+    const flip = (on) => {
+      this.reminderList = this.reminderList.map((x) => (ids.includes(x.id) ? { ...x, enabled: on } : x));
+    };
+    flip(next);
     try {
-      await reminders.save({ ...r, enabled: next });
-      this.flash(`${reminders.title(r)} ${next ? 'on' : 'off'}`);
+      for (const r of series.rows) await reminders.save({ ...r, enabled: next });
+      this.flash(`${series.title} ${next ? 'on' : 'off'}`);
     } catch (e) {
-      this.reminderList = this.reminderList.map((x) => (x.id === r.id ? { ...x, enabled: !next } : x));
+      flip(!next);
       this.flash(describeError(e));
     }
   },
 
   async deleteReminder() {
-    const { id } = this.reminderDraft;
+    const { key, times, removed } = this.reminderDraft;
+    const ids = [...times.filter((t) => !t.isNew).map((t) => t.id), ...removed];
     this.reminderBusy = true;
     try {
-      await reminders.remove(id);
-      this.reminderList = this.reminderList.filter((r) => r.id !== id);
+      for (const id of ids) await reminders.remove(id);
+      this.reminderList = this.reminderList.filter((r) => (r.series_id ?? r.id) !== key && !ids.includes(r.id));
       this.reminderDraft = null;
       this.flash('Reminder deleted');
     } catch (e) {
       this.reminderError = describeError(e);
     } finally {
       this.reminderBusy = false;
+    }
+  },
+
+  /**
+   * A drag in Edit order. Every reminder gets its place written, not just the
+   * one moved, so an order is never half old and half new; rows already in the
+   * right place are not sent.
+   */
+  async moveReminder(key, to) {
+    const order = this.reminderSeries.map((s) => s.key).filter((k) => k !== key);
+    order.splice(Math.max(0, Math.min(order.length, to)), 0, key);
+    const before = this.reminderList;
+    const place = new Map(order.map((k, i) => [k, i]));
+    this.reminderList = before.map((r) => ({ ...r, sort_order: place.get(r.series_id ?? r.id) }));
+    try {
+      for (const r of this.reminderList) {
+        if (before.find((b) => b.id === r.id)?.sort_order !== r.sort_order) await reminders.setOrder(r.id, r.sort_order);
+      }
+    } catch (e) {
+      this.reminderList = before;
+      this.flash(describeError(e));
+    }
+  },
+
+  /** "Send a test": the first time of a reminder, now, to this person's phones. */
+  async testReminder(series) {
+    try {
+      const result = await reminders.sendTest(series.rows[0].id);
+      this.flash(result?.sent ? 'Test sent' : 'Nothing sent: notifications are off on every phone');
+    } catch (e) {
+      this.flash(describeError(e));
+    }
+  },
+
+  /** The automatic alerts' switches, saved straight away and put back on failure. */
+  async togglePref(key) {
+    const email = Alpine.store('auth').email;
+    const before = this.prefs[key];
+    this.prefs = { ...this.prefs, [key]: !before };
+    this.prefsBusy = true;
+    try {
+      this.prefs = await push.savePrefs(email, { [key]: !before });
+    } catch (e) {
+      this.prefs = { ...this.prefs, [key]: before };
+      this.flash(describeError(e));
+    } finally {
+      this.prefsBusy = false;
     }
   },
 

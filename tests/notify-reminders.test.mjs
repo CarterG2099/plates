@@ -229,10 +229,45 @@ test('morning streaks still count yesterday on the morning after', () => {
 
 const source = (path) => readFile(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
 
-test('every reminder goes through whatIsDue, and ?force=<id> sends that one only', async () => {
+test('every reminder goes through whatIsDue; ?force=<id> and a member\'s test send that one only', async () => {
   const src = await source('../supabase/functions/notify-reminders/index.ts');
-  assert.match(src, /force === r\.id \? \(send\?\.sends \? "nag" : "first"\) : force \? null : whatIsDue\(r, send, local, now\)/);
+  assert.match(src, /const due = test \? "first"\s+: force === r\.id \? \(send\?\.sends \? "nag" : "first"\)\s+: force \? null\s+: whatIsDue\(r, send, local, now\)/);
   assert.doesNotMatch(src, /function localParts/, 'localParts lives in due.ts, not a copy here');
+});
+
+test('a member\'s test is their own reminder only, sent once and never recorded', async () => {
+  const src = await source('../supabase/functions/notify-reminders/index.ts');
+  assert.match(src, /if \(!cron && !tester\) return json\(\{ error: "forbidden" \}, 403\);/);
+  assert.match(src, /query = test \? query\.eq\("id", test\)\.eq\("owner_email", tester\) : query\.eq\("enabled", true\);/);
+  const testBlock = src.slice(src.indexOf('if (test) {\n      const payload'), src.indexOf('// A new token per send'));
+  assert.match(testBlock, /continue;/);
+  assert.doesNotMatch(testBlock, /reminder_sends/, 'nothing written for the day');
+});
+
+test('the new kinds speak in their own words, and go quiet once done', () => {
+  assert.equal(d.weighInMessage(), 'Time to weigh in.');
+  assert.equal(d.weighInMessage(true), 'Still need to weigh in? Tap Done once you have.');
+  assert.equal(d.trainingMessage(''), 'Training day: time to lift.');
+  assert.equal(d.trainingMessage('Leg day'), 'Leg day: time to train.');
+  assert.equal(d.trainingMessage('Leg day', true), 'Still training today (Leg day)? Tap Done once you have.');
+  assert.equal(d.customMessage('  Stretch  '), 'Stretch');
+  assert.equal(d.customMessage(''), 'Reminder');
+});
+
+test('weigh-in and training check today first, in Denver dates', async () => {
+  const src = await source('../supabase/functions/notify-reminders/index.ts');
+  assert.match(src, /await doneToday\(db, "weight_log", r\.owner_email, today, now\)/);
+  assert.match(src, /await doneToday\(db, "sessions", r\.owner_email, today, now\)/);
+  const fn = src.slice(src.indexOf('async function doneToday'), src.indexOf('async function testerOf'));
+  assert.match(fn, /\.eq\("owner_email", owner\)/);
+  assert.match(fn, /localParts\(new Date\(row\[column\]\), ZONE\)\.date === today/);
+});
+
+test('the message and forgotten-workout alerts honour their switches', async () => {
+  const msg = await source('../supabase/functions/notify-message/index.ts');
+  assert.match(msg, /if \(prefs\?\.messages === false\) return json/);
+  const idle = await source('../supabase/functions/notify-idle-workouts/index.ts');
+  assert.match(idle, /if \(prefs\?\.idle_workouts === false\) continue;/);
 });
 
 test('a send is claimed before it is made, so overlapping calls cannot both send', async () => {

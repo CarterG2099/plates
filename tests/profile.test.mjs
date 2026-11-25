@@ -61,8 +61,8 @@ test('the bar has a bell to notifications and the initial to the profile, not th
 test('the bell sheet is notifications and reminders only', () => {
   const sheet = sheetOf('settingsOpen');
   assert.match(sheet, /<h2>Notifications<\/h2>/);
-  assert.match(sheet, /Push notifications/);
-  assert.match(sheet, /newReminder\('meds'\)/);
+  assert.match(sheet, /On for this phone/);
+  assert.match(sheet, /kindPicking = true/);
   assert.doesNotMatch(sheet, /pairWatch|signOut/);
 });
 

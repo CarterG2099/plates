@@ -43,6 +43,14 @@ Deno.serve(async (req) => {
   // Unsent before the push went out: nothing to announce.
   if (!message || message.deleted_at) return json({ sent: 0 });
 
+  // The recipient can switch message alerts off on the notifications page. No
+  // row, or no answer, means on: that is how it behaved before the switch.
+  const { data: prefs } = await db.from("notification_prefs")
+    .select("messages")
+    .eq("owner_email", message.recipient_email)
+    .maybeSingle();
+  if (prefs?.messages === false) return json({ sent: 0, note: "messages off" });
+
   const { data: subs } = await db.from("push_subscriptions")
     .select("id, endpoint, p256dh, auth")
     .eq("owner_email", message.recipient_email)

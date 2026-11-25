@@ -572,16 +572,13 @@
    switch above that has to be on first. Still readable, so the reason shows. */
 .setting.is-dead { opacity: .55; cursor: default; }
 
-/* A reminder row: tap the text to edit it, the switch to turn it on or off. */
-.reminder-row .setting-text { flex: 1; text-align: left; }
-.reminder-row.is-off .setting-text { opacity: .55; }
-.reminder-row .reminder-taken { color: var(--color-text); }
 
 .setting-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .setting-text b { font-size: var(--text-sm); }
 .setting-text small { font-size: var(--text-xs); color: var(--color-text-muted); }
 
-.setting input[type="checkbox"] {
+.setting input[type="checkbox"],
+.notify-row input[type="checkbox"] {
   appearance: none;
   flex: none;
   width: 46px;
@@ -593,7 +590,8 @@
   transition: background .15s ease, border-color .15s ease;
 }
 
-.setting input[type="checkbox"]::after {
+.setting input[type="checkbox"]::after,
+.notify-row input[type="checkbox"]::after {
   content: "";
   position: absolute;
   top: 2px;
@@ -605,15 +603,18 @@
   transition: transform .15s ease, background .15s ease;
 }
 
-.setting input[type="checkbox"]:checked {
+.setting input[type="checkbox"]:checked,
+.notify-row input[type="checkbox"]:checked {
   background: var(--color-primary);
   border-color: var(--color-primary);
 }
-.setting input[type="checkbox"]:checked::after {
+.setting input[type="checkbox"]:checked::after,
+.notify-row input[type="checkbox"]:checked::after {
   transform: translateX(19px);
   background: #fff;
 }
-.setting input[type="checkbox"]:disabled { cursor: default; }
+.setting input[type="checkbox"]:disabled,
+.notify-row input[type="checkbox"]:disabled { cursor: default; }
 
 .setting-meta {
   font-family: var(--font-sans);
