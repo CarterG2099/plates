@@ -322,6 +322,61 @@ export async function sendVideo({ blob, text, ownerEmail, recipientEmail, lock =
   return savePhotoMessage({ blob, text, ownerEmail, recipientEmail, ext, contentType, lock });
 }
 
+const TYPE_OF = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', mp4: 'video/mp4', webm: 'video/webm' };
+
+/**
+ * Lock the messages I sent before encryption was on, so the server stops
+ * holding anything readable. Only my own: the update policy lets each person
+ * rewrite just the rows they sent, so each phone does its own.
+ *
+ * A message with a photo or clip: its file is downloaded, sealed with the same
+ * message key as its caption, uploaded as an opaque .bin, and the readable
+ * original deleted — before the row moves to the new file, because the bucket
+ * only lets you delete an object a message of yours still points to. If the
+ * delete fails the row is left as it was, plain, and tried again next time,
+ * rather than leaving a readable file behind that nothing points to.
+ *
+ * Returns how many were locked. Safe to run again: sealed rows are skipped.
+ */
+export async function resealPast({ rows, ownerEmail, lock }) {
+  const me = String(ownerEmail ?? '').toLowerCase();
+  let sealed = 0;
+  for (const m of rows ?? []) {
+    if (m.enc || m.deleted_at || String(m.owner_email ?? '').toLowerCase() !== me) continue;
+    const text = String(m.body ?? '').trim() || null;
+    if (!text && !m.photo_path) continue;
+
+    let file = null;
+    if (m.photo_path) {
+      const plain = await photoBlob(m.photo_path);
+      const ext = String(m.photo_path).split('.').pop().toLowerCase();
+      file = new Blob([plain], { type: plain.type || TYPE_OF[ext] || 'application/octet-stream' });
+    }
+    const locked = await lock({ text, file });
+
+    let photoPath = m.photo_path;
+    if (file) {
+      photoPath = `${crypto.randomUUID()}.bin`;
+      const up = await supabase.storage.from(BUCKET)
+        .upload(photoPath, locked.file, { contentType: 'application/octet-stream' });
+      if (up.error) throw new Error(up.error.message ?? String(up.error));
+      const gone = await supabase.storage.from(BUCKET).remove([m.photo_path]);
+      if (gone.error) {
+        Promise.resolve(supabase.storage.from(BUCKET).remove([photoPath])).catch(() => {});
+        throw new Error(gone.error.message ?? String(gone.error));
+      }
+      await local.putBlob(photoPath, locked.file);
+      await local.deleteBlob(m.photo_path);
+    }
+
+    const existing = await local.get('messages', m.id) ?? m;
+    await local.save('messages', { ...existing, body: locked.body, enc: locked.enc, photo_path: photoPath }, existing.owner_email);
+    sealed++;
+  }
+  if (sealed) sync.nudge();
+  return sealed;
+}
+
 /** Cached blob if we have it, the bucket if not. */
 export async function photoBlob(photoPath) {
   const cached = await local.getBlob(photoPath);

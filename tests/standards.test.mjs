@@ -178,7 +178,9 @@ test('the card asks for the standards before rating, and saves the answer on the
   assert.match(html, /<div class="card-label">How you compare<\/div>/);
   assert.match(html, /<template x-if="!mySex">[\s\S]*?setSex\('male'\)[\s\S]*?setSex\('female'\)/);
   const app = await source('../docs/js/app.js');
-  assert.match(app, /\.from\('members'\)\s*\.update\(\{ sex \}\)\.eq\('email', this\.email\)/);
+  // Saved for the signed-in person, never the one whose day is on screen.
+  assert.match(app, /\.from\('members'\)\s*\.update\(\{ sex \}\)\.eq\('email', this\.me\)/);
+  assert.match(html, /<template x-if="!mySex">\s*<div class="mine-only compare-ask">/, 'not asked on the other person\'s day');
   const sb = await source('../docs/js/supabase.js');
   assert.match(sb, /db\('members'\)\.select\('[^']*\bsex\b[^']*'\)/, 'membership must load sex or the choice is asked again every session');
   const sql = await source('../supabase/schema.sql');

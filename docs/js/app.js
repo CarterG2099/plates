@@ -4980,6 +4980,9 @@ Alpine.data('statsPage', () => ({
 
   // While viewing the other person, their email, and their training index in
   // place of yours: every card below reads through these two.
+  // Always the signed-in person: Messages, the camera, progress photos, the PIN
+  // and anything saved here are yours, whoever's day the cards are showing.
+  get me() { return Alpine.store('auth').email; },
   get email() { return Alpine.store('ui').viewEmail; },
   get data() {
     const all = snapshotAll();
@@ -5099,7 +5102,7 @@ Alpine.data('statsPage', () => ({
     const lb = Number(this.newWeight);
     if (!Number.isFinite(lb) || lb <= 0) return;
 
-    await stats.logWeight(lb, this.email);
+    await stats.logWeight(lb, this.me);
     this.newWeight = '';
     this.weighing = false;
     await Alpine.store('data').refresh();
@@ -5333,10 +5336,10 @@ Alpine.data('statsPage', () => ({
     this.sexSaving = true;
     try {
       const { error } = await supabase.schema('plates').from('members')
-        .update({ sex }).eq('email', this.email);
+        .update({ sex }).eq('email', this.me);
       if (error) throw error;
       const auth = Alpine.store('auth');
-      const me = auth.members.find((m) => m.email?.toLowerCase() === this.email.toLowerCase());
+      const me = auth.members.find((m) => m.email?.toLowerCase() === this.me.toLowerCase());
       if (me) me.sex = sex;
       auth.members = [...auth.members];      // a new array, so the getters re-run
       writeMembership({ email: auth.email, members: auth.members, isAdmin: auth.isAdmin });
@@ -5493,14 +5496,14 @@ Alpine.data('statsPage', () => ({
   },
 
   async saveGoal() {
-    await food.updateGoal(this.goal ?? {}, this.draft, this.email);
+    await food.updateGoal(this.goal ?? {}, this.draft, this.me);
     this.editing = false;
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash('Targets updated');
   },
 
   async saveNewPhase() {
-    await food.startPhase(this.draft, this.goal, this.email);
+    await food.startPhase(this.draft, this.goal, this.me);
     this.editing = false;
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash(`Started ${this.draft.phase}`);
@@ -5617,7 +5620,7 @@ Alpine.data('statsPage', () => ({
   },
 
   get myPinHash() {
-    const email = this.email.toLowerCase();
+    const email = this.me.toLowerCase();
     return Alpine.store('auth').members
       .find((m) => m.email?.toLowerCase() === email)?.photo_pin_hash ?? null;
   },
@@ -5626,13 +5629,13 @@ Alpine.data('statsPage', () => ({
   ownerFilter: 'mine',
 
   get partnerName() {
-    return partnerOf(Alpine.store('auth').members, this.email)?.display_name || 'Theirs';
+    return partnerOf(Alpine.store('auth').members, this.me)?.display_name || 'Theirs';
   },
 
   /** Whose timeline is showing: yours, or the other person's. */
   get timelineEmail() {
-    if (this.ownerFilter === 'mine') return this.email;
-    return partnerOf(Alpine.store('auth').members, this.email)?.email ?? '';
+    if (this.ownerFilter === 'mine') return this.me;
+    return partnerOf(Alpine.store('auth').members, this.me)?.email ?? '';
   },
 
   /** Their own photos, and the ones of you both, which show in either timeline. */
@@ -5658,7 +5661,7 @@ Alpine.data('statsPage', () => ({
       stage: this.pinStage,
       storedHash: this.myPinHash,
       first: this.pinFirst,
-      email: this.email,
+      email: this.me,
     });
 
     this.pinStage = step.stage;
@@ -5670,15 +5673,15 @@ Alpine.data('statsPage', () => ({
 
   async savePin(pin) {
     try {
-      const hash = await progress.hashPin(this.email, pin);
+      const hash = await progress.hashPin(this.me, pin);
       const { error } = await supabase.schema('plates').from('members')
-        .update({ photo_pin_hash: hash }).eq('email', this.email);
+        .update({ photo_pin_hash: hash }).eq('email', this.me);
       if (error) throw error;
 
       // Patch the in-memory copy and its localStorage cache so the lock works
       // offline from now on without waiting for the next membership check.
       const auth = Alpine.store('auth');
-      const me = auth.members.find((m) => m.email?.toLowerCase() === this.email.toLowerCase());
+      const me = auth.members.find((m) => m.email?.toLowerCase() === this.me.toLowerCase());
       if (me) me.photo_pin_hash = hash;
       writeMembership({ email: auth.email, members: auth.members, isAdmin: auth.isAdmin });
 
@@ -5743,7 +5746,7 @@ Alpine.data('statsPage', () => ({
   },
 
   ownedBy(p) {
-    if (p.owner_email === this.email) return '';
+    if (p.owner_email === this.me) return '';
     const other = Alpine.store('auth').members
       .find((m) => m.email?.toLowerCase() === p.owner_email?.toLowerCase());
     return other?.display_name || p.owner_email;
@@ -5930,7 +5933,7 @@ Alpine.data('statsPage', () => ({
     this.retake();
     this.cameraSaving++;
     try {
-      await progress.addPhoto({ file: blob, takenOn: food.toDateOnly(new Date()), pose, note: '', together, ownerEmail: this.email });
+      await progress.addPhoto({ file: blob, takenOn: food.toDateOnly(new Date()), pose, note: '', together, ownerEmail: this.me });
       await Alpine.store('data').refresh();
       Alpine.store('ui').flash(`${together ? 'Together, ' : ''}${pose} saved`);
     } catch (error) {
@@ -6002,7 +6005,7 @@ Alpine.data('statsPage', () => ({
         pose: this.photoDraft.pose,
         note: this.photoDraft.note.trim(),
         together: this.photoDraft.together,
-        ownerEmail: this.email,
+        ownerEmail: this.me,
       });
       this.addingPhoto = false;
       this.photoFile = null;
@@ -6095,12 +6098,12 @@ Alpine.data('statsPage', () => ({
   },
 
   chatReactedBy(r) {
-    return r.owner_email?.toLowerCase() === this.email.toLowerCase();
+    return r.owner_email?.toLowerCase() === this.me.toLowerCase();
   },
 
   async chatReact(m, emoji) {
     this.chatMenu = null;
-    await messages.react({ reactions: this.data.messageReactions, messageId: m.id, emoji, ownerEmail: this.email });
+    await messages.react({ reactions: this.data.messageReactions, messageId: m.id, emoji, ownerEmail: this.me });
     await Alpine.store('data').refreshCore();
   },
 
@@ -6236,11 +6239,11 @@ Alpine.data('statsPage', () => ({
   },
 
   get chatUnread() {
-    return messages.unreadCount(this.data.messages, this.email, this.chatReadAt);
+    return messages.unreadCount(this.data.messages, this.me, this.chatReadAt);
   },
 
   get chatPartner() {
-    return messages.partnerFor(Alpine.store('auth').members, this.email);
+    return messages.partnerFor(Alpine.store('auth').members, this.me);
   },
 
   // ---- end-to-end encryption ------------------------------------------------------
@@ -6266,7 +6269,7 @@ Alpine.data('statsPage', () => ({
   chatOpened: {},        // message id → { text, media } | { failed: true }
 
   async loadChatCrypto() {
-    const me = this.email.toLowerCase();
+    const me = this.me.toLowerCase();
     const partner = this.chatPartner?.email?.toLowerCase();
     if (!partner) return;
     this.chatCryptoError = '';
@@ -6304,6 +6307,34 @@ Alpine.data('statsPage', () => ({
     this.chatPartnerVerified = Boolean(known.verified);
     this.chatCrypto = 'ready';
     this.chatUnlockPending();
+    this.chatResealPast();
+  },
+
+  /**
+   * Once encryption is ready, lock what I sent before it was: the server should
+   * hold nothing readable. Quiet and best-effort — a failure leaves those rows
+   * as they were and tries again the next time Messages opens.
+   */
+  chatResealing: false,
+  async chatResealPast() {
+    if (this.chatResealing || this.chatCrypto !== 'ready') return;
+    this.chatResealing = true;
+    try {
+      const n = await messages.resealPast({
+        rows: snapshot().messages ?? [],
+        ownerEmail: this.me,
+        lock: await this.chatLock(),
+      });
+      if (n) {
+        await Alpine.store('data').refresh();
+        this.chatUnlockPending();
+        Alpine.store('ui').flash(`${n === 1 ? '1 earlier message' : `${n} earlier messages`} now encrypted`);
+      }
+    } catch (error) {
+      console.warn('Encrypting earlier messages:', error);
+    } finally {
+      this.chatResealing = false;
+    }
   },
 
   /**
@@ -6316,7 +6347,7 @@ Alpine.data('statsPage', () => ({
     this.chatCryptoBusy = true;
     this.chatCryptoError = '';
     try {
-      const me = this.email.toLowerCase();
+      const me = this.me.toLowerCase();
       const identity = await e2ee.createIdentity(this.chatNewKey);
       await e2ee.publish(me, identity);
       await e2ee.keepIdentity(me, identity);
@@ -6352,7 +6383,7 @@ Alpine.data('statsPage', () => ({
     const entered = this.chatKeyEntry;
     this.chatKeyEntry = '';
     try {
-      const me = this.email.toLowerCase();
+      const me = this.me.toLowerCase();
       const vault = await e2ee.fetchVault(me);
       if (!vault) { this.chatCrypto = 'checking'; await this.loadChatCrypto(); return; }
       const privateKey = await e2ee.unlockIdentity(vault, entered);
@@ -6450,7 +6481,7 @@ Alpine.data('statsPage', () => ({
     this.stopChatListen = messages.listen(() => Alpine.store('data').refreshCore());
     this.chatTyping?.close();
     this.chatTyping = messages.typingChannel({
-      myEmail: this.email,
+      myEmail: this.me,
       partnerEmail: this.chatPartner.email,
       onChange: (on) => { this.chatTheyType = on; },
     });
@@ -6500,7 +6531,7 @@ Alpine.data('statsPage', () => ({
   },
 
   chatMine(m) {
-    return m.owner_email?.toLowerCase() === this.email.toLowerCase();
+    return m.owner_email?.toLowerCase() === this.me.toLowerCase();
   },
 
   chatTime(m) {
@@ -6573,13 +6604,13 @@ Alpine.data('statsPage', () => ({
     try {
       const lock = await this.chatLock();
       if (this.chatPhoto?.kind === 'video') {
-        await messages.sendVideo({ blob: this.chatPhoto.file, text, ownerEmail: this.email, recipientEmail, lock });
+        await messages.sendVideo({ blob: this.chatPhoto.file, text, ownerEmail: this.me, recipientEmail, lock });
         this.clearChatPhoto();
       } else if (this.chatPhoto) {
-        await messages.sendPhoto({ file: this.chatPhoto.file, text, ownerEmail: this.email, recipientEmail, lock });
+        await messages.sendPhoto({ file: this.chatPhoto.file, text, ownerEmail: this.me, recipientEmail, lock });
         this.clearChatPhoto();
       } else {
-        await messages.sendText({ text, ownerEmail: this.email, recipientEmail, lock });
+        await messages.sendText({ text, ownerEmail: this.me, recipientEmail, lock });
       }
       this.chatText = '';
       this.chatTyping?.stopped();

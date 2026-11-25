@@ -348,3 +348,130 @@ test('setup tells you to tap the key box, since a password manager only saves a 
   assert.match(setup, /First tap the key box below/);
   assert.match(setup, /autocomplete="new-password"\s+x-model="chatNewKey"/);
 });
+
+// ---- locking what was sent before encryption -------------------------------------------
+
+const messagesModule = await import('../docs/js/messages.js');
+
+/** A plain, pre-encryption row of mine or hers, already on this phone. */
+async function plainRow(over) {
+  const row = { id: crypto.randomUUID(), owner_email: ME, recipient_email: AANA, body: 'before encryption',
+    photo_path: null, enc: null, deleted_at: null, sent_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...over };
+  await local.putManyLocalIfNewer('messages', [row]);
+  return row;
+}
+
+/** Watches the bucket: every upload and remove, in order; `refuseRemoves` makes deletes fail. */
+function watchBucket() {
+  const steps = [];
+  const real = supabase.storage.from;
+  let failRemove = false;
+  supabase.storage.from = function () {
+    return {
+      upload: async (path, blob) => { steps.push(['upload', path, blob]); return { data: { path }, error: null }; },
+      remove: async (paths) => {
+        steps.push(['remove', ...paths]);
+        return failRemove ? { data: null, error: { message: 'refused' } } : { data: null, error: null };
+      },
+      download: async () => ({ data: null, error: { message: 'not stubbed' } }),
+    };
+  };
+  return { steps, refuseRemoves() { failRemove = true; }, restore() { supabase.storage.from = real; } };
+}
+
+test('my old messages are locked; hers, unsent and already-locked ones are left alone', async () => {
+  const { a, b, ab, ba } = await twoPeople();
+  const ids = { from: a.keyId, to: b.keyId };
+  const lock = (content) => e2ee.seal(ab, content, ids);
+  const bucket = watchBucket();
+  try {
+    const text = await plainRow({ body: 'hello from before' });
+    const photoPath = `${crypto.randomUUID()}.jpg`;
+    await local.putBlob(photoPath, new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }));
+    const photo = await plainRow({ body: 'look', photo_path: photoPath });
+    const hers = await plainRow({ owner_email: AANA, recipient_email: ME, body: 'hers' });
+    const gone = await plainRow({ body: null, deleted_at: new Date().toISOString() });
+    const already = await plainRow({ body: 'x', enc: { v: 1 } });
+    const rows = [text, photo, hers, gone, already];
+
+    assert.equal(await messagesModule.resealPast({ rows, ownerEmail: ME, lock }), 2);
+
+    const t = await local.get('messages', text.id);
+    assert.ok(t.enc && t.body !== 'hello from before', 'the server copy is ciphertext now');
+    assert.equal((await e2ee.open(ba, t)).text, 'hello from before', 'and she can still read it');
+
+    const p = await local.get('messages', photo.id);
+    assert.match(p.photo_path, /\.bin$/, 'the file is an opaque object now');
+    assert.equal((await e2ee.open(ba, p)).media, 'image/jpeg', 'its real type is inside');
+    assert.deepEqual(bucket.steps.map((s) => s[0]), ['upload', 'remove'], 'the locked copy goes up before the readable one is deleted');
+    assert.equal(bucket.steps[0][1], p.photo_path);
+    assert.equal(bucket.steps[1][1], photoPath);
+    assert.ok(!(await local.getBlob(photoPath)), 'no readable copy left on this phone either');
+
+    assert.equal((await local.get('messages', hers.id)).enc, null, 'hers are hers to lock');
+    assert.equal((await local.get('messages', gone.id)).body, null);
+
+    const again = [t, p, hers, gone, already];
+    assert.equal(await messagesModule.resealPast({ rows: again, ownerEmail: ME, lock }), 0, 'safe to run again');
+  } finally {
+    bucket.restore();
+  }
+});
+
+test('if the readable file cannot be deleted, the message stays as it was and the locked copy is taken back', async () => {
+  const { a, b, ab } = await twoPeople();
+  const lock = (content) => e2ee.seal(ab, content, { from: a.keyId, to: b.keyId });
+  const bucket = watchBucket();
+  bucket.refuseRemoves();
+  try {
+    const photoPath = `${crypto.randomUUID()}.jpg`;
+    await local.putBlob(photoPath, new Blob([new Uint8Array([9])], { type: 'image/jpeg' }));
+    const row = await plainRow({ body: null, photo_path: photoPath });
+    await assert.rejects(messagesModule.resealPast({ rows: [row], ownerEmail: ME, lock }), /refused/);
+    const after = await local.get('messages', row.id);
+    assert.equal(after.photo_path, photoPath);
+    assert.equal(after.enc, null, 'tried again next time');
+    const uploaded = bucket.steps[0][1];
+    assert.ok(bucket.steps.some((s) => s[0] === 'remove' && s[1] === uploaded), 'the orphaned locked copy is removed');
+  } finally {
+    bucket.restore();
+  }
+});
+
+test('once encryption is ready, Messages locks my earlier messages by itself', async () => {
+  await reset();
+  const page = statsPage();
+  page.openChat();
+  await readyChat(page, server, AANA);
+  const row = await plainRow({ body: 'sent before it was on' });
+  await Alpine.store('data').refreshCore();
+  // Ready already started one run, on the rows it had then; a call while that
+  // is going steps aside, so wait it out before asking again.
+  while (page.chatResealing) await new Promise((r) => setTimeout(r, 5));
+  await page.chatResealPast();
+  const after = await local.get('messages', row.id);
+  assert.ok(after.enc, 'locked');
+  await page.chatUnlockPending();
+  assert.equal(page.chatBody(after), 'sent before it was on', 'and still reads the same here');
+  page.closeChat();
+});
+
+test('Messages is always mine, even while viewing her day', async () => {
+  await reset();
+  Alpine.store('ui').viewAs = AANA;
+  try {
+    const page = statsPage();
+    assert.equal(page.email, AANA, 'the cards show her day');
+    assert.equal(page.me, ME, 'Messages, photos and the PIN stay mine');
+    page.openChat();
+    await readyChat(page, server, AANA);
+    page.chatText = 'still me';
+    await page.sendChat();
+    const sent = (await local.allRaw('messages')).filter((m) => m.recipient_email === AANA).at(-1);
+    assert.equal(sent.owner_email, ME);
+    assert.equal(page.chatPartner.email, AANA, 'talking to her, not to myself');
+    page.closeChat();
+  } finally {
+    Alpine.store('ui').viewAs = '';
+  }
+});
