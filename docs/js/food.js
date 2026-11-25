@@ -219,6 +219,75 @@ export function isComplete(marks, ownerEmail, dayKey) {
   return dayMarkFor(marks, ownerEmail, dayKey)?.complete ?? null;
 }
 
+// ---- the week strip ------------------------------------------------------------
+
+/** The Monday-to-Sunday week holding `date`, as seven local-midnight dates. */
+export function weekOf(date) {
+  const start = dayBounds(date).start;
+  const monday = addDays(start, -((start.getDay() + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+}
+
+/**
+ * One day measured against the goal that was in force on it: what was eaten,
+ * the four targets (null where none is set), and the day's mark.
+ */
+export function dayAgainstGoal({ log, goals, marks }, ownerEmail, date) {
+  const entries = entriesForDay(log, ownerEmail, date);
+  const goal = currentGoal(goals, ownerEmail, date);
+  const target = (key) => Number(goal?.[key]) || null;
+  return {
+    date,
+    key: toDateOnly(date),
+    logged: entries.length,
+    mark: isComplete(marks, ownerEmail, toDateOnly(date)),
+    totals: sumTotals(entries),
+    targets: {
+      calories: target('calorie_target'),
+      protein_g: target('protein_target_g'),
+      carbs_g: target('carbs_target_g'),
+      fat_g: target('fat_target_g'),
+    },
+  };
+}
+
+/**
+ * Where a day stands, for its chip and its mark in the strip:
+ * complete | incomplete — the person's answer, which wins whenever there is one;
+ * future — not happened yet; today — still going; unreviewed — logged but never
+ * marked; empty — nothing logged.
+ */
+export function dayStatus(day, todayKey) {
+  if (day.key > todayKey) return 'future';
+  if (day.mark === true) return 'complete';
+  if (day.mark === false) return 'incomplete';
+  if (day.key === todayKey) return 'today';
+  return day.logged ? 'unreviewed' : 'empty';
+}
+
+/**
+ * The week's average share of each target, over the days marked complete.
+ *
+ * Only complete days count: an unmarked or incomplete day is a partial record,
+ * and averaging it in reads as eating less than really happened. A macro with
+ * no target on a day is left out of that day rather than counted as zero.
+ * Each value is a whole percent, or null when no complete day had a target.
+ */
+export function completedAverages(days) {
+  const done = days.filter((d) => d.mark === true && d.logged > 0);
+  const average = (key) => {
+    const shares = done.filter((d) => d.targets[key]).map((d) => d.totals[key] / d.targets[key]);
+    return shares.length ? Math.round((shares.reduce((s, x) => s + x, 0) / shares.length) * 100) : null;
+  };
+  return {
+    count: done.length,
+    calories: average('calories'),
+    protein_g: average('protein_g'),
+    carbs_g: average('carbs_g'),
+    fat_g: average('fat_g'),
+  };
+}
+
 export async function setDayMark(marks, ownerEmail, dayKey, complete) {
   const existing = dayMarkFor(marks, ownerEmail, dayKey);
   const row = await local.save('day_marks', {

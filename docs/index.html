@@ -174,21 +174,34 @@
           <button class="tap" @click="$store.ui.dropReadyEstimate()" aria-label="Discard the estimate"><svg class="icon icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
         </div>
 
-        <div class="datenav">
-          <button class="tap" @click="$store.ui.shiftDay(-1)" aria-label="Previous day"><svg class="icon icon-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
-          <button class="datenav-label" @click="$store.ui.goToday()">
+        <!-- The day on screen, and its verdict: the check marks it complete; a
+             complete day is the only kind the week's averages count. Tapping
+             the title comes back to today; swiping the screen moves a day. -->
+        <div class="day-head">
+          <button class="day-title" @click="$store.ui.goToday()"
+                  :aria-label="$store.ui.isToday ? $store.ui.dayLabel : `${$store.ui.dayLabel}, tap for today`">
+            <small x-text="dayDate"></small>
             <b x-text="$store.ui.dayLabel"></b>
-            <small x-show="!$store.ui.isToday">
-              <span x-text="$store.ui.viewDate"></span> · tap for today
-            </small>
           </button>
-          <button class="tap" @click="$store.ui.shiftDay(1)" aria-label="Next day"><svg class="icon icon-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
-          <!-- The day's verdict: green check = complete, struck = incomplete,
-               dim = never reviewed. The future cannot be complete yet. -->
+          <span class="status-chip" :class="`is-${status.key}`" x-text="status.text"></span>
           <button class="tap day-mark" x-show="!$store.ui.isFuture"
                   :class="{ 'is-complete': viewMark === true, 'is-incomplete': viewMark === false }"
                   @click="toggleDayMark()"
                   :aria-label="viewMark === true ? 'Mark day incomplete' : 'Mark day complete'"><svg class="icon icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+        </div>
+
+        <!-- The week, Monday to Sunday: each day's rings and its mark. A tap
+             opens that day. The rings are markup from rings.js, because x-for
+             does not run inside an SVG element. -->
+        <div class="card week-strip" role="group" aria-label="The week">
+          <template x-for="d in week" :key="d.key">
+            <button class="week-day" :class="{ 'is-on': d.on, 'is-future': d.isFuture }"
+                    @click="pickDay(d.key)" :aria-pressed="d.on" :aria-label="d.aria">
+              <span class="week-letter" x-text="d.letter"></span>
+              <span class="week-rings" x-html="d.svg"></span>
+              <span class="week-mark" x-html="d.markSvg"></span>
+            </button>
+          </template>
         </div>
 
         <!-- A future day with entries is a plan, not a record. Say so, so the
@@ -198,19 +211,23 @@
         </div>
 
         <div class="card readout">
-          <div class="readout-head">
-            <div>
-              <div class="readout-total" x-text="round(totals.calories).toLocaleString()"></div>
-              <div class="readout-of">
-                <span x-show="calorieTarget">of <span x-text="calorieTarget?.toLocaleString()"></span> kcal</span>
-                <span x-show="!calorieTarget">kcal · no target set</span>
-              </div>
-            </div>
-            <div class="readout-remaining" :class="remaining !== null && remaining < 0 && 'is-over'" x-show="calorieTarget">
-              <b x-text="Math.abs(remaining ?? 0).toLocaleString()"></b>
-              <small x-text="(remaining ?? 0) < 0 ? 'over' : 'left'"></small>
+          <div class="ring-day">
+            <span class="ring-big" x-html="ringsSvg"></span>
+            <!-- Each line opens the who-contributed sheet for that number. -->
+            <div class="ring-rows">
+              <template x-for="r in ringRows" :key="r.key">
+                <button class="ring-row" @click="openNutrient(r.nutrient)">
+                  <small x-text="r.label"></small>
+                  <span class="ring-line">
+                    <b :class="`is-${r.key}`" x-text="r.value"></b>
+                    <span class="ring-of" x-text="r.of"></span>
+                    <span class="over-tag" :class="`is-${r.key}`" x-show="r.over" x-text="r.overText"></span>
+                  </span>
+                </button>
+              </template>
             </div>
           </div>
+          <p class="ring-note" x-text="ringNote"></p>
 
           <p class="infood" x-show="remainingInFood">
             ≈ <span x-text="remainingInFood"></span>
@@ -225,40 +242,6 @@
               <span x-text="(afterPlan ?? 0) < 0 ? 'over after it' : 'left after it'"></span>
             </span>
           </p>
-
-          <!-- The calorie readout as a loaded barbell. Width is each macro's
-               share of the target; heights are equal, because a taller plate
-               would read as a heavier one. Planned plates sit beyond the
-               collar, waiting to be loaded. -->
-          <div class="rack" x-show="calorieTarget">
-            <template x-for="p in plates" :key="p.key">
-              <i :style="`background: ${p.colour}; width: ${p.width}%`"></i>
-            </template>
-            <i class="collar" x-show="plates.length"></i>
-            <template x-for="p in plannedPlates" :key="`plan-${p.key}`">
-              <i class="is-planned" :style="`background: ${p.colour}; width: ${p.width}%`"></i>
-            </template>
-          </div>
-
-          <div class="macros">
-            <!-- Buttons: each opens the same who-contributed sheet the label
-                 lines use, keyed to that macro. -->
-            <template x-for="m in [
-              { key: 'protein_g', name: 'Protein', color: 'var(--color-protein)' },
-              { key: 'carbs_g',   name: 'Carbs',   color: 'var(--color-carbs)' },
-              { key: 'fat_g',     name: 'Fat',     color: 'var(--color-fat)' }
-            ]" :key="m.key">
-              <button class="macro" @click="openNutrient({ key: m.key, name: m.name, unit: 'g' })">
-                <span class="dot" :style="`background: ${m.color}`"></span>
-                <span class="macro-name" x-text="m.name"></span>
-                <span class="macro-bar"><i :style="`background: ${m.color}; width: ${percent(m.key)}%`"></i><i
-                  class="is-planned" :style="`background: ${m.color}; width: ${plannedPercent(m.key)}%`"></i></span>
-                <span class="macro-val">
-                  <span x-text="round(totals[m.key])"></span><s x-show="target(m.key)">/<span x-text="target(m.key)"></span></s>
-                </span>
-              </button>
-            </template>
-          </div>
 
           <!-- The rest of the panel — sodium, sugars, the micros — summed
                across everything eaten, on request. The macro rows above stay
@@ -316,6 +299,44 @@
           </div>
         </div>
 
+        <!-- Today's doses, checked off here or from the notification's button. -->
+        <div class="card meds" x-show="meds.length" x-cloak>
+          <div class="section-row">
+            <span class="card-label">Meds</span>
+            <small x-text="medsSummary"></small>
+          </div>
+          <template x-for="m in meds" :key="m.id">
+            <div class="med-row">
+              <span class="med-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="9" width="17" height="6.5" rx="3.25" transform="rotate(-35 12 12)"/><path d="M9.5 8.2l4.9 7"/></svg></span>
+              <span class="med-text">
+                <b x-text="$store.ui.reminderTitle(m)"></b>
+                <small x-text="medLine(m)"></small>
+              </span>
+              <button class="btn" :class="!$store.ui.takenLabel(m) && 'btn-success'"
+                      @click="$store.ui.toggleTaken(m)"
+                      x-text="$store.ui.takenLabel(m) ? 'Undo' : 'Taken'"></button>
+            </div>
+          </template>
+        </div>
+
+        <!-- The week's averages, from complete days only: a half-logged day
+             would read as eating less than really happened. -->
+        <div class="week-avg">
+          <div class="section-row">
+            <span class="card-label" x-text="weekAverages.title"></span>
+            <small x-text="weekAverages.sub"></small>
+          </div>
+          <div class="avg-tiles">
+            <template x-for="t in weekAverages.tiles" :key="t.key">
+              <div class="avg-tile">
+                <small x-text="t.label"></small>
+                <b :class="`is-${t.key}`" x-text="t.text"></b>
+                <span class="avg-bar"><i :class="`is-${t.key}`" :style="`width: ${t.width}%`"></i></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
         <template x-if="!entries.length && !plannedEntries.length">
           <p class="empty">Nothing logged yet today.</p>
         </template>
@@ -361,63 +382,6 @@
             </div>
           </div>
         </template>
-
-        <!-- The average logged day, as a label ------------------------------- -->
-        <div class="card" x-show="weekLabel.loggedDays">
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Average day</div>
-              <div class="stat-sub">
-                last 7 · averaged across
-                <span x-text="weekLabel.loggedDays"></span>
-                logged <span x-text="weekLabel.loggedDays === 1 ? 'day' : 'days'"></span>
-              </div>
-            </div>
-            <button class="btn" @click="weekLabelOpen = !weekLabelOpen"
-                    x-text="weekLabelOpen ? 'Hide' : 'Show'"></button>
-          </div>
-
-          <div class="nutrition" x-show="weekLabelOpen && weekLabel.hasAny" x-cloak>
-            <div class="nf-title">Nutrition Facts</div>
-            <div class="nf-serving">
-              <span>Serving size</span><span>1 average day</span>
-            </div>
-
-            <div class="nf-calories">
-              <span>Calories</span><b x-text="weekLabel.calories ?? '—'"></b>
-            </div>
-
-            <div class="nf-dv">% Daily Value*</div>
-
-            <template x-for="r in weekLabel.printedRows" :key="r.key">
-              <div class="nf-row" :class="[`nf-in-${r.indent}`, r.bold && 'is-major']">
-                <span class="nf-name">
-                  <span x-text="r.name"></span>
-                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
-                </span>
-                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
-              </div>
-            </template>
-
-            <div class="nf-rule" x-show="weekLabel.printedMicros.length"></div>
-
-            <template x-for="r in weekLabel.printedMicros" :key="r.key">
-              <div class="nf-row">
-                <span class="nf-name">
-                  <span x-text="r.name"></span>
-                  <span class="nf-amount" x-text="r.amount ?? '—'"></span>
-                </span>
-                <span class="nf-pct" x-text="r.percent === null ? '' : `${r.percent}%`"></span>
-              </div>
-            </template>
-
-            <p class="nf-note">
-              * Percent Daily Values are based on a 2,000 calorie diet.
-              <span x-show="weekLabel.partial">Not every food reported every
-              line, so lines below the macros can undercount.</span>
-            </p>
-          </div>
-        </div>
 
         <!-- Edit a logged amount ---------------------------------------------- -->
         <template x-if="edit">

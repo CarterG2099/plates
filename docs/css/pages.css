@@ -41,35 +41,6 @@
 .tabbar button.is-active { color: var(--color-text); }
 .tabbar button.is-active .icon { color: var(--color-primary-hover); }
 
-/* ---- date navigation ------------------------------------------------------ */
-
-.datenav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex: none;
-}
-
-.datenav-label {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.datenav-label b {
-  font-family: var(--font-sans);
-  font-size: var(--text-lg);
-  letter-spacing: -.02em;
-}
-
-.datenav-label small {
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  color: var(--color-text-dim);
-}
-
 /* ---- add-food entry point ------------------------------------------------- */
 
 .fab-stack {
@@ -144,24 +115,6 @@
   margin-top: var(--space-1);
 }
 
-.readout-remaining { text-align: right; }
-
-.readout-remaining b {
-  display: block;
-  font-family: var(--font-sans);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--text-xl);
-  color: var(--color-success);
-}
-
-.readout-remaining.is-over b { color: var(--color-danger); }
-
-.readout-remaining small {
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  color: var(--color-text-dim);
-}
-
 /* Stacked calorie bar, segmented by macro. */
 .track {
   display: flex;
@@ -176,19 +129,6 @@
 .macros { display: flex; flex-direction: column; gap: var(--space-2); }
 
 .macro { display: flex; align-items: center; gap: var(--space-2); }
-
-/* On Today the rows are buttons — they open the who-contributed sheet — so the
-   reset keeps them looking exactly like the plain rows everywhere else. */
-button.macro {
-  background: none;
-  border: 0;
-  padding: 0;
-  width: 100%;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
 
 .macro-name {
   font-family: var(--font-sans);
@@ -207,10 +147,6 @@ button.macro {
   overflow: hidden;
 }
 .macro-bar i { display: block; flex: none; height: 100%; border-radius: var(--radius-pill); }
-
-/* The plan, wherever it stacks: same hue, clearly not yet real. */
-.macro-bar i.is-planned,
-.rack i.is-planned { opacity: .35; }
 
 .plan-line {
   font-family: var(--font-sans);
@@ -1331,49 +1267,6 @@ button.nf-tap:active { background: var(--color-hover); }
   background: var(--color-ink);
 }
 
-/* ---- the loaded bar -------------------------------------------------------- */
-/* The calorie readout as a barbell: each plate's WIDTH is that macro's share of
-   the day. Heights are equal on purpose — a taller plate reads as a heavier one
-   and would contradict what the widths are saying. */
-
-.rack {
-  display: flex;
-  align-items: center;
-  height: 38px;
-  position: relative;
-  flex: none;
-  overflow: hidden;
-}
-
-/* The shaft runs the full width; plates load from the left. */
-.rack::before {
-  content: "";
-  position: absolute;
-  left: 0; right: 0; top: 50%;
-  height: 4px;
-  margin-top: -2px;
-  border-radius: var(--radius-pill);
-  background: #3F4855;
-}
-
-.rack i {
-  position: relative;
-  display: block;
-  height: 28px;
-  border-radius: 4px;
-  margin-right: 3px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .3), 0 3px 8px rgba(0, 0, 0, .35);
-}
-
-/* Caps the loaded end, like a real collar. */
-.rack .collar {
-  width: 7px;
-  height: 15px;
-  border-radius: 2px;
-  background: var(--color-text-dim);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, .4);
-}
-
 /* ---- what's left, in food you actually eat --------------------------------- */
 /* "253 kcal" is abstract; "one chicken breast" is a decision. Built from your
    own frequents, so it isn't generic advice. */
@@ -2463,3 +2356,166 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; d
 
 .plan-swap-list { display: flex; flex-direction: column; gap: var(--space-2); max-height: 50vh; overflow-y: auto; }
 .plan-swap-list .setting { width: 100%; text-align: left; }
+
+/* ---- Today: the day, the week, the rings ------------------------------------- */
+
+.day-head { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.day-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.day-title small { font-size: var(--text-xs); color: var(--color-text-muted); }
+.day-title b { font-size: var(--text-2xl); font-weight: 750; letter-spacing: -.02em; line-height: 1.1; }
+
+.status-chip {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+  padding: 5px 10px;
+  color: var(--color-text-muted);
+  background: var(--color-fill);
+}
+.status-chip.is-complete { color: var(--color-success); background: var(--color-success-soft); }
+.status-chip.is-incomplete { color: var(--color-fat-text); background: rgba(229, 36, 59, .15); }
+.status-chip.is-today { color: var(--color-protein-text); background: var(--color-primary-soft); }
+.status-chip.is-empty, .status-chip.is-future { color: var(--color-text-dim); }
+
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: var(--space-2) var(--space-1);
+  flex: none;
+}
+.week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 6px 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.week-day.is-on { background: rgba(243, 246, 250, .08); }
+.week-day.is-future .week-rings { opacity: .4; }
+.week-letter {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-dim);
+  min-width: 20px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+}
+.week-day.is-on .week-letter { color: var(--color-bg); background: var(--color-text); font-weight: 700; }
+.week-rings, .week-mark { display: grid; place-items: center; }
+.week-mark { height: 14px; }
+
+.mark-complete circle { fill: var(--color-success); }
+.mark-complete path { fill: none; stroke: var(--color-bg); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mark-incomplete circle, .mark-incomplete path { fill: none; stroke: var(--color-fat-text); stroke-width: 1.6; stroke-linecap: round; }
+.mark-unreviewed circle { fill: #4A5566; }
+.mark-today circle { fill: var(--color-protein-text); }
+
+/* The rings themselves. Colours come from the ring tokens; the second lap is
+   the same colour as the first, and the shadow and tick say where it is. */
+.ring-cal { --ring: var(--ring-cal); }
+.ring-p { --ring: var(--ring-p); }
+.ring-c { --ring: var(--ring-c); }
+.ring-f { --ring: var(--ring-f); }
+.ring-track { stroke: var(--ring); stroke-opacity: .2; }
+.ring-arc { stroke: var(--ring); }
+.ring-cap { fill: var(--ring); stroke: none; }
+.ring-shadow { fill: #000; opacity: .55; }
+.ring-tick { stroke: #fff; opacity: .9; }
+
+.ring-day { display: flex; align-items: center; gap: var(--space-3); }
+.ring-big { flex: none; display: grid; }
+.ring-big .rings { width: 150px; height: 150px; }
+.ring-rows { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ring-row {
+  display: flex;
+  flex-direction: column;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ring-row small { font-size: var(--text-xs); color: var(--color-text-muted); }
+.ring-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; line-height: 1.15; }
+.ring-line b { font-size: var(--text-lg); font-weight: 700; }
+.ring-of { font-size: var(--text-xs); color: var(--color-text-muted); }
+.over-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-bg);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+}
+.ring-note { text-align: center; font-size: var(--text-sm); color: var(--color-text-muted); }
+
+/* Numbers and bars by macro, in the readable tints. */
+b.is-calories { color: var(--color-calories-text); }
+b.is-protein_g { color: var(--color-protein-text); }
+b.is-carbs_g { color: var(--color-carbs-text); }
+b.is-fat_g { color: var(--color-fat-text); }
+.over-tag.is-calories, i.is-calories { background: var(--color-success); }
+.over-tag.is-protein_g { background: var(--color-protein-text); }
+i.is-protein_g { background: var(--color-protein); }
+.over-tag.is-carbs_g, i.is-carbs_g { background: var(--color-carbs); }
+.over-tag.is-fat_g { background: var(--color-fat-text); }
+i.is-fat_g { background: var(--color-fat); }
+
+.section-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.section-row small { font-size: var(--text-xs); color: var(--color-text-muted); }
+
+.meds { display: flex; flex-direction: column; gap: var(--space-3); }
+.med-row { display: flex; align-items: center; gap: var(--space-3); }
+.med-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: var(--color-protein-text);
+  background: var(--color-primary-soft);
+}
+.med-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.med-text small { font-size: var(--text-xs); color: var(--color-text-muted); }
+.btn.btn-success { background: var(--color-success); color: var(--color-bg); }
+
+.week-avg { display: flex; flex-direction: column; gap: var(--space-2); flex: none; }
+.avg-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.avg-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 16px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+}
+.avg-tile small { font-size: var(--text-xs); color: var(--color-text-muted); }
+.avg-tile b { font-size: var(--text-xl); font-weight: 700; }
+.avg-bar { height: 4px; border-radius: var(--radius-pill); background: rgba(243, 246, 250, .08); overflow: hidden; }
+.avg-bar i { display: block; height: 100%; border-radius: var(--radius-pill); }

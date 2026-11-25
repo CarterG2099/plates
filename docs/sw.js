@@ -34,7 +34,7 @@
  * the whole strategy.
  */
 
-const CACHE_VERSION = 'plates-v221';
+const CACHE_VERSION = 'plates-v222';
 
 /** The shell. Everything needed to open the app and read local data. */
 const SHELL = [
@@ -65,6 +65,7 @@ const SHELL = [
   '/js/stats.js',
   '/js/push.js',
   '/js/reminders.js',
+  '/js/rings.js',
   '/js/grocery.js',
   '/js/watch.js',
   '/js/recipes.js',

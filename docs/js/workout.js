@@ -1375,11 +1375,11 @@ export function pacePer(set, { metric = false } = {}) {
 
 /** Plate face colours, so the loadout reads as plates rather than as a sum. */
 export const PLATE_COLOURS = {
-  45: '#2D68C4',   // blue
-  35: '#F2C230',   // yellow
-  25: '#2FA84F',   // green
+  45: '#3D6FE0',   // blue
+  35: '#F5B700',   // yellow
+  25: '#12B76A',   // green
   10: '#F2EDE4',   // white
-  5:  '#E0362A',   // red
+  5:  '#E5243B',   // red
   2.5: '#AEB8C6',
 };
 
@@ -1416,7 +1416,7 @@ const FAMILY = {
   quads: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs',
 };
 
-const FAMILY_COLOUR = { push: '#E0362A', pull: '#2D68C4', core: '#F2C230', legs: '#2FA84F' };
+const FAMILY_COLOUR = { push: '#E5243B', pull: '#3D6FE0', core: '#F5B700', legs: '#12B76A' };
 const FAMILY_LABEL  = { push: 'Push', pull: 'Pull', core: 'Core', legs: 'Legs' };
 
 /**

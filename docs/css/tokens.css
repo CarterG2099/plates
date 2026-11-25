@@ -39,21 +39,35 @@
   --color-text-muted:     #AEB8C6;
   --color-text-dim:       #78838F;
 
-  /* Plate colours: identity and macro encoding in one system */
-  --color-protein:        #2D68C4;   /* 20 kg blue */
-  --color-carbs:          #F2C230;   /* 15 kg yellow */
-  --color-fat:            #E0362A;   /* 25 kg red */
+  /* Plate colours: identity and macro encoding in one system. The "jewel"
+     shades (2026-11-24): the same four plates, richer, so they hold up next
+     to the brighter rings below. The -text variants are for numbers and
+     words, where the darker blue and red were hard to read on the ground. */
+  --color-protein:        #3D6FE0;   /* 20 kg blue */
+  --color-carbs:          #F5B700;   /* 15 kg yellow */
+  --color-fat:            #E5243B;   /* 25 kg red */
   --color-plate-white:    #EDF1F6;   /*  5 kg white */
+  --color-calories-text:  #12B76A;
+  --color-protein-text:   #6F95EC;
+  --color-carbs-text:     #F5B700;
+  --color-fat-text:       #F0556A;
 
-  --color-primary:        #2D68C4;
-  --color-primary-hover:  #4B85DD;
-  --color-primary-soft:   rgba(45, 104, 196, .2);
+  /* The rings, and only the rings: the "electric" set. Bright enough to read
+     as light on the near-black ground, which the flat jewel tones did not. */
+  --ring-cal:             #00E676;
+  --ring-p:               #2979FF;
+  --ring-c:               #FFEA00;
+  --ring-f:               #FF3D00;
+
+  --color-primary:        #3D6FE0;
+  --color-primary-hover:  #6F95EC;
+  --color-primary-soft:   rgba(61, 111, 224, .2);
 
   /* Semantic — separate from the accent */
-  --color-success:        #2FA84F;   /* 10 kg green */
-  --color-success-soft:   rgba(47, 168, 79, .16);
-  --color-warning:        #F2C230;
-  --color-danger:         #E0362A;
+  --color-success:        #12B76A;   /* 10 kg green */
+  --color-success-soft:   rgba(18, 183, 106, .16);
+  --color-warning:        #F5B700;
+  --color-danger:         #E5243B;
 
   /* Spacing (4px base) */
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px;

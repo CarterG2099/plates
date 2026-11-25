@@ -28,6 +28,7 @@ import { backStack, topBackdrop } from './back.js';
 import * as stats from './stats.js';
 import * as push from './push.js';
 import * as reminders from './reminders.js';
+import * as rings from './rings.js';
 import * as watch from './watch.js';
 
 /** Exactly, so a round-trip through miles does not drift the stored metres. */
@@ -1144,6 +1145,16 @@ Alpine.store('ui', {
 
 // ---- today -----------------------------------------------------------------
 
+/** A day's chip, and the end of its name in the strip's spoken label. */
+const STATUS_TEXT = {
+  complete: 'Complete',
+  incomplete: 'Incomplete',
+  today: 'In progress',
+  unreviewed: 'Not reviewed',
+  empty: 'Not logged',
+  future: 'Ahead',
+};
+
 Alpine.data('todayPage', () => ({
   get email() { return Alpine.store('auth').email; },
   get date() { return Alpine.store('ui').date; },
@@ -1177,42 +1188,147 @@ Alpine.data('todayPage', () => ({
     return Math.round(this.calorieTarget - this.totals.calories - this.plannedTotals.calories);
   },
 
-  /** The ghost segment: the plan's share of the target, in whatever room is left. */
-  plannedPercent(macro) {
-    const t = this.target(macro);
-    if (!t) return 0;
-    const room = 100 - this.percent(macro);
-    return Math.min(room, (this.plannedTotals[macro] / t) * 100);
-  },
-
   async confirmPlanned(entry) {
     await food.confirmPlanned(entry);
     await Alpine.store('data').refresh();
     Alpine.store('ui').flash('Logged');
   },
 
-  /** Ghost plates load beyond the collar: what the bar would hold. */
-  get plannedPlates() {
-    if (!this.calorieTarget || !this.plannedEntries.length) return [];
-    let room = Math.max(0, 100 - this.plates.reduce((sum, p) => sum + p.width, 0));
-    return [
-      { key: 'protein_g', colour: 'var(--color-protein)', per: 4 },
-      { key: 'carbs_g',   colour: 'var(--color-carbs)',   per: 4 },
-      { key: 'fat_g',     colour: 'var(--color-fat)',     per: 9 },
-    ]
-      .map((m) => ({ ...m, raw: (this.plannedTotals[m.key] * m.per / this.calorieTarget) * 100 }))
-      .map((m) => {
-        const width = Math.min(m.raw, room);
-        room -= width;
-        return { ...m, width };
-      })
-      .filter((m) => m.width > 0.5);
+  // ---- the week strip and the rings -----------------------------------------------
+  //
+  // Monday to Sunday around the day on screen. Each day is measured against the
+  // goal that was in force on it, so changing a target next month does not
+  // redraw last week's rings.
+
+  init() {
+    // Today's doses for the Meds card. Off the logging path: a failure here
+    // leaves the card empty and says nothing, the notifications page reports it.
+    Alpine.store('ui').loadReminders();
   },
 
-  /** The average logged day, printed through the same label the sheets use. */
-  weekLabelOpen: false,
-  get weekLabel() {
-    return food.weeklyNutritionLabel(this.data.log, this.email, { marks: this.data.dayMarks });
+  get weekDays() {
+    const data = { log: this.data.log, goals: this.data.goals, marks: this.data.dayMarks };
+    return food.weekOf(this.date).map((d) => food.dayAgainstGoal(data, this.email, d));
+  },
+
+  get week() {
+    const viewDate = Alpine.store('ui').viewDate;
+    const todayKey = food.toDateOnly(new Date());
+    return this.weekDays.map((d) => {
+      const status = food.dayStatus(d, todayKey);
+      return {
+        key: d.key,
+        letter: d.date.toLocaleDateString(undefined, { weekday: 'narrow' }),
+        on: d.key === viewDate,
+        isFuture: status === 'future',
+        svg: rings.svg(rings.fromTotals(d.totals, d.targets), { kind: 'mini' }),
+        markSvg: rings.markIcon(status),
+        aria: `${d.date.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}, ${STATUS_TEXT[status].toLowerCase()}`,
+      };
+    });
+  },
+
+  pickDay(key) { Alpine.store('ui').viewDate = key; },
+
+  get dayDate() {
+    return this.date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  },
+
+  get status() {
+    const key = food.dayStatus(
+      { key: Alpine.store('ui').viewDate, mark: this.viewMark, logged: this.entries.length },
+      food.toDateOnly(new Date()),
+    );
+    return { key, text: STATUS_TEXT[key] };
+  },
+
+  get dayTargets() {
+    return {
+      calories: this.calorieTarget,
+      protein_g: this.target('protein_g'),
+      carbs_g: this.target('carbs_g'),
+      fat_g: this.target('fat_g'),
+    };
+  },
+
+  get ringsSvg() {
+    const t = this.totals;
+    const label = `${this.round(t.calories)} kcal, ${this.round(t.protein_g)} g protein, `
+      + `${this.round(t.carbs_g)} g carbs, ${this.round(t.fat_g)} g fat`;
+    return rings.svg(rings.fromTotals(t, this.dayTargets), { kind: 'big', label });
+  },
+
+  /** The four lines beside the rings: amount, target, share, and how far over. */
+  get ringRows() {
+    return [
+      { key: 'calories',  label: 'Calories', unit: '',   nutrient: { key: 'calories',  name: 'Calories', unit: ' kcal' } },
+      { key: 'protein_g', label: 'Protein',  unit: ' g', nutrient: { key: 'protein_g', name: 'Protein',  unit: 'g' } },
+      { key: 'carbs_g',   label: 'Carbs',    unit: ' g', nutrient: { key: 'carbs_g',   name: 'Carbs',    unit: 'g' } },
+      { key: 'fat_g',     label: 'Fat',      unit: ' g', nutrient: { key: 'fat_g',     name: 'Fat',      unit: 'g' } },
+    ].map((row) => {
+      const value = this.round(this.totals[row.key]);
+      const target = this.dayTargets[row.key];
+      const pct = target ? Math.round((this.totals[row.key] / target) * 100) : null;
+      return {
+        ...row,
+        value: value.toLocaleString(),
+        of: target ? `/ ${target.toLocaleString()}${row.unit} · ${pct}%` : 'no target',
+        over: pct !== null && pct > 100,
+        overText: pct !== null && pct > 100 ? `+${pct - 100}% over` : '',
+      };
+    });
+  },
+
+  /** The line under the rings: what is left today, or how a past day landed. */
+  get ringNote() {
+    if (!this.calorieTarget) return 'No calorie target set';
+    const left = this.remaining;
+    if (Alpine.store('ui').isToday) {
+      return left >= 0 ? `${left.toLocaleString()} kcal left` : `${(-left).toLocaleString()} kcal over`;
+    }
+    if (!this.entries.length) return 'Nothing logged';
+    if (left === 0) return 'Right on the calorie target';
+    return left > 0 ? `${left.toLocaleString()} kcal under target` : `${(-left).toLocaleString()} kcal over target`;
+  },
+
+  /** The week's tiles: each macro's average share of target, complete days only. */
+  get weekAverages() {
+    const avg = food.completedAverages(this.weekDays);
+    const days = this.weekDays;
+    const thisWeek = days.some((d) => d.key === food.toDateOnly(new Date()));
+    const title = thisWeek ? 'This week'
+      : `Week of ${days[0].date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    const sub = avg.count
+      ? `average of ${stats.count(avg.count, 'complete day')}`
+      : 'counts days once you mark them complete';
+    const tiles = [['calories', 'Calories'], ['protein_g', 'Protein'], ['carbs_g', 'Carbs'], ['fat_g', 'Fat']]
+      .map(([key, label]) => ({
+        key, label,
+        text: avg[key] === null ? '–' : `${avg[key]}%`,
+        width: Math.min(100, avg[key] ?? 0),
+      }));
+    return { title, sub, tiles, count: avg.count };
+  },
+
+  // ---- meds ------------------------------------------------------------------
+
+  /** Today's doses: meds reminders that are on and fall on today's weekday. */
+  get meds() {
+    const ui = Alpine.store('ui');
+    if (!ui.isToday) return [];
+    const weekday = new Date().getDay();
+    return ui.reminderList.filter((r) => r.kind === 'meds' && r.enabled && (r.days ?? []).includes(weekday));
+  },
+
+  get medsSummary() {
+    const taken = this.meds.filter((m) => Alpine.store('ui').takenLabel(m)).length;
+    return `${taken} of ${this.meds.length} taken`;
+  },
+
+  medLine(m) {
+    const taken = Alpine.store('ui').takenLabel(m);
+    const at = reminders.timeLabel(m.at_time);
+    return taken ? `${at} · ${taken.toLowerCase()}` : at;
   },
 
   // ---- marking a day complete ------------------------------------------------
@@ -1259,32 +1375,7 @@ Alpine.data('todayPage', () => ({
     return Number(this.goal?.[key]) || null;
   },
 
-  percent(macro) {
-    const t = this.target(macro);
-    if (!t) return 0;
-    return Math.min(100, (this.totals[macro] / t) * 100);
-  },
-
   round(n) { return Math.round(Number(n) || 0); },
-
-
-  /** Plates on the bar: width is each macro's share of the calorie target. */
-  get plates() {
-    if (!this.calorieTarget) return [];
-    return [
-      { key: 'protein_g', colour: 'var(--color-protein)', per: 4 },
-      { key: 'carbs_g',   colour: 'var(--color-carbs)',   per: 4 },
-      { key: 'fat_g',     colour: 'var(--color-fat)',     per: 9 },
-    ]
-      .map((m) => ({ ...m, raw: (this.totals[m.key] * m.per / this.calorieTarget) * 100 }))
-      .filter((m) => m.raw > 0.5)
-      // Over target, the shares sum past 100% — scale them down together so the
-      // bar stays full-width and the proportions between macros stay honest.
-      .map((m, _, all) => {
-        const total = all.reduce((sum, x) => sum + x.raw, 0);
-        return { ...m, width: total > 100 ? (m.raw / total) * 100 : m.raw };
-      });
-  },
 
   get remainingInFood() {
     const ranked = food.rankFoods(this.data.foods, this.data.log, this.email);

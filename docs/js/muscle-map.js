@@ -143,11 +143,11 @@ const MUSCLES = {
 
 /** Colour by movement family, using the plate palette. */
 const COLOUR = {
-  chest: '#E0362A', shoulders: '#E0362A', traps: '#E0362A',
-  biceps: '#2D68C4', triceps: '#2D68C4', forearms: '#2D68C4',
-  lats: '#2D68C4', lowerBack: '#2D68C4',
-  core: '#F2C230',
-  quads: '#2FA84F', hamstrings: '#2FA84F', glutes: '#2FA84F', calves: '#2FA84F',
+  chest: '#E5243B', shoulders: '#E5243B', traps: '#E5243B',
+  biceps: '#3D6FE0', triceps: '#3D6FE0', forearms: '#3D6FE0',
+  lats: '#3D6FE0', lowerBack: '#3D6FE0',
+  core: '#F5B700',
+  quads: '#12B76A', hamstrings: '#12B76A', glutes: '#12B76A', calves: '#12B76A',
 };
 
 // ---- naming ----------------------------------------------------------------
