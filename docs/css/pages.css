@@ -1267,9 +1267,7 @@ button.nf-tap:active { background: var(--color-hover); }
   background: var(--color-ink);
 }
 
-/* ---- what's left, in food you actually eat --------------------------------- */
-/* "253 kcal" is abstract; "one chicken breast" is a decision. Built from your
-   own frequents, so it isn't generic advice. */
+/* ---- the small carbs-coloured aside under a number ------------------------- */
 
 .infood {
   font-family: var(--font-sans);
@@ -2699,7 +2697,9 @@ button.time-chip:disabled { cursor: inherit; }
 .nudge-presets .setting.is-picked { border-color: var(--color-primary); background: rgba(61, 111, 224, .1); }
 
 /* Meds on Today: one row of pills, not a card, so Last 7 days stays in view. */
-.meds-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex: none; }
+/* Full label on the left, the day's meds on the right, one row under the rings. */
+.readout-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.meds-strip { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 .meds-label { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-right: 2px; }
 .med-pill {
   display: inline-flex;
@@ -2718,4 +2718,5 @@ button.time-chip:disabled { cursor: inherit; }
 .med-pill small { font-size: var(--text-xs); font-weight: 500; color: var(--color-text-muted); }
 .med-pill.is-taken { color: var(--color-success); background: var(--color-success-soft); border-color: transparent; }
 .med-pill:disabled { cursor: default; }
+.med-pill.is-none { color: var(--color-text-muted); background: none; border-style: dashed; }
 .med-tick { width: 14px; height: 14px; }

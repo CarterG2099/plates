@@ -212,10 +212,42 @@ test('the meds row lists today\'s doses: meds only, switched on, due today', asy
   assert.equal(page.medLine(page.meds[0]), '6:45am · taken 9:02am');
 });
 
-test('the meds row is today only: a dose taken is a today fact', async () => {
+test('the meds row shows on a day gone, with that day\'s doses and what was taken then', async () => {
   const page = await today(D(5));
-  Alpine.store('ui').reminderList = [{ id: 'a', kind: 'meds', label: 'Creatine', at_time: '06:45:00', days: [0, 1, 2, 3, 4, 5, 6], enabled: true }];
+  const weekday = food.fromDateOnly(D(5)).getDay();
+  const ui = Alpine.store('ui');
+  ui.reminderList = [
+    { id: 'a', kind: 'meds', label: 'Creatine', at_time: '06:45:00', days: [weekday], enabled: true },
+    { id: 'c', kind: 'meds', label: 'Not that day', at_time: '07:00:00', days: [(weekday + 1) % 7], enabled: true },
+  ];
+  ui.reminderToday = { a: { taken_at: new Date().toISOString() } };
+  ui.reminderDays = {};
+  assert.deepEqual(page.meds.map((m) => m.id), ['a'], 'that weekday\'s doses');
+  assert.equal(page.medsSummary, '0 of 1 taken', 'today\'s tick is not that day\'s');
+  assert.equal(page.canTakeMeds, true, 'a day gone can be put right');
+
+  ui.reminderDays = { [D(5)]: { a: { taken_at: new Date(`${D(5)}T07:10:00`).toISOString() } } };
+  assert.equal(page.medsSummary, '1 of 1 taken');
+  assert.equal(page.medLine(page.meds[0]), '6:45am · taken 7:10am');
+});
+
+test('the meds row is there on a day with none due, so the days under it never jump', async () => {
+  const page = await today(D(5));
+  const weekday = food.fromDateOnly(D(5)).getDay();
+  const ui = Alpine.store('ui');
+  ui.reminderList = [{ id: 'c', kind: 'meds', label: 'Not that day', at_time: '07:00:00', days: [(weekday + 1) % 7], enabled: true }];
   assert.deepEqual(page.meds, []);
+  assert.equal(page.hasMeds, true);
+
+  ui.reminderList = [{ id: 'b', kind: 'meds', label: 'Off', at_time: '07:00:00', days: [weekday], enabled: false }];
+  assert.equal(page.hasMeds, false, 'no meds switched on: no row on any day');
+});
+
+test('a day ahead shows its doses but cannot tick them', async () => {
+  const page = await today(food.toDateOnly(food.addDays(new Date(), 2)));
+  Alpine.store('ui').reminderList = [{ id: 'a', kind: 'meds', label: 'Creatine', at_time: '06:45:00', days: [0, 1, 2, 3, 4, 5, 6], enabled: true }];
+  assert.deepEqual(page.meds.map((m) => m.id), ['a']);
+  assert.equal(page.canTakeMeds, false);
 });
 
 test('the Today markup: strip, rings, a single row of meds, the averages, and no workout card', async () => {
@@ -226,10 +258,11 @@ test('the Today markup: strip, rings, a single row of meds, the averages, and no
   assert.match(todayHtml, /x-html="d\.svg"/);
   assert.match(todayHtml, /x-html="ringsSvg"/);
   assert.match(todayHtml, /@click="pickDay\(d\.key\)"/);
-  assert.match(todayHtml, /<div class="meds-strip"[^>]*>\s*<span class="meds-label">Meds<\/span>\s*<template x-for="m in meds"/,
-    'meds are one row of pills, not a card');
-  assert.match(todayHtml, /class="med-pill"[\s\S]*?@click="\$store\.ui\.toggleTaken\(m\)"/);
-  assert.match(todayHtml, /:disabled="Boolean\(\$store\.ui\.viewAs\)"/, 'only your own doses can be checked off');
+  assert.match(todayHtml, /<div class="meds-strip" x-show="hasMeds"[^>]*>\s*<span class="meds-label">Meds<\/span>\s*<span class="med-pill is-none" x-show="!meds\.length">None due<\/span>\s*<template x-for="m in meds"/,
+    'meds are one row of pills, not a card, there on every day once any are on');
+  assert.match(todayHtml, /class="med-pill"[\s\S]*?@click="\$store\.ui\.toggleTaken\(m, \$store\.ui\.viewDate\)"/, 'a tap marks the day on screen');
+  assert.match(todayHtml, /:class="medTaken\(m\) && 'is-taken'"/, 'the tick is the day on screen\'s');
+  assert.match(todayHtml, /:disabled="!canTakeMeds"/, 'only your own doses, and not ahead');
   assert.doesNotMatch(todayHtml, /trained-card|x-show="trained"/, 'no workout card on Today');
   assert.match(todayHtml, /x-for="t in weekAverages\.tiles"/);
   assert.match(todayHtml, /x-for="r in weekLabel\.printedRows"/, 'the average complete day is still there as a full label');
@@ -241,18 +274,20 @@ test('the Today markup: strip, rings, a single row of meds, the averages, and no
   const averages = todayHtml.indexOf('class="week-avg"');
   const rings = todayHtml.indexOf('class="card readout"');
   assert.ok(rings < meds && meds < averages, 'meds sit between the rings and the averages');
+  assert.match(todayHtml, /<div class="readout-foot"[^>]*>\s*<button class="chip"[^>]*>?[\s\S]*?'Full label'"><\/button>\s*<!--[\s\S]*?-->\s*<div class="meds-strip"/,
+    'the meds share the Full label row, after it, so they sit on its right');
+  assert.ok(meds < todayHtml.indexOf('<div class="nutrition" x-show="labelOpen'), 'inside the rings card, above the label it opens');
+  assert.match(todayHtml, /<div class="readout-foot" x-show="\(entries\.length && dayNutrition\.hasDetail\) \|\| hasMeds">/,
+    'the row stays for the meds on a day with nothing logged');
 });
 
-test('the food suggestion is for today only: a past day has nothing left to fill', async () => {
-  // A food eaten recently, so there is something to suggest. Yesterday stays
-  // unmarked, so it changes neither the averages nor the marks read above.
-  const rice = await local.save('foods', { name: 'Rice bowl', serving_qty: 1, serving_unit: 'bowl', calories: 800, protein_g: 20, carbs_g: 150, fat_g: 10 }, ME);
-  await eat(D(1), { food_id: rice.id, description: 'Rice bowl', calories: 800 });
-
-  const now = await today(D(0));
-  assert.match(now.remainingInFood, /Rice bowl/, 'today: what would fill the rest of the day');
-  const past = await today(D(4));   // 1,200 kcal under, a past day
-  assert.equal(past.remainingInFood, '');
+test('Today has no "about N of a food" suggestion', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../docs/index.html', import.meta.url), 'utf8');
+  const todayHtml = html.slice(html.indexOf('x-data="todayPage"'), html.indexOf('<!-- Edit a logged amount'));
+  assert.doesNotMatch(todayHtml, /remainingInFood|class="infood"/);
+  const page = await today(D(0));
+  assert.equal('remainingInFood' in page, false);
 });
 
 test('the average day label covers the complete days on screen, up to today', async () => {

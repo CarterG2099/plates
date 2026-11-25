@@ -1203,6 +1203,7 @@ Alpine.store('ui', {
   reminderList: [],           // your own rows
   reminderAll: [],            // every row you can read: yours and the other person's
   reminderToday: {},          // reminder id → today's send row (sends, taken_at)
+  reminderDays: {},           // any other day Today has shown → its send rows, by reminder id
   reminderDraft: null,
   reminderBusy: false,
   reminderError: '',
@@ -1225,11 +1226,30 @@ Alpine.store('ui', {
   reminderTime(r) { return reminders.timeLabel(r.at_time); },
   dayNames: reminders.DAY_NAMES,
 
-  /** "Taken 8:02am" for a med, "Done 12:40pm" for food, checked off today; or ''. */
-  takenLabel(r) {
-    const at = this.reminderToday[r.id]?.taken_at;
+  sendsOn(day) {
+    return day === food.toDateOnly(new Date()) ? this.reminderToday : (this.reminderDays[day] ?? {});
+  },
+
+  /** Another day's check-offs, so Today's meds row is true on any day it shows. */
+  async loadSendsOn(day) {
+    if (day === food.toDateOnly(new Date())) return;
+    try {
+      this.reminderDays = { ...this.reminderDays, [day]: await reminders.loadDay(day) };
+    } catch {
+      // Off the logging path: the row shows the doses unticked, as before it loaded.
+    }
+  },
+
+  /**
+   * "Taken 8:02am" for a med, "Done 12:40pm" for food, checked off on the day
+   * (today unless given); or ''. A day ticked afterwards says only "Taken" —
+   * its stamp is when the tap happened, not when the dose was.
+   */
+  takenLabel(r, day = food.toDateOnly(new Date())) {
+    const at = this.sendsOn(day)[r.id]?.taken_at;
     if (!at) return '';
     const d = new Date(at);
+    if (food.toDateOnly(d) !== day) return reminders.checkOffWord(r);
     return `${reminders.checkOffWord(r)} ${reminders.timeLabel(`${d.getHours()}:${d.getMinutes()}`)}`;
   },
 
@@ -1371,12 +1391,15 @@ Alpine.store('ui', {
   },
 
   /** Checked off today, from the list — for a dose taken without the notification. */
-  async toggleTaken(r) {
-    const was = this.reminderToday[r.id] ?? null;
+  async toggleTaken(r, day = food.toDateOnly(new Date())) {
+    const isToday = day === food.toDateOnly(new Date());
+    const was = this.sendsOn(day)[r.id] ?? null;
     const taking = !was?.taken_at;
     try {
-      const at = await reminders.setTaken(r.id, taking);
-      this.reminderToday = { ...this.reminderToday, [r.id]: { ...was, taken_at: at } };
+      const at = await reminders.setTaken(r.id, taking, day);
+      const sends = { ...this.sendsOn(day), [r.id]: { ...was, taken_at: at } };
+      if (isToday) this.reminderToday = sends;
+      else this.reminderDays = { ...this.reminderDays, [day]: sends };
       this.flash(taking ? `${reminders.title(r)}: ${reminders.checkOffWord(r).toLowerCase()}` : 'Unmarked');
     } catch (e) {
       this.flash(describeError(e));
@@ -1487,6 +1510,7 @@ Alpine.data('todayPage', () => ({
     // Today's doses for the Meds card. Off the logging path: a failure here
     // leaves the card empty and says nothing, the notifications page reports it.
     Alpine.store('ui').loadReminders();
+    this.$watch('$store.ui.viewDate', (day) => Alpine.store('ui').loadSendsOn(day));
   },
 
   /**
@@ -1616,14 +1640,32 @@ Alpine.data('todayPage', () => ({
 
   // ---- meds ------------------------------------------------------------------
 
-  /** Today's doses: meds reminders that are on and fall on today's weekday. */
-  get meds() {
+  /** Every meds reminder that is on, whatever its days. */
+  get allMeds() {
     const ui = Alpine.store('ui');
-    if (!ui.isToday) return [];
-    const weekday = new Date().getDay();
     const list = ui.viewAs ? reminders.ownedBy(ui.reminderAll, ui.viewAs) : ui.reminderList;
-    return list.filter((r) => r.kind === 'meds' && r.enabled && (r.days ?? []).includes(weekday));
+    return list.filter((r) => r.kind === 'meds' && r.enabled);
   },
+
+  /** The day on screen's doses: the meds that fall on its weekday. */
+  get meds() {
+    const weekday = this.date.getDay();
+    return this.allMeds.filter((r) => (r.days ?? []).includes(weekday));
+  },
+
+  /**
+   * The row shows on every day once there are any meds, even a day with none
+   * due, so stepping between days never moves what sits under it.
+   */
+  get hasMeds() { return this.allMeds.length > 0; },
+
+  /** Your own doses, on today or a day gone — a dose ahead hasn't happened. */
+  get canTakeMeds() {
+    const ui = Alpine.store('ui');
+    return !ui.viewAs && !ui.isFuture;
+  },
+
+  medTaken(m) { return Alpine.store('ui').takenLabel(m, Alpine.store('ui').viewDate); },
 
   /** The workout started on the day on screen, for the card under the rings. */
   get trained() {
@@ -1634,12 +1676,12 @@ Alpine.data('todayPage', () => ({
   },
 
   get medsSummary() {
-    const taken = this.meds.filter((m) => Alpine.store('ui').takenLabel(m)).length;
+    const taken = this.meds.filter((m) => this.medTaken(m)).length;
     return `${taken} of ${this.meds.length} taken`;
   },
 
   medLine(m) {
-    const taken = Alpine.store('ui').takenLabel(m);
+    const taken = this.medTaken(m);
     const at = reminders.timeLabel(m.at_time);
     return taken ? `${at} · ${taken.toLowerCase()}` : at;
   },
@@ -1689,16 +1731,6 @@ Alpine.data('todayPage', () => ({
   },
 
   round(n) { return Math.round(Number(n) || 0); },
-
-  get remainingInFood() {
-    // "What would fill the rest of today" means nothing for a day already gone,
-    // or for one that hasn't started.
-    if (!Alpine.store('ui').isToday) return '';
-    const ranked = food.rankFoods(this.data.foods, this.data.log, this.email);
-    return food.remainingAsFoods(this.remaining, ranked)
-      .map((x) => x.label)
-      .join(', or ');
-  },
 
   async removeEntry(id) {
     await food.deleteEntry(id);

@@ -294,14 +294,16 @@ export function ownedBy(list, email) {
   return (list ?? []).filter((r) => String(r.owner_email ?? '').toLowerCase() === who);
 }
 
-/** What was sent today, and which meds are taken, by reminder id. */
-export async function loadToday() {
+/** What was sent on a day, and which meds were taken, by reminder id. */
+export async function loadDay(day) {
   const { data, error } = await db('reminder_sends')
     .select('reminder_id, sends, taken_at')
-    .eq('local_date', today());
+    .eq('local_date', day);
   if (error) throw error;
   return Object.fromEntries((data ?? []).map((s) => [s.reminder_id, s]));
 }
+
+export const loadToday = () => loadDay(today());
 
 /** Insert one row, or update the editable columns of an existing one. Kind is never sent on an edit. */
 export async function save(row) {
@@ -348,10 +350,10 @@ export async function remove(id) {
   if (error) throw error;
 }
 
-/** Checks today's off (a dose taken, food logged), or un-marks a mis-tap. Returns the time, or null. */
-export async function setTaken(id, taken) {
+/** Checks a day's off (today's by default), or un-marks a mis-tap. Returns the time, or null. */
+export async function setTaken(id, taken, day = today()) {
   const { data, error } = await supabase.schema('plates')
-    .rpc('set_reminder_taken', { p_reminder: id, p_day: today(), p_taken: taken });
+    .rpc('set_reminder_taken', { p_reminder: id, p_day: day, p_taken: taken });
   if (error) throw error;
   return data;
 }

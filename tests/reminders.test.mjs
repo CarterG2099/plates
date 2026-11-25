@@ -10,6 +10,7 @@ import { loadApp } from './helpers/app.mjs';
 
 const { Alpine } = await loadApp();
 const r = await import('../docs/js/reminders.js');
+const food = await import('../docs/js/food.js');
 const { supabase } = await import('../docs/js/supabase.js');
 
 // ---- words ------------------------------------------------------------------------
@@ -297,7 +298,7 @@ test('dragging a reminder writes the new order on every row that moved, and puts
 
 test('Taken in the list marks today\'s dose, and shows when', withServer(async (server, ui) => {
   ui.reminderToday = {};
-  server.rpcResult = '2026-10-31T14:02:00.000Z';
+  server.rpcResult = new Date().toISOString();
   await ui.toggleTaken(VITD);
   const call = server.calls.find((c) => c.rpc === 'set_reminder_taken');
   assert.equal(call.args.p_reminder, 'v');
@@ -308,6 +309,41 @@ test('Taken in the list marks today\'s dose, and shows when', withServer(async (
   await ui.toggleTaken(VITD);
   assert.equal(server.calls.at(-1).args.p_taken, false, 'a second tap un-marks a mis-tap');
   assert.equal(ui.takenLabel(VITD), '');
+}));
+
+test('a day gone can be ticked from Today: it marks that day, not today, and says Taken without a time', withServer(async (server, ui) => {
+  const todayKey = food.toDateOnly(new Date());
+  const yesterday = food.toDateOnly(food.addDays(new Date(), -1));
+  ui.reminderToday = {};
+  ui.reminderDays = {};
+  server.rpcResult = new Date().toISOString();   // the server stamps the tap, which is today
+  await ui.toggleTaken(VITD, yesterday);
+  const call = server.calls.find((c) => c.rpc === 'set_reminder_taken');
+  assert.equal(call.args.p_day, yesterday);
+  assert.equal(call.args.p_taken, true);
+  assert.equal(ui.takenLabel(VITD, yesterday), 'Taken', 'the stamp is the tap, not the dose');
+  assert.equal(ui.takenLabel(VITD), '', 'today is untouched');
+  assert.deepEqual(ui.reminderToday, {});
+
+  server.rpcResult = null;
+  await ui.toggleTaken(VITD, yesterday);
+  assert.equal(server.calls.at(-1).args.p_taken, false);
+  assert.equal(ui.takenLabel(VITD, yesterday), '');
+  assert.ok(todayKey !== yesterday);
+}));
+
+test('moving Today to another day loads that day\'s check-offs; today\'s come with the list', withServer(async (server, ui) => {
+  const day = food.toDateOnly(food.addDays(new Date(), -3));
+  ui.reminderDays = {};
+  server.rows = [{ reminder_id: 'v', sends: 1, taken_at: new Date(`${day}T08:05:00`).toISOString() }];
+  await ui.loadSendsOn(day);
+  const read = server.calls.find((c) => c.table === 'reminder_sends');
+  assert.deepEqual(read.filters, [['local_date', day]]);
+  assert.equal(ui.takenLabel(VITD, day), 'Taken 8:05am');
+
+  const before = server.calls.length;
+  await ui.loadSendsOn(food.toDateOnly(new Date()));
+  assert.equal(server.calls.length, before, 'today is already loaded with the reminders');
 }));
 
 // ---- keep reminding until checked off ---------------------------------------------
@@ -353,7 +389,7 @@ test('keep reminding is saved for anything checkable, and never for the fixed tw
 test('Done on a food reminder checks it off and reads as Done', withServer(async (server, ui) => {
   const lunch = { ...LUNCH, persistent: true };
   ui.reminderToday = {};
-  server.rpcResult = '2026-11-12T19:40:00.000Z';
+  server.rpcResult = new Date().toISOString();
   await ui.toggleTaken(lunch);
   assert.equal(server.calls.find((c) => c.rpc === 'set_reminder_taken').args.p_reminder, 'l');
   assert.match(ui.takenLabel(lunch), /^Done \d{1,2}:\d{2}(am|pm)$/);

@@ -242,10 +242,6 @@
           </div>
           <p class="ring-note" x-text="ringNote"></p>
 
-          <p class="infood" x-show="remainingInFood">
-            ≈ <span x-text="remainingInFood"></span>
-          </p>
-
           <!-- The projection: where the day lands if the plan gets eaten. -->
           <p class="plan-line" x-show="plannedEntries.length" x-cloak
              :class="afterPlan !== null && afterPlan < 0 && 'is-over'">
@@ -258,11 +254,32 @@
 
           <!-- The rest of the panel — sodium, sugars, the micros — summed
                across everything eaten, on request. The macro rows above stay
-               the headline; this answers the longer questions. -->
-          <div class="chips" x-show="entries.length && dayNutrition.hasDetail">
-            <button class="chip" :class="labelOpen && 'is-active'"
+               the headline; this answers the longer questions. The meds share
+               its row, on the right, so neither costs a line of its own. -->
+          <div class="readout-foot" x-show="(entries.length && dayNutrition.hasDetail) || hasMeds">
+            <button class="chip" x-show="entries.length && dayNutrition.hasDetail" :class="labelOpen && 'is-active'"
                     @click="labelOpen = !labelOpen"
                     x-text="labelOpen ? 'Hide full label' : 'Full label'"></button>
+            <!-- The day's doses as one row of pills, small enough that the week's
+                 numbers stay on screen. A tap checks one off (or undoes it), as the
+                 notification's button does, on today or a day gone; on a day ahead
+                 or the other person's day they only show. The row is there on every
+                 day, even one with nothing due, so stepping days never moves what
+                 sits under it. -->
+            <div class="meds-strip" x-show="hasMeds" x-cloak role="group" :aria-label="meds.length ? `Meds, ${medsSummary}` : 'Meds, none due'">
+              <span class="meds-label">Meds</span>
+              <span class="med-pill is-none" x-show="!meds.length">None due</span>
+              <template x-for="m in meds" :key="m.id">
+                <button class="med-pill" :class="medTaken(m) && 'is-taken'"
+                        :disabled="!canTakeMeds"
+                        @click="$store.ui.toggleTaken(m, $store.ui.viewDate)"
+                        :aria-label="`${$store.ui.reminderTitle(m)}, ${medLine(m)}${canTakeMeds ? (medTaken(m) ? '. Undo' : '. Mark taken') : ''}`">
+                  <svg class="med-tick" x-show="medTaken(m)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                  <span x-text="$store.ui.reminderTitle(m)"></span>
+                  <small x-text="$store.ui.reminderTime(m)"></small>
+                </button>
+              </template>
+            </div>
           </div>
 
           <div class="nutrition" x-show="labelOpen && dayNutrition.hasAny" x-cloak>
@@ -320,23 +337,6 @@
             <button class="btn" :disabled="$store.ui.nudgeBusy"
                     @click="$store.ui.sendNudge('cheer', trained ? `Nice work on ${trained.name}!` : 'Keep it up today!')">Cheer</button>
           </div>
-        </div>
-
-        <!-- Today's doses as one row of pills, small enough that the week's
-             numbers stay on screen. A tap checks one off (or undoes it), as the
-             notification's button does; on the other person's day they only show. -->
-        <div class="meds-strip" x-show="meds.length" x-cloak role="group" :aria-label="`Meds, ${medsSummary}`">
-          <span class="meds-label">Meds</span>
-          <template x-for="m in meds" :key="m.id">
-            <button class="med-pill" :class="$store.ui.takenLabel(m) && 'is-taken'"
-                    :disabled="Boolean($store.ui.viewAs)"
-                    @click="$store.ui.toggleTaken(m)"
-                    :aria-label="`${$store.ui.reminderTitle(m)}, ${medLine(m)}${$store.ui.viewAs ? '' : ($store.ui.takenLabel(m) ? '. Undo' : '. Mark taken')}`">
-              <svg class="med-tick" x-show="$store.ui.takenLabel(m)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
-              <span x-text="$store.ui.reminderTitle(m)"></span>
-              <small x-text="$store.ui.reminderTime(m)"></small>
-            </button>
-          </template>
         </div>
 
         <!-- The week's averages, from complete days only: a half-logged day
