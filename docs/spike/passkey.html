@@ -49,7 +49,8 @@
 <h1 style="margin-top:28px">Password-manager key</h1>
 <p>For Bitwarden (or iCloud Keychain): Plates makes a long random key and your
    password manager saves it like a password. On a new phone it fills it back
-   in. You never type or remember it.</p>
+   in. You never type or remember it. On an iPhone, if Safari offers its own
+   Strong Password instead, that is fine: take it, whatever is saved is the key.</p>
 
 <!-- A: save. A real username + new-password pair, submitted, is what makes a
      password manager offer to save. The submit is stopped here: the key never
@@ -67,7 +68,7 @@
 <form id="pm-restore" autocomplete="on">
   <input name="username" autocomplete="username" value="Plates chat key"
          style="width:100%;margin:6px 0;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit">
-  <input id="pm-fill" name="password" type="password" autocomplete="current-password" placeholder="Tap here, let Bitwarden fill it"
+  <input id="pm-fill" name="password" type="password" autocomplete="current-password" placeholder="Tap here, let your password manager fill it"
          style="width:100%;margin:6px 0;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit">
   <button type="submit">B. Unlock with the filled-in key</button>
 </form>
@@ -182,9 +183,12 @@ document.getElementById('setup').onclick = async () => {
 
 // ---- the password-manager key ------------------------------------------------
 //
-// 32 random bytes, written as 43 URL-safe characters so it survives any
-// password manager's field. The key is the AES key itself: no derivation, since
-// nobody chose it and nobody has to remember it.
+// Plates offers 32 random bytes, written as 43 URL-safe characters. But a
+// password manager may save its own instead: Safari on iPhone fills a
+// new-password field with an iCloud Keychain "Strong Password" (20 characters)
+// in place of ours, which decoded as our format came out at 15 bytes. So the
+// key is whatever text the manager saved, stretched into a 256-bit AES key with
+// PBKDF2: the same text always gives the same key, whichever manager made it.
 const PM_STORE = 'plates-e2ee-check-pm';
 const pmVerdict = document.getElementById('pm-verdict');
 const pmJudge = (ok, text) => {
@@ -192,12 +196,20 @@ const pmJudge = (ok, text) => {
   pmVerdict.style.outline = `2px solid ${ok ? 'var(--green)' : 'var(--red)'}`;
 };
 const b64url = (buf) => b64(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const unb64url = (s) => unb64(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
+
+/** Short enough to be a typo rather than a generated password: refused, not stretched. */
+const PM_MIN_LENGTH = 16;
 
 async function pmKey(text) {
-  const raw = unb64url(text.trim());
-  if (raw.length !== 32) throw new Error(`That key is ${raw.length} bytes, not 32 — was it filled in whole?`);
-  return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  const secret = text.trim();
+  if (secret.length < PM_MIN_LENGTH) {
+    throw new Error(`That key is ${secret.length} characters; a saved one is at least ${PM_MIN_LENGTH}. Was it filled in whole?`);
+  }
+  const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode('plates chat key v1'), iterations: 600_000 },
+    material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+  );
 }
 
 const newField = document.getElementById('pm-new');

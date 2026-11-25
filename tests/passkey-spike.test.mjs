@@ -46,8 +46,33 @@ test('the key never leaves the page: forms do not really submit, and only the lo
   assert.match(script, /field\.value = '';/, 'the filled key is cleared after use');
 });
 
-test('a key that is not exactly 32 bytes is refused before it is used', () => {
-  assert.match(script, /if \(raw\.length !== 32\) throw/);
+/** The page's own pmKey, run under Node's WebCrypto: the real function, not a copy. */
+const pmKey = new Function(
+  `${script.slice(script.indexOf('const PM_MIN_LENGTH'), script.indexOf('const newField'))} return pmKey;`,
+)();
+
+const lock = async (key, text) => {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  return { iv, locked: await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text)) };
+};
+
+test('whatever the password manager saved is the key: iCloud\'s Strong Password works as well as ours', async () => {
+  // Safari on iPhone puts its own 20-character password in a new-password field.
+  // Read as our 43-character format that was 15 bytes, and the old check refused it.
+  for (const saved of ['xyzAbc-defGhi-jklMn4', 'q3Jb0n8V0sA7hKkP2wQeX9zR1tYuIoPaSdFgHjKlZxC']) {
+    const { iv, locked } = await lock(await pmKey(saved), 'hello');
+    const again = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, await pmKey(` ${saved} `), locked);
+    assert.equal(new TextDecoder().decode(again), 'hello', `${saved.length} characters, filled back in`);
+  }
+});
+
+test('a different saved key does not unlock the note', async () => {
+  const { iv, locked } = await lock(await pmKey('xyzAbc-defGhi-jklMn4'), 'hello');
+  await assert.rejects(crypto.subtle.decrypt({ name: 'AES-GCM', iv }, await pmKey('xyzAbc-defGhi-jklMn5'), locked));
+});
+
+test('a fill too short to be a saved key is refused before it is used', async () => {
+  await assert.rejects(pmKey('hunter2'), /7 characters; a saved one is at least 16/);
 });
 
 test('it asks the passkey for a secret, and keeps only the locked note, never the secret', () => {
