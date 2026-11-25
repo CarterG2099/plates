@@ -2499,604 +2499,815 @@
       <template x-if="$store.ui.view === 'stats'">
       <main class="app-main" x-data="statsPage" x-effect="takeChatRequest()">
 
-        <!-- Targets ---------------------------------------------------------- -->
-        <div class="card">
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Targets</div>
-              <div class="stat-hero" x-show="goal">
-                <span x-text="goal && (goal.calorie_target || '—')"></span><small>kcal</small>
-              </div>
-              <div class="stat-sub" x-show="goal">
-                <span x-text="goal && (goal.phase || 'no phase set')"></span>
-                <span x-show="goal && goal.target_weight_lb">
-                  · target <span x-text="goal && goal.target_weight_lb"></span> lb
-                </span>
-              </div>
-            </div>
-            <button class="btn" @click="editGoal()" x-text="goal ? 'Edit' : 'Set'"></button>
+        <!-- Four tabs instead of one long page. Swipe between them, or tap; the
+             pencil reorders or hides them, per phone. -->
+        <div class="stats-head">
+          <div class="section-row">
+            <h2 class="stats-title">Stats</h2>
+            <button class="tap" @click="$store.ui.statsEditing = true" aria-label="Edit tabs"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
           </div>
-
-          <div class="macros" x-show="goal && goal.protein_target_g">
-            <template x-for="m in [
-              { k: 'protein_target_g', n: 'Protein', c: 'var(--color-protein)' },
-              { k: 'carbs_target_g',   n: 'Carbs',   c: 'var(--color-carbs)' },
-              { k: 'fat_target_g',     n: 'Fat',     c: 'var(--color-fat)' }
-            ]" :key="m.k">
-              <div class="macro">
-                <span class="dot" :style="`background: ${m.c}`"></span>
-                <span class="macro-name" x-text="m.n"></span>
-                <span class="macro-val" style="margin-left:auto"
-                      x-text="goal && ((goal[m.k] ?? '—') + ' g')"></span>
-              </div>
+          <div class="seg" role="tablist" :style="`grid-template-columns: repeat(${$store.ui.statsTabs.length}, minmax(0, 1fr))`">
+            <template x-for="t in $store.ui.statsTabs" :key="t.key">
+              <button role="tab" :aria-selected="$store.ui.statsActive === t.key"
+                      :class="$store.ui.statsActive === t.key && 'is-active'"
+                      @click="$store.ui.setStatsTab(t.key)" x-text="t.label"></button>
             </template>
           </div>
-
-          <p class="empty" style="padding:var(--space-3) 0" x-show="!goal">
-            No targets yet. Set them and the Today screen starts showing progress.
-          </p>
         </div>
 
-        <!-- Body weight ------------------------------------------------------ -->
-        <div class="card">
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Body weight</div>
-              <div class="stat-hero" x-show="weightSummary">
-                <span x-text="weightSummary && weightSummary.latest"></span><small>lb</small>
-              </div>
-              <div class="stat-sub" x-show="weightSummary && weightSummary.target">
-                <span x-text="weightSummary && Math.abs(weightSummary.toGo)"></span> lb
-                <span x-text="weightSummary && weightSummary.toGo > 0 ? 'to go' : 'past target'"></span>
+        <div class="stats-panel" data-tab="food" x-show="$store.ui.statsActive === 'food'" role="tabpanel">
+          <!-- Nutrition -------------------------------------------------------- -->
+          <div class="card" x-show="calorieSummary">
+            <div class="readout-head">
+              <div>
+                <div class="card-label">Calories · 14 day average</div>
+                <div class="stat-hero">
+                  <span x-text="calorieSummary && calorieSummary.average.toLocaleString()"></span><small>kcal</small>
+                </div>
+                <div class="stat-sub" x-show="calorieSummary && calorieSummary.delta !== null">
+                  <span x-text="calorieSummary && Math.abs(calorieSummary.delta)"></span>
+                  <span x-text="calorieSummary && calorieSummary.delta > 0 ? 'over target' : 'under target'"></span>
+                  · <span x-text="calorieSummary && count(calorieSummary.loggedDays, 'complete day')"></span>
+                  <span x-show="completeDays.streak > 1" x-text="`· ${completeDays.streak} in a row`"></span>
+                </div>
+                <!-- Protein per pound of body weight: whether it is enough depends
+                     on how much of you there is. Out of range says which way. -->
+                <div class="stat-sub protein-line" x-show="protein" x-cloak>
+                  <span x-text="protein && `${protein.average} g protein a day`"></span>
+                  <template x-if="protein && protein.perLb !== null">
+                    <span>
+                      · <b x-text="`${protein.perLb.toFixed(2)} g/lb`"></b>
+                      <span class="protein-flag" x-show="protein.status !== 'ok'"
+                            x-text="protein.status === 'low' ? '· below 0.7–1.0' : '· above 0.7–1.0'"></span>
+                    </span>
+                  </template>
+                </div>
               </div>
             </div>
-            <button class="btn" @click="openWeighing()">Log</button>
-          </div>
 
-          <!-- One series, so the heading names it and no legend is needed.
-               preserveAspectRatio is deliberately not "none" here: the old chart
-               stretched, which skews a slope into whatever the card width says. -->
-          <template x-if="weightPlot && weight.length > 1">
-            <!-- Tap to select, and it stays selected. pointermove is guarded on
-                 $event.buttons, which is 1 only while a finger, pen or held mouse
-                 button is actually down — so dragging scrubs along the series and
-                 a mouse merely passing over does nothing. Nothing clears the
-                 selection on the way out, because a readout that vanishes when
-                 you lift your finger is no use on a phone. -->
-            <div class="plot" @pointerdown="trackWeight($event)"
-                 @pointermove="if ($event.buttons) trackWeight($event)">
-              <!-- viewBox is set imperatively, not with :viewBox. The HTML parser
-                   lowercases attribute names, so :viewBox arrives as :viewbox and
-                   Alpine sets "viewbox" — which SVG, being case-sensitive, ignores
-                   entirely. The result is an SVG with no viewBox at all: it takes
-                   the default 100%x150px while the paths stay in 100x32 user units,
-                   drawing the whole chart as a sliver in the top-left corner. -->
-              <svg x-effect="$el.setAttribute('viewBox', `0 0 ${weightPlot.width} ${weightPlot.height}`)"
-                   role="img" aria-label="Body weight over time">
-                <!-- Target line, recessive: context, not data. -->
-                <line x-show="weightPlot.targetY !== null" x-cloak
-                      x1="0" :x2="weightPlot.width"
-                      :y1="weightPlot.targetY" :y2="weightPlot.targetY"
+            <div class="plot" x-show="loggedDays > 1" x-cloak
+                 @pointerdown="trackCalories($event)"
+                 @pointermove="if ($event.buttons) trackCalories($event)">
+              <svg x-effect="$el.setAttribute('viewBox', `0 0 ${caloriePlot.width} ${caloriePlot.height}`)"
+                   role="img" aria-label="Daily calories over the last 14 days">
+                <line x-show="caloriePlot.targetY !== null" x-cloak
+                      x1="0" :x2="caloriePlot.width"
+                      :y1="caloriePlot.targetY" :y2="caloriePlot.targetY"
                       class="plot-target"/>
-                <path :d="weightPlot.area" class="plot-area"/>
-                <path :d="weightPlot.line" class="plot-line"/>
-
-                <!-- Crosshair on the snapped reading. -->
-                <line x-show="weightHover" x-cloak
-                      :x1="weightHover && weightHover.x" :x2="weightHover && weightHover.x"
-                      y1="0" :y2="weightPlot.height" class="plot-crosshair"/>
-
-                <g x-html="weightDots"></g>
+                <g x-html="calorieBars"></g>
               </svg>
 
-              <!-- Values lead, the date follows. The thumbnail is the progress
-                   photo taken within three days of the reading — the picture of
-                   the number — and only exists while the photo section is
-                   unlocked, so the chart can't leak what the PIN guards. -->
-              <div class="plot-readout" x-show="weightFocus" x-cloak>
-                <b x-text="weightFocus && `${weightFocus.lb} lb`"></b>
-                <span x-text="weightFocus && weightDate(weightFocus.at, { long: true })"></span>
-                <button class="plot-photo" x-show="focusPhoto"
-                        @click="viewingPhoto = focusPhoto"
-                        aria-label="Progress photo from around this reading">
-                  <img :src="focusPhoto ? (photoUrl(focusPhoto) || null) : null" alt="">
-                </button>
+              <div class="plot-readout" x-show="calorieFocus" x-cloak>
+                <b x-text="calorieFocus && (calorieFocus.logged
+                     ? `${calorieFocus.kcal.toLocaleString()} kcal`
+                     : 'Not logged')"></b>
+                <span x-text="calorieFocus && `${weightDate(calorieFocus.date.toISOString(), { long: true })}${
+                  calorieFocus.logged && calorieFocus.target
+                    ? ` · ${signed(calorieFocus.kcal - calorieFocus.target, '', 0)} vs target`
+                    : ''}`"></span>
               </div>
             </div>
-          </template>
 
-          <p class="empty" style="padding:var(--space-3) 0" x-show="weight.length < 2">
-            Log your weight a couple of times and a trend appears here.
-          </p>
+            <p class="empty" style="padding:var(--space-3) 0" x-show="loggedDays < 2" x-cloak>
+              Log a couple of days and the chart fills in.
+            </p>
 
-          <!-- Trajectory, in words first. -->
-          <div class="stat-grid" x-show="weight.length > 1" x-cloak>
-            <div class="stat-cell">
-              <small>Weekly trend</small>
-              <b x-text="weightTrend.enough
-                   ? signed(weightTrend.lbPerWeek, ' lb')
-                   : 'Not yet'"></b>
-            </div>
-            <div class="stat-cell" x-show="weightWeek.change !== null">
-              <small>Last 7 days</small>
-              <b x-text="signed(weightWeek.change, ' lb')"></b>
-            </div>
-            <div class="stat-cell" x-show="weightMonth.change !== null">
-              <small>Last 30 days</small>
-              <b x-text="signed(weightMonth.change, ' lb')"></b>
-            </div>
-            <div class="stat-cell" x-show="weightTrend.weeksAway">
-              <small>At this rate</small>
-              <b x-text="weightTrend.projectedAt ? weightDate(weightTrend.projectedAt) : '—'"></b>
-            </div>
-          </div>
-
-          <p class="plot-note" x-show="weight.length > 1" x-cloak
-             x-text="trendConfidence"></p>
-
-          <button class="btn btn-ghost btn-block" x-show="weightReadings.length" x-cloak
-                  @click="weightOpen = !weightOpen"
-                  x-text="weightOpen ? 'Hide every reading' : `All ${weightReadings.length} readings`"></button>
-
-          <!-- The table view. Also what makes the low-contrast stroke acceptable:
-               every plotted value is readable without hovering anything. -->
-          <div class="rows" x-show="weightOpen" x-cloak>
-            <template x-for="r in weightReadings" :key="r.at">
-              <button class="row" @click="openWeightEdit(r)">
-                <div class="row-text">
-                  <b x-text="weightDate(r.at, { long: true })"></b>
-                  <small x-text="gapLabel(r.daysSincePrevious)"></small>
-                </div>
-                <span class="row-num" x-text="`${r.lb} lb`"></span>
-                <span class="delta"
-                      :class="{ 'is-down': r.delta < 0, 'is-up': r.delta > 0 }"
-                      x-text="signed(r.delta)"></span>
-              </button>
-            </template>
-          </div>
-
-          <div class="stat-grid" x-show="weightOpen && weightExtremes" x-cloak>
-            <div class="stat-cell">
-              <small>Highest</small>
-              <b x-text="weightExtremes && `${weightExtremes.high.lb} lb`"></b>
-              <span x-text="weightExtremes && weightDate(weightExtremes.high.at)"></span>
-            </div>
-            <div class="stat-cell">
-              <small>Lowest</small>
-              <b x-text="weightExtremes && `${weightExtremes.low.lb} lb`"></b>
-              <span x-text="weightExtremes && weightDate(weightExtremes.low.at)"></span>
-            </div>
-            <div class="stat-cell">
-              <small>Range</small>
-              <b x-text="weightExtremes && `${weightExtremes.range} lb`"></b>
-            </div>
-          </div>
-        </div>
-
-        <!-- Sets per muscle --------------------------------------------------- -->
-        <!-- Working sets a week per group against the 10-20 range, as plain
-             bars: one measure, one axis, read straight across. The range is a
-             shaded band behind every bar so in or out is visible at a glance,
-             and a word says it too, so it never rests on colour. -->
-        <div class="card" x-show="muscleSets.sessions" x-cloak>
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Sets per muscle</div>
-              <div class="stat-hero">
-                <span x-text="muscleInRange"></span><small x-text="` of ${muscleSets.groups.length}`"></small>
+            <div class="stat-grid" x-show="adherence" x-cloak>
+              <div class="stat-cell">
+                <small>On target</small>
+                <b x-text="adherence && `${adherence.on} / ${adherence.days}`"></b>
+                <span x-text="adherence && `within ${adherence.slack}`"></span>
               </div>
-              <div class="stat-sub"
-                   x-text="`in the ${muscleSets.low}-${muscleSets.high} sets a week range · last ${muscleSets.weeks} weeks`"></div>
-            </div>
-          </div>
-
-          <div class="sets-bars">
-            <template x-for="g in muscleSets.groups" :key="g.key">
-              <div class="sets-row" :class="`is-${g.status}`">
-                <span class="sets-name" x-text="g.label"></span>
-                <span class="sets-track">
-                  <span class="sets-band"
-                        :style="`left:${setsPct(muscleSets.low)}%; width:${setsPct(muscleSets.high) - setsPct(muscleSets.low)}%`"></span>
-                  <span class="sets-fill" :style="`width:${setsPct(g.sets)}%`"></span>
-                </span>
-                <span class="sets-num">
-                  <b x-text="g.sets"></b>
-                  <small x-show="g.status !== 'ok'" x-text="g.status"></small>
-                </span>
+              <div class="stat-cell">
+                <small>Over · under</small>
+                <b x-text="adherence && `${adherence.over} · ${adherence.under}`"></b>
               </div>
-            </template>
-          </div>
-
-          <p class="plot-note">
-            <span x-text="`Completed working sets across ${count(muscleSets.sessions, 'workout')}. A set counts fully for its main muscle and half for each secondary one.`"></span>
-            <span x-show="muscleSets.unplaced"
-                  x-text="` ${muscleSets.unplaced} a week are not counted — the muscle map cannot place those exercises.`"></span>
-          </p>
-        </div>
-
-        <!-- Training --------------------------------------------------------- -->
-        <div class="card">
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Weekly volume</div>
-              <div class="stat-hero">
-                <span x-text="thousands(thisWeek.volume)"></span><small>lb</small>
+              <div class="stat-cell">
+                <small>Complete days</small>
+                <b x-text="completeDays.total"></b>
+                <span x-text="`streak ${completeDays.streak}`"></span>
               </div>
-              <div class="stat-sub">
-                <span x-text="thisWeek.sessions"></span> sessions this week
+              <div class="stat-cell" x-show="adherence && adherence.biggest">
+                <small>Biggest miss</small>
+                <b x-text="adherence && signed(adherence.biggest.delta, '', 0)"></b>
+                <span x-text="adherence && weightDate(adherence.biggest.date.toISOString())"></span>
               </div>
             </div>
-          </div>
 
-          <!-- Bars as elements rather than an x-html string, so a pointer has
-               something to interrogate. Selection snaps by slot, not by rectangle:
-               an untrained week has no bar to hit and is still a week you can
-               ask about. -->
-          <div class="plot" @pointerdown="trackVolume($event)"
-               @pointermove="if ($event.buttons) trackVolume($event)">
-            <svg x-effect="$el.setAttribute('viewBox', `0 0 ${volumePlot.width} ${volumePlot.height}`)"
-                 role="img" aria-label="Training volume by week, last 12 weeks">
-              <g x-html="volumeBars"></g>
-            </svg>
+            <p class="plot-note" x-show="adherence && adherence.unlogged" x-cloak
+               x-text="adherence && `${adherence.unlogged} of the ${adherence.unlogged + adherence.days} days aren't logged, so they count for nothing here.`"></p>
 
-            <div class="plot-readout" x-show="volumeFocus" x-cloak>
-              <b x-text="volumeFocus && `${volumeFocus.volume.toLocaleString()} lb`"></b>
-              <span x-text="volumeFocus && `week of ${weekOf(volumeFocus.start)} · ${
-                count(volumeFocus.sessions, 'session')}`"></span>
-            </div>
-          </div>
+            <button class="btn btn-ghost btn-block" @click="calorieOpen = !calorieOpen"
+                    x-text="calorieOpen ? 'Hide days' : 'Every day'"></button>
 
-          <div class="stat-grid" x-show="volumeStats" x-cloak>
-            <div class="stat-cell" x-show="volumeStats && volumeStats.change !== null">
-              <small>Vs last week</small>
-              <b x-text="volumeStats && signed(volumeStats.change / 1000, 'k lb')"></b>
-            </div>
-            <div class="stat-cell">
-              <small>Weekly average</small>
-              <b x-text="volumeStats && thousands(volumeStats.average) + ' lb'"></b>
-            </div>
-            <div class="stat-cell" x-show="volumeStats && volumeStats.best">
-              <small>Best week</small>
-              <b x-text="volumeStats && thousands(volumeStats.best.volume) + ' lb'"></b>
-              <span x-text="volumeStats && weekOf(volumeStats.best.start)"></span>
-            </div>
-            <div class="stat-cell">
-              <small>Sessions / wk</small>
-              <b x-text="volumeStats && volumeStats.perWeek"></b>
-            </div>
-          </div>
-
-          <!-- The comparison is against a finished week, so say when it isn't fair. -->
-          <p class="plot-note" x-show="volumeStats" x-cloak
-             x-text="volumeStats && (volumeStats.partial
-               ? `This week is ${count(volumeStats.daysIn, 'day')} old — the comparison catches up as it fills.`
-               : `Averaged over the ${volumeStats.weeksTrained} of ${volumeStats.weeks} weeks you trained.`)"></p>
-
-          <button class="btn btn-ghost btn-block" x-show="sessions.length" x-cloak
-                  @click="volumeOpen = !volumeOpen"
-                  x-text="volumeOpen ? 'Hide sessions' : `Last ${sessions.length} sessions`"></button>
-
-          <div class="rows" x-show="volumeOpen" x-cloak>
-            <template x-for="s in sessions" :key="s.id">
-              <div class="row">
-                <div class="row-text">
-                  <b x-text="s.name"></b>
-                  <small x-text="`${weightDate(s.at, { long: true })} · ${
-                    count(s.sets, 'set')} · ${count(s.exercises, 'exercise', 'exercises')}${
-                    s.minutes ? ` · ${duration(s.minutes)}` : ''}`"></small>
-                </div>
-                <span class="row-num" x-text="s.volume ? `${thousands(s.volume)} lb` : '—'"></span>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <!-- Consistency ------------------------------------------------------ -->
-        <div class="card" x-show="consistency.any" x-cloak>
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Consistency</div>
-              <div class="stat-hero">
-                <span x-text="consistency.weekStreak"></span><small>week streak</small>
-              </div>
-              <div class="stat-sub"
-                   x-text="consistency.daysSinceLast === 0
-                     ? 'Trained today'
-                     : `${count(consistency.daysSinceLast, 'day')} since the last one`"></div>
-            </div>
-          </div>
-
-          <!-- One square per day, twelve weeks. A calendar answers "how often"
-               in a way a number cannot: the gaps are visible as gaps. -->
-          <div class="plot" @pointerdown="trackGrid($event)"
-               @pointermove="if ($event.buttons) trackGrid($event)">
-            <svg class="grid-plot"
-                 x-effect="$el.setAttribute('viewBox', `0 0 ${gridBox.width} ${gridBox.height}`)"
-                 role="img" aria-label="Days trained over the last twelve weeks"
-                 x-html="gridCells"></svg>
-
-            <div class="plot-readout" x-show="gridReadout" x-cloak>
-              <b x-text="gridReadout && gridReadout.what"></b>
-              <span x-text="gridReadout && gridReadout.date"></span>
-            </div>
-          </div>
-
-          <div class="stat-grid">
-            <div class="stat-cell">
-              <small>Day streak</small>
-              <b x-text="consistency.dayStreak"></b>
-              <span x-text="`best ${consistency.bestDayStreak}`"></span>
-            </div>
-            <div class="stat-cell">
-              <small>Week streak</small>
-              <b x-text="consistency.weekStreak"></b>
-              <span x-text="`best ${consistency.bestWeekStreak}`"></span>
-            </div>
-            <div class="stat-cell">
-              <small>Longest gap</small>
-              <b x-text="count(consistency.longestGap, 'day')"></b>
-            </div>
-            <div class="stat-cell">
-              <small>Days trained</small>
-              <b x-text="consistency.trainedDays"></b>
-              <span x-text="count(consistency.sessions, 'session')"></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Top lifts -------------------------------------------------------- -->
-        <div class="card" x-show="lifts.length">
-          <div class="card-label">Best lifts · estimated 1RM</div>
-          <div class="rows">
-            <template x-for="lift in lifts" :key="lift.name">
-              <div>
-                <!-- The whole row is the control: a lift with two years behind it
-                     should not need a chevron explaining that it opens. -->
-                <button class="row row-tap" @click="toggleLift(lift)"
-                        :aria-expanded="liftOpen === lift.name">
+            <div class="rows" x-show="calorieOpen" x-cloak>
+              <template x-for="d in [...caloriePlot.bars].reverse()" :key="d.i">
+                <div class="row">
                   <div class="row-text">
-                    <b x-text="lift.name"></b>
-                    <!-- Sessions, strength for your size and its trend, and how
-                         long since this lift's last record. -->
-                    <small x-text="liftMeta(lift)"></small>
+                    <b x-text="weightDate(d.date.toISOString(), { long: true })"></b>
+                    <small x-text="d.logged
+                      ? (d.target ? `target ${d.target.toLocaleString()}` : 'no target set')
+                      : 'nothing logged'"></small>
                   </div>
-                  <span class="pill" x-show="lift.isBest">PR</span>
-                  <span class="row-num"><span x-text="lift.best"></span> lb</span>
+                  <span class="row-num" x-text="d.logged ? d.kcal.toLocaleString() : '—'"></span>
+                  <span class="delta" x-show="d.logged && d.target"
+                        :class="{ 'is-down': d.kcal < d.target, 'is-up': d.kcal > d.target }"
+                        x-text="d.logged && d.target ? signed(d.kcal - d.target, '', 0) : ''"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <p class="empty" x-show="!lifts.length && !calorieSummary && weight.length < 2">
+            Log a workout, a meal or your weight and this fills in.
+          </p>
+
+        </div>
+
+        <div class="stats-panel" data-tab="body" x-show="$store.ui.statsActive === 'body'" role="tabpanel">
+          <!-- Body weight ------------------------------------------------------ -->
+          <div class="card">
+            <div class="readout-head">
+              <div>
+                <div class="card-label">Body weight</div>
+                <div class="stat-hero" x-show="weightSummary">
+                  <span x-text="weightSummary && weightSummary.latest"></span><small>lb</small>
+                </div>
+                <div class="stat-sub" x-show="weightSummary && weightSummary.target">
+                  <span x-text="weightSummary && Math.abs(weightSummary.toGo)"></span> lb
+                  <span x-text="weightSummary && weightSummary.toGo > 0 ? 'to go' : 'past target'"></span>
+                </div>
+              </div>
+              <button class="btn" @click="openWeighing()">Log</button>
+            </div>
+
+            <!-- One series, so the heading names it and no legend is needed.
+                 preserveAspectRatio is deliberately not "none" here: the old chart
+                 stretched, which skews a slope into whatever the card width says. -->
+            <template x-if="weightPlot && weight.length > 1">
+              <!-- Tap to select, and it stays selected. pointermove is guarded on
+                   $event.buttons, which is 1 only while a finger, pen or held mouse
+                   button is actually down — so dragging scrubs along the series and
+                   a mouse merely passing over does nothing. Nothing clears the
+                   selection on the way out, because a readout that vanishes when
+                   you lift your finger is no use on a phone. -->
+              <div class="plot" @pointerdown="trackWeight($event)"
+                   @pointermove="if ($event.buttons) trackWeight($event)">
+                <!-- viewBox is set imperatively, not with :viewBox. The HTML parser
+                     lowercases attribute names, so :viewBox arrives as :viewbox and
+                     Alpine sets "viewbox" — which SVG, being case-sensitive, ignores
+                     entirely. The result is an SVG with no viewBox at all: it takes
+                     the default 100%x150px while the paths stay in 100x32 user units,
+                     drawing the whole chart as a sliver in the top-left corner. -->
+                <svg x-effect="$el.setAttribute('viewBox', `0 0 ${weightPlot.width} ${weightPlot.height}`)"
+                     role="img" aria-label="Body weight over time">
+                  <!-- Target line, recessive: context, not data. -->
+                  <line x-show="weightPlot.targetY !== null" x-cloak
+                        x1="0" :x2="weightPlot.width"
+                        :y1="weightPlot.targetY" :y2="weightPlot.targetY"
+                        class="plot-target"/>
+                  <path :d="weightPlot.area" class="plot-area"/>
+                  <path :d="weightPlot.line" class="plot-line"/>
+
+                  <!-- Crosshair on the snapped reading. -->
+                  <line x-show="weightHover" x-cloak
+                        :x1="weightHover && weightHover.x" :x2="weightHover && weightHover.x"
+                        y1="0" :y2="weightPlot.height" class="plot-crosshair"/>
+
+                  <g x-html="weightDots"></g>
+                </svg>
+
+                <!-- Values lead, the date follows. The thumbnail is the progress
+                     photo taken within three days of the reading — the picture of
+                     the number — and only exists while the photo section is
+                     unlocked, so the chart can't leak what the PIN guards. -->
+                <div class="plot-readout" x-show="weightFocus" x-cloak>
+                  <b x-text="weightFocus && `${weightFocus.lb} lb`"></b>
+                  <span x-text="weightFocus && weightDate(weightFocus.at, { long: true })"></span>
+                  <button class="plot-photo" x-show="focusPhoto"
+                          @click="viewingPhoto = focusPhoto"
+                          aria-label="Progress photo from around this reading">
+                    <img :src="focusPhoto ? (photoUrl(focusPhoto) || null) : null" alt="">
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <p class="empty" style="padding:var(--space-3) 0" x-show="weight.length < 2">
+              Log your weight a couple of times and a trend appears here.
+            </p>
+
+            <!-- Trajectory, in words first. -->
+            <div class="stat-grid" x-show="weight.length > 1" x-cloak>
+              <div class="stat-cell">
+                <small>Weekly trend</small>
+                <b x-text="weightTrend.enough
+                     ? signed(weightTrend.lbPerWeek, ' lb')
+                     : 'Not yet'"></b>
+              </div>
+              <div class="stat-cell" x-show="weightWeek.change !== null">
+                <small>Last 7 days</small>
+                <b x-text="signed(weightWeek.change, ' lb')"></b>
+              </div>
+              <div class="stat-cell" x-show="weightMonth.change !== null">
+                <small>Last 30 days</small>
+                <b x-text="signed(weightMonth.change, ' lb')"></b>
+              </div>
+              <div class="stat-cell" x-show="weightTrend.weeksAway">
+                <small>At this rate</small>
+                <b x-text="weightTrend.projectedAt ? weightDate(weightTrend.projectedAt) : '—'"></b>
+              </div>
+            </div>
+
+            <p class="plot-note" x-show="weight.length > 1" x-cloak
+               x-text="trendConfidence"></p>
+
+            <button class="btn btn-ghost btn-block" x-show="weightReadings.length" x-cloak
+                    @click="weightOpen = !weightOpen"
+                    x-text="weightOpen ? 'Hide every reading' : `All ${weightReadings.length} readings`"></button>
+
+            <!-- The table view. Also what makes the low-contrast stroke acceptable:
+                 every plotted value is readable without hovering anything. -->
+            <div class="rows" x-show="weightOpen" x-cloak>
+              <template x-for="r in weightReadings" :key="r.at">
+                <button class="row" @click="openWeightEdit(r)">
+                  <div class="row-text">
+                    <b x-text="weightDate(r.at, { long: true })"></b>
+                    <small x-text="gapLabel(r.daysSincePrevious)"></small>
+                  </div>
+                  <span class="row-num" x-text="`${r.lb} lb`"></span>
+                  <span class="delta"
+                        :class="{ 'is-down': r.delta < 0, 'is-up': r.delta > 0 }"
+                        x-text="signed(r.delta)"></span>
                 </button>
+              </template>
+            </div>
 
-                <template x-if="liftOpen === lift.name && liftDetail">
-                  <div class="lift-detail">
-                    <svg class="plot-mini"
-                         x-effect="$el.setAttribute('viewBox', `0 0 ${liftDetail.plot.width} ${liftDetail.plot.height}`)"
-                         role="img" :aria-label="`Estimated 1RM for ${liftDetail.name} over time`"
-                         x-html="liftLine"></svg>
+            <div class="stat-grid" x-show="weightOpen && weightExtremes" x-cloak>
+              <div class="stat-cell">
+                <small>Highest</small>
+                <b x-text="weightExtremes && `${weightExtremes.high.lb} lb`"></b>
+                <span x-text="weightExtremes && weightDate(weightExtremes.high.at)"></span>
+              </div>
+              <div class="stat-cell">
+                <small>Lowest</small>
+                <b x-text="weightExtremes && `${weightExtremes.low.lb} lb`"></b>
+                <span x-text="weightExtremes && weightDate(weightExtremes.low.at)"></span>
+              </div>
+              <div class="stat-cell">
+                <small>Range</small>
+                <b x-text="weightExtremes && `${weightExtremes.range} lb`"></b>
+              </div>
+            </div>
+          </div>
 
-                    <div class="stat-grid">
-                      <div class="stat-cell">
-                        <small>Latest</small>
-                        <b x-text="`${liftDetail.latest} lb`"></b>
-                      </div>
-                      <div class="stat-cell" x-show="liftDetail.change !== null">
-                        <small>Last <span x-text="liftDetail.sessions"></span></small>
-                        <b x-text="signed(liftDetail.change, ' lb', 0)"></b>
-                      </div>
-                      <div class="stat-cell" x-show="liftDetail.heaviest && liftDetail.heaviest.best">
-                        <small>Heaviest set</small>
-                        <b x-text="liftDetail.heaviest && liftDetail.heaviest.best
-                             ? `${liftDetail.heaviest.best.weight_lb} × ${liftDetail.heaviest.best.reps}`
-                             : '—'"></b>
-                        <span x-text="liftDetail.heaviest && weightDate(liftDetail.heaviest.date)"></span>
-                      </div>
-                    </div>
+          <!-- Progress photos ---------------------------------------------------
+               Locked by default every time the page opens; the PIN is a privacy
+               curtain for whoever is holding the phone, not the security boundary
+               (that is RLS + the account login). -->
+          <div class="card">
+            <!-- The file inputs live OUTSIDE the lock-gated templates. Opening the
+                 camera or the photo picker hides the page, and the relock used to
+                 tear down the unlocked template — destroying the input while it
+                 was waiting for the photo, so "Use photo" had no listener left to
+                 deliver to. Out here they survive any relock. -->
+            <input id="pp-camera" type="file" accept="image/*" capture="environment"
+                   hidden @change="pickPhoto($event)">
+            <input id="pp-library" type="file" accept="image/*"
+                   hidden @change="pickPhoto($event)">
+            <!-- The conversation's library picker, out here for the same reason.
+                 It is for photos already on the phone; new ones come from the
+                 Camera button, the in-page camera, so they never reach the
+                 gallery. (The phone's chooser may still list its own camera here;
+                 a shot taken that way is the phone camera's, and may be kept.) -->
+            <input id="pm-photo" type="file" accept="image/*"
+                   hidden @change="pickChatPhoto($event)">
 
-                    <div class="rows">
-                      <template x-for="h in liftDetail.recent" :key="h.at">
-                        <div class="row">
-                          <div class="row-text">
-                            <b x-text="weightDate(h.at, { long: true })"></b>
-                            <small x-text="`${h.weight ?? '—'} × ${h.reps ?? '—'} · ${
-                              count(h.sets, 'set')}`"></small>
-                          </div>
-                          <span class="row-num" x-text="`${h.oneRm} lb`"></span>
-                        </div>
-                      </template>
-                    </div>
-                  </div>
-                </template>
+            <div class="readout-head">
+              <div>
+                <div class="card-label">Progress photos</div>
+                <div class="stat-sub" x-show="!photosLocked"
+                     x-text="`${photos.length} photo${photos.length === 1 ? '' : 's'}`"></div>
+              </div>
+              <div class="photo-head-actions" x-show="!photosLocked">
+                <button class="btn" x-show="chatPartner" @click="openChat()"
+                        :aria-label="chatUnread ? `Messages, ${chatUnread} unread` : 'Messages'">
+                  Messages<span class="chat-dot" x-show="chatUnread" aria-hidden="true"></span>
+                </button>
+                <button class="btn" @click="relockPhotos()">Lock</button>
+              </div>
+            </div>
+
+            <!-- Locked: the PIN pad and nothing else. No thumbnails, no counts.
+                 Left-aligned like every other card — the centered column read as
+                 a broken empty state, and .tap (a 40px circle for × buttons) once
+                 wrapped the reset link onto four lines. -->
+            <template x-if="photosLocked">
+              <div class="photo-lock">
+                <p class="photo-lock-prompt">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/>
+                    <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>
+                  </svg>
+                  <span x-text="pinPrompt"></span>
+                </p>
+                <form class="pin-row" @submit.prevent="submitPin()">
+                  <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+                         x-model="pinEntry" placeholder="••••" autocomplete="off" aria-label="PIN">
+                  <button class="btn btn-primary" type="submit" :disabled="pinEntry.length < 4"
+                          x-text="pinStage === 'enter' && myPinHash ? 'Unlock' : 'Next'"></button>
+                </form>
+                <p class="notice notice-error" x-show="pinError" x-text="pinError"></p>
+                <button class="photo-lock-reset" x-show="myPinHash && pinStage === 'enter'"
+                        @click="resetPin()">Forgot? Set a new PIN</button>
               </div>
             </template>
-          </div>
-        </div>
 
-        <!-- How you compare --------------------------------------------------- -->
-        <!-- Free-weight lifts against published body-weight standards. Machines
-             are left out on purpose: their numbers depend on the machine. The
-             standards differ by sex, so the card asks rather than assumes. -->
-        <div class="card" x-show="standings.rows.length" x-cloak>
-          <div class="readout-head">
-            <div>
-              <div class="card-label">How you compare</div>
-              <div class="stat-sub">Free-weight lifts, against lifters your sex and body weight</div>
-            </div>
-          </div>
-
-          <template x-if="!mySex">
-            <div class="compare-ask">
-              <p>Standards differ for men and women. Which should yours be measured against?</p>
-              <div class="btn-row">
-                <button class="btn" :disabled="sexSaving" @click="setSex('male')">Men's</button>
-                <button class="btn" :disabled="sexSaving" @click="setSex('female')">Women's</button>
-              </div>
-            </div>
-          </template>
-
-          <template x-if="mySex">
-            <div>
-              <div class="rows">
-                <template x-for="row in standings.rows" :key="row.lift">
-                  <div class="row">
-                    <div class="row-text">
-                      <b x-text="row.label"></b>
-                      <small x-text="`${row.oneRm} lb est. 1RM${row.ratio ? ` · ${row.ratio.toFixed(2)}× body weight` : ''} · ${weightDate(row.at)}`"></small>
-                      <small class="compare-next" x-text="standingLine(row)"></small>
-                    </div>
-                    <span class="row-num compare-level" x-text="row.rating ? row.rating.level : '—'"></span>
-                  </div>
-                </template>
-              </div>
-
-              <div class="compare-dots" x-show="standings.dots" x-cloak>
-                <span>DOTS</span>
-                <b x-text="standings.dots && standings.dots.score"></b>
-                <small x-text="standings.dots && `${standings.dots.total} lb squat + bench + deadlift at ${standings.dots.bodyWeight} lb · ~300 solid, ~400 strong, ~500 national level`"></small>
-              </div>
-
-              <p class="plot-note">
-                Approximate: commonly published body-weight multiples, not a live
-                dataset. Each rating uses your latest session and the weigh-in
-                nearest it.
-                <button class="link-btn" :disabled="sexSaving"
-                        @click="setSex(mySex === 'male' ? 'female' : 'male')"
-                        x-text="mySex === 'male' ? 'Using men’s standards · switch' : 'Using women’s standards · switch'"></button>
-              </p>
-            </div>
-          </template>
-        </div>
-
-        <!-- Personal records -------------------------------------------------- -->
-        <!-- Every record as it landed: a heavier top set, more reps at a weight
-             than ever, or a higher estimated 1RM. The same check as the
-             "No PR in N sessions" nudge on the workout screen. -->
-        <div class="card" x-show="prs.events.length" x-cloak>
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Personal records</div>
-              <div class="stat-hero"><span x-text="prsThisMonth"></span></div>
-              <div class="stat-sub" x-text="`${count(prsThisMonth, 'record').replace(/^\d+ /, '')} in the last 30 days`"></div>
-            </div>
-          </div>
-          <div class="rows">
-            <template x-for="e in prs.events" :key="`${e.key}-${e.at}`">
-              <div class="row">
-                <div class="row-text">
-                  <b x-text="e.name"></b>
-                  <small x-text="prLine(e)"></small>
+            <template x-if="!photosLocked">
+              <div>
+                <!-- Whose photos, then which pose. Two people, two chips. -->
+                <div class="chips" style="margin-bottom:var(--space-2)">
+                  <button class="chip" :class="ownerFilter === 'mine' && 'is-active'"
+                          @click="ownerFilter = 'mine'; compareSel = []">Mine</button>
+                  <button class="chip" :class="ownerFilter === 'partner' && 'is-active'"
+                          @click="ownerFilter = 'partner'; compareSel = []"
+                          x-text="partnerName"></button>
                 </div>
-                <span class="row-num" x-text="weightDate(e.at)"></span>
+                <div class="chips">
+                  <button class="chip" :class="poseFilter === 'all' && 'is-active'"
+                          @click="poseFilter = 'all'">All</button>
+                  <template x-for="p in poses" :key="p">
+                    <button class="chip" :class="poseFilter === p && 'is-active'"
+                            @click="poseFilter = p" x-text="p"></button>
+                  </template>
+                  <button class="chip" :class="compareMode && 'is-active'"
+                          @click="compareMode = !compareMode; compareSel = []">Compare</button>
+                </div>
+
+                <p class="empty" x-show="compareMode && compareSel.length < 2"
+                   style="padding:var(--space-2) 0">
+                  Pick two photos to compare.
+                </p>
+
+                <div class="photo-grid" x-show="photos.length">
+                  <template x-for="p in photos" :key="p.id">
+                    <button class="photo-cell" :class="compareSel.includes(p.id) && 'is-selected'"
+                            @click="tapPhoto(p)">
+                      <img x-show="photoUrl(p)" :src="photoUrl(p) || null" alt="" loading="lazy">
+                      <span class="photo-cell-date" x-text="photoDate(p.taken_on)"></span>
+                      <span class="photo-cell-together" x-show="p.together">Together</span>
+                    </button>
+                  </template>
+                </div>
+
+                <p class="empty" x-show="!photos.length" style="padding:var(--space-3) 0"
+                   x-text="ownerFilter === 'mine'
+                     ? 'No photos yet. Same spot, same light, same pose — future you will want the comparison to be fair.'
+                     : `No photos from ${partnerName} yet.`"></p>
+
+                <!-- Take photo opens the camera inside the app: one tap saves. The
+                     library still goes through the save sheet. @click arms
+                     pickerHeld so the hide the photo picker causes doesn't relock
+                     and destroy the flow. -->
+                <div class="photo-add-row" x-show="ownerFilter === 'mine'">
+                  <button class="btn btn-primary" @click="openCamera()">Take photo</button>
+                  <label class="btn" for="pp-library" @click="pickerHeld = true">From library</label>
+                </div>
               </div>
             </template>
           </div>
-          <p class="plot-note">
-            A record beats your best of the six months before it: heavier, more
-            reps at a weight, or a higher estimated 1RM.
-          </p>
+
         </div>
 
-        <!-- Nutrition -------------------------------------------------------- -->
-        <div class="card" x-show="calorieSummary">
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Calories · 14 day average</div>
-              <div class="stat-hero">
-                <span x-text="calorieSummary && calorieSummary.average.toLocaleString()"></span><small>kcal</small>
+        <div class="stats-panel" data-tab="training" x-show="$store.ui.statsActive === 'training'" role="tabpanel">
+          <!-- Consistency ------------------------------------------------------ -->
+          <div class="card" x-show="consistency.any" x-cloak>
+            <div class="readout-head">
+              <div>
+                <div class="card-label">Consistency</div>
+                <div class="stat-hero">
+                  <span x-text="consistency.weekStreak"></span><small>week streak</small>
+                </div>
+                <div class="stat-sub"
+                     x-text="consistency.daysSinceLast === 0
+                       ? 'Trained today'
+                       : `${count(consistency.daysSinceLast, 'day')} since the last one`"></div>
               </div>
-              <div class="stat-sub" x-show="calorieSummary && calorieSummary.delta !== null">
-                <span x-text="calorieSummary && Math.abs(calorieSummary.delta)"></span>
-                <span x-text="calorieSummary && calorieSummary.delta > 0 ? 'over target' : 'under target'"></span>
-                · <span x-text="calorieSummary && count(calorieSummary.loggedDays, 'complete day')"></span>
-                <span x-show="completeDays.streak > 1" x-text="`· ${completeDays.streak} in a row`"></span>
+            </div>
+
+            <!-- One square per day, twelve weeks. A calendar answers "how often"
+                 in a way a number cannot: the gaps are visible as gaps. -->
+            <div class="plot" @pointerdown="trackGrid($event)"
+                 @pointermove="if ($event.buttons) trackGrid($event)">
+              <svg class="grid-plot"
+                   x-effect="$el.setAttribute('viewBox', `0 0 ${gridBox.width} ${gridBox.height}`)"
+                   role="img" aria-label="Days trained over the last twelve weeks"
+                   x-html="gridCells"></svg>
+
+              <div class="plot-readout" x-show="gridReadout" x-cloak>
+                <b x-text="gridReadout && gridReadout.what"></b>
+                <span x-text="gridReadout && gridReadout.date"></span>
               </div>
-              <!-- Protein per pound of body weight: whether it is enough depends
-                   on how much of you there is. Out of range says which way. -->
-              <div class="stat-sub protein-line" x-show="protein" x-cloak>
-                <span x-text="protein && `${protein.average} g protein a day`"></span>
-                <template x-if="protein && protein.perLb !== null">
-                  <span>
-                    · <b x-text="`${protein.perLb.toFixed(2)} g/lb`"></b>
-                    <span class="protein-flag" x-show="protein.status !== 'ok'"
-                          x-text="protein.status === 'low' ? '· below 0.7–1.0' : '· above 0.7–1.0'"></span>
+            </div>
+
+            <div class="stat-grid">
+              <div class="stat-cell">
+                <small>Day streak</small>
+                <b x-text="consistency.dayStreak"></b>
+                <span x-text="`best ${consistency.bestDayStreak}`"></span>
+              </div>
+              <div class="stat-cell">
+                <small>Week streak</small>
+                <b x-text="consistency.weekStreak"></b>
+                <span x-text="`best ${consistency.bestWeekStreak}`"></span>
+              </div>
+              <div class="stat-cell">
+                <small>Longest gap</small>
+                <b x-text="count(consistency.longestGap, 'day')"></b>
+              </div>
+              <div class="stat-cell">
+                <small>Days trained</small>
+                <b x-text="consistency.trainedDays"></b>
+                <span x-text="count(consistency.sessions, 'session')"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Training --------------------------------------------------------- -->
+          <div class="card">
+            <div class="readout-head">
+              <div>
+                <div class="card-label">Weekly volume</div>
+                <div class="stat-hero">
+                  <span x-text="thousands(thisWeek.volume)"></span><small>lb</small>
+                </div>
+                <div class="stat-sub">
+                  <span x-text="thisWeek.sessions"></span> sessions this week
+                </div>
+              </div>
+            </div>
+
+            <!-- Bars as elements rather than an x-html string, so a pointer has
+                 something to interrogate. Selection snaps by slot, not by rectangle:
+                 an untrained week has no bar to hit and is still a week you can
+                 ask about. -->
+            <div class="plot" @pointerdown="trackVolume($event)"
+                 @pointermove="if ($event.buttons) trackVolume($event)">
+              <svg x-effect="$el.setAttribute('viewBox', `0 0 ${volumePlot.width} ${volumePlot.height}`)"
+                   role="img" aria-label="Training volume by week, last 12 weeks">
+                <g x-html="volumeBars"></g>
+              </svg>
+
+              <div class="plot-readout" x-show="volumeFocus" x-cloak>
+                <b x-text="volumeFocus && `${volumeFocus.volume.toLocaleString()} lb`"></b>
+                <span x-text="volumeFocus && `week of ${weekOf(volumeFocus.start)} · ${
+                  count(volumeFocus.sessions, 'session')}`"></span>
+              </div>
+            </div>
+
+            <div class="stat-grid" x-show="volumeStats" x-cloak>
+              <div class="stat-cell" x-show="volumeStats && volumeStats.change !== null">
+                <small>Vs last week</small>
+                <b x-text="volumeStats && signed(volumeStats.change / 1000, 'k lb')"></b>
+              </div>
+              <div class="stat-cell">
+                <small>Weekly average</small>
+                <b x-text="volumeStats && thousands(volumeStats.average) + ' lb'"></b>
+              </div>
+              <div class="stat-cell" x-show="volumeStats && volumeStats.best">
+                <small>Best week</small>
+                <b x-text="volumeStats && thousands(volumeStats.best.volume) + ' lb'"></b>
+                <span x-text="volumeStats && weekOf(volumeStats.best.start)"></span>
+              </div>
+              <div class="stat-cell">
+                <small>Sessions / wk</small>
+                <b x-text="volumeStats && volumeStats.perWeek"></b>
+              </div>
+            </div>
+
+            <!-- The comparison is against a finished week, so say when it isn't fair. -->
+            <p class="plot-note" x-show="volumeStats" x-cloak
+               x-text="volumeStats && (volumeStats.partial
+                 ? `This week is ${count(volumeStats.daysIn, 'day')} old — the comparison catches up as it fills.`
+                 : `Averaged over the ${volumeStats.weeksTrained} of ${volumeStats.weeks} weeks you trained.`)"></p>
+
+            <button class="btn btn-ghost btn-block" x-show="sessions.length" x-cloak
+                    @click="volumeOpen = !volumeOpen"
+                    x-text="volumeOpen ? 'Hide sessions' : `Last ${sessions.length} sessions`"></button>
+
+            <div class="rows" x-show="volumeOpen" x-cloak>
+              <template x-for="s in sessions" :key="s.id">
+                <div class="row">
+                  <div class="row-text">
+                    <b x-text="s.name"></b>
+                    <small x-text="`${weightDate(s.at, { long: true })} · ${
+                      count(s.sets, 'set')} · ${count(s.exercises, 'exercise', 'exercises')}${
+                      s.minutes ? ` · ${duration(s.minutes)}` : ''}`"></small>
+                  </div>
+                  <span class="row-num" x-text="s.volume ? `${thousands(s.volume)} lb` : '—'"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Sets per muscle --------------------------------------------------- -->
+          <!-- Working sets a week per group against the 10-20 range, as plain
+               bars: one measure, one axis, read straight across. The range is a
+               shaded band behind every bar so in or out is visible at a glance,
+               and a word says it too, so it never rests on colour. -->
+          <div class="card" x-show="muscleSets.sessions" x-cloak>
+            <div class="readout-head">
+              <div>
+                <div class="card-label">Sets per muscle</div>
+                <div class="stat-hero">
+                  <span x-text="muscleInRange"></span><small x-text="` of ${muscleSets.groups.length}`"></small>
+                </div>
+                <div class="stat-sub"
+                     x-text="`in the ${muscleSets.low}-${muscleSets.high} sets a week range · last ${muscleSets.weeks} weeks`"></div>
+              </div>
+            </div>
+
+            <div class="sets-bars">
+              <template x-for="g in muscleSets.groups" :key="g.key">
+                <div class="sets-row" :class="`is-${g.status}`">
+                  <span class="sets-name" x-text="g.label"></span>
+                  <span class="sets-track">
+                    <span class="sets-band"
+                          :style="`left:${setsPct(muscleSets.low)}%; width:${setsPct(muscleSets.high) - setsPct(muscleSets.low)}%`"></span>
+                    <span class="sets-fill" :style="`width:${setsPct(g.sets)}%`"></span>
                   </span>
-                </template>
+                  <span class="sets-num">
+                    <b x-text="g.sets"></b>
+                    <small x-show="g.status !== 'ok'" x-text="g.status"></small>
+                  </span>
+                </div>
+              </template>
+            </div>
+
+            <p class="plot-note">
+              <span x-text="`Completed working sets across ${count(muscleSets.sessions, 'workout')}. A set counts fully for its main muscle and half for each secondary one.`"></span>
+              <span x-show="muscleSets.unplaced"
+                    x-text="` ${muscleSets.unplaced} a week are not counted — the muscle map cannot place those exercises.`"></span>
+            </p>
+          </div>
+
+          <!-- Top lifts -------------------------------------------------------- -->
+          <div class="card fold" x-data="{ open: false }" :class="open && 'is-open'" x-show="lifts.length">
+            <button class="fold-head" @click="open = !open" :aria-expanded="open">
+              <span class="fold-summary" x-show="!open" x-text="liftsSummary"></span>
+              <span class="fold-summary" x-show="open">Hide</span>
+                <svg class="icon fold-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="card-label">Best lifts · estimated 1RM</div>
+            <div class="rows">
+              <template x-for="lift in lifts" :key="lift.name">
+                <div>
+                  <!-- The whole row is the control: a lift with two years behind it
+                       should not need a chevron explaining that it opens. -->
+                  <button class="row row-tap" @click="toggleLift(lift)"
+                          :aria-expanded="liftOpen === lift.name">
+                    <div class="row-text">
+                      <b x-text="lift.name"></b>
+                      <!-- Sessions, strength for your size and its trend, and how
+                           long since this lift's last record. -->
+                      <small x-text="liftMeta(lift)"></small>
+                    </div>
+                    <span class="pill" x-show="lift.isBest">PR</span>
+                    <span class="row-num"><span x-text="lift.best"></span> lb</span>
+                  </button>
+
+                  <template x-if="liftOpen === lift.name && liftDetail">
+                    <div class="lift-detail">
+                      <svg class="plot-mini"
+                           x-effect="$el.setAttribute('viewBox', `0 0 ${liftDetail.plot.width} ${liftDetail.plot.height}`)"
+                           role="img" :aria-label="`Estimated 1RM for ${liftDetail.name} over time`"
+                           x-html="liftLine"></svg>
+
+                      <div class="stat-grid">
+                        <div class="stat-cell">
+                          <small>Latest</small>
+                          <b x-text="`${liftDetail.latest} lb`"></b>
+                        </div>
+                        <div class="stat-cell" x-show="liftDetail.change !== null">
+                          <small>Last <span x-text="liftDetail.sessions"></span></small>
+                          <b x-text="signed(liftDetail.change, ' lb', 0)"></b>
+                        </div>
+                        <div class="stat-cell" x-show="liftDetail.heaviest && liftDetail.heaviest.best">
+                          <small>Heaviest set</small>
+                          <b x-text="liftDetail.heaviest && liftDetail.heaviest.best
+                               ? `${liftDetail.heaviest.best.weight_lb} × ${liftDetail.heaviest.best.reps}`
+                               : '—'"></b>
+                          <span x-text="liftDetail.heaviest && weightDate(liftDetail.heaviest.date)"></span>
+                        </div>
+                      </div>
+
+                      <div class="rows">
+                        <template x-for="h in liftDetail.recent" :key="h.at">
+                          <div class="row">
+                            <div class="row-text">
+                              <b x-text="weightDate(h.at, { long: true })"></b>
+                              <small x-text="`${h.weight ?? '—'} × ${h.reps ?? '—'} · ${
+                                count(h.sets, 'set')}`"></small>
+                            </div>
+                            <span class="row-num" x-text="`${h.oneRm} lb`"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- How you compare --------------------------------------------------- -->
+          <!-- Free-weight lifts against published body-weight standards. Machines
+               are left out on purpose: their numbers depend on the machine. The
+               standards differ by sex, so the card asks rather than assumes. -->
+          <div class="card fold" x-data="{ open: false }" :class="open && 'is-open'" x-show="standings.rows.length" x-cloak>
+            <button class="fold-head" @click="open = !open" :aria-expanded="open">
+              <span class="fold-summary" x-show="!open" x-text="compareSummary"></span>
+              <span class="fold-summary" x-show="open">Hide</span>
+                <svg class="icon fold-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="readout-head">
+              <div>
+                <div class="card-label">How you compare</div>
+                <div class="stat-sub">Free-weight lifts, against lifters your sex and body weight</div>
               </div>
             </div>
-          </div>
 
-          <div class="plot" x-show="loggedDays > 1" x-cloak
-               @pointerdown="trackCalories($event)"
-               @pointermove="if ($event.buttons) trackCalories($event)">
-            <svg x-effect="$el.setAttribute('viewBox', `0 0 ${caloriePlot.width} ${caloriePlot.height}`)"
-                 role="img" aria-label="Daily calories over the last 14 days">
-              <line x-show="caloriePlot.targetY !== null" x-cloak
-                    x1="0" :x2="caloriePlot.width"
-                    :y1="caloriePlot.targetY" :y2="caloriePlot.targetY"
-                    class="plot-target"/>
-              <g x-html="calorieBars"></g>
-            </svg>
-
-            <div class="plot-readout" x-show="calorieFocus" x-cloak>
-              <b x-text="calorieFocus && (calorieFocus.logged
-                   ? `${calorieFocus.kcal.toLocaleString()} kcal`
-                   : 'Not logged')"></b>
-              <span x-text="calorieFocus && `${weightDate(calorieFocus.date.toISOString(), { long: true })}${
-                calorieFocus.logged && calorieFocus.target
-                  ? ` · ${signed(calorieFocus.kcal - calorieFocus.target, '', 0)} vs target`
-                  : ''}`"></span>
-            </div>
-          </div>
-
-          <p class="empty" style="padding:var(--space-3) 0" x-show="loggedDays < 2" x-cloak>
-            Log a couple of days and the chart fills in.
-          </p>
-
-          <div class="stat-grid" x-show="adherence" x-cloak>
-            <div class="stat-cell">
-              <small>On target</small>
-              <b x-text="adherence && `${adherence.on} / ${adherence.days}`"></b>
-              <span x-text="adherence && `within ${adherence.slack}`"></span>
-            </div>
-            <div class="stat-cell">
-              <small>Over · under</small>
-              <b x-text="adherence && `${adherence.over} · ${adherence.under}`"></b>
-            </div>
-            <div class="stat-cell">
-              <small>Complete days</small>
-              <b x-text="completeDays.total"></b>
-              <span x-text="`streak ${completeDays.streak}`"></span>
-            </div>
-            <div class="stat-cell" x-show="adherence && adherence.biggest">
-              <small>Biggest miss</small>
-              <b x-text="adherence && signed(adherence.biggest.delta, '', 0)"></b>
-              <span x-text="adherence && weightDate(adherence.biggest.date.toISOString())"></span>
-            </div>
-          </div>
-
-          <p class="plot-note" x-show="adherence && adherence.unlogged" x-cloak
-             x-text="adherence && `${adherence.unlogged} of the ${adherence.unlogged + adherence.days} days aren't logged, so they count for nothing here.`"></p>
-
-          <button class="btn btn-ghost btn-block" @click="calorieOpen = !calorieOpen"
-                  x-text="calorieOpen ? 'Hide days' : 'Every day'"></button>
-
-          <div class="rows" x-show="calorieOpen" x-cloak>
-            <template x-for="d in [...caloriePlot.bars].reverse()" :key="d.i">
-              <div class="row">
-                <div class="row-text">
-                  <b x-text="weightDate(d.date.toISOString(), { long: true })"></b>
-                  <small x-text="d.logged
-                    ? (d.target ? `target ${d.target.toLocaleString()}` : 'no target set')
-                    : 'nothing logged'"></small>
+            <template x-if="!mySex">
+              <div class="compare-ask">
+                <p>Standards differ for men and women. Which should yours be measured against?</p>
+                <div class="btn-row">
+                  <button class="btn" :disabled="sexSaving" @click="setSex('male')">Men's</button>
+                  <button class="btn" :disabled="sexSaving" @click="setSex('female')">Women's</button>
                 </div>
-                <span class="row-num" x-text="d.logged ? d.kcal.toLocaleString() : '—'"></span>
-                <span class="delta" x-show="d.logged && d.target"
-                      :class="{ 'is-down': d.kcal < d.target, 'is-up': d.kcal > d.target }"
-                      x-text="d.logged && d.target ? signed(d.kcal - d.target, '', 0) : ''"></span>
+              </div>
+            </template>
+
+            <template x-if="mySex">
+              <div>
+                <div class="rows">
+                  <template x-for="row in standings.rows" :key="row.lift">
+                    <div class="row">
+                      <div class="row-text">
+                        <b x-text="row.label"></b>
+                        <small x-text="`${row.oneRm} lb est. 1RM${row.ratio ? ` · ${row.ratio.toFixed(2)}× body weight` : ''} · ${weightDate(row.at)}`"></small>
+                        <small class="compare-next" x-text="standingLine(row)"></small>
+                      </div>
+                      <span class="row-num compare-level" x-text="row.rating ? row.rating.level : '—'"></span>
+                    </div>
+                  </template>
+                </div>
+
+                <div class="compare-dots" x-show="standings.dots" x-cloak>
+                  <span>DOTS</span>
+                  <b x-text="standings.dots && standings.dots.score"></b>
+                  <small x-text="standings.dots && `${standings.dots.total} lb squat + bench + deadlift at ${standings.dots.bodyWeight} lb · ~300 solid, ~400 strong, ~500 national level`"></small>
+                </div>
+
+                <p class="plot-note">
+                  Approximate: commonly published body-weight multiples, not a live
+                  dataset. Each rating uses your latest session and the weigh-in
+                  nearest it.
+                  <button class="link-btn" :disabled="sexSaving"
+                          @click="setSex(mySex === 'male' ? 'female' : 'male')"
+                          x-text="mySex === 'male' ? 'Using men’s standards · switch' : 'Using women’s standards · switch'"></button>
+                </p>
               </div>
             </template>
           </div>
+
+          <!-- Personal records -------------------------------------------------- -->
+          <!-- Every record as it landed: a heavier top set, more reps at a weight
+               than ever, or a higher estimated 1RM. The same check as the
+               "No PR in N sessions" nudge on the workout screen. -->
+          <div class="card fold" x-data="{ open: false }" :class="open && 'is-open'" x-show="prs.events.length" x-cloak>
+            <button class="fold-head" @click="open = !open" :aria-expanded="open">
+              <span class="fold-summary" x-show="!open" x-text="prsSummary"></span>
+              <span class="fold-summary" x-show="open">Hide</span>
+                <svg class="icon fold-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="readout-head">
+              <div>
+                <div class="card-label">Personal records</div>
+                <div class="stat-hero"><span x-text="prsThisMonth"></span></div>
+                <div class="stat-sub" x-text="`${count(prsThisMonth, 'record').replace(/^\d+ /, '')} in the last 30 days`"></div>
+              </div>
+            </div>
+            <div class="rows">
+              <template x-for="e in prs.events" :key="`${e.key}-${e.at}`">
+                <div class="row">
+                  <div class="row-text">
+                    <b x-text="e.name"></b>
+                    <small x-text="prLine(e)"></small>
+                  </div>
+                  <span class="row-num" x-text="weightDate(e.at)"></span>
+                </div>
+              </template>
+            </div>
+            <p class="plot-note">
+              A record beats your best of the six months before it: heavier, more
+              reps at a weight, or a higher estimated 1RM.
+            </p>
+          </div>
+
         </div>
 
-        <p class="empty" x-show="!lifts.length && !calorieSummary && weight.length < 2">
-          Log a workout, a meal or your weight and this fills in.
-        </p>
+        <div class="stats-panel" data-tab="goals" x-show="$store.ui.statsActive === 'goals'" role="tabpanel">
+          <!-- The weight goal, measured against the latest weigh-in. -->
+          <div class="card" x-show="goal && goal.target_weight_lb" x-cloak>
+            <div class="readout-head">
+              <div>
+                <div class="card-label">Weight goal</div>
+                <div class="stat-hero"><span x-text="goal && goal.target_weight_lb"></span><small>lb</small></div>
+                <div class="stat-sub" x-show="weightSummary">
+                  Now <span x-text="weightSummary && weightSummary.latest"></span> lb ·
+                  <span x-text="weightSummary && Math.abs(weightSummary.toGo)"></span> lb
+                  <span x-text="weightSummary && weightSummary.toGo > 0 ? 'to go' : 'past target'"></span>
+                </div>
+              </div>
+              <span class="status-chip is-today" x-show="goal && goal.phase" x-text="goal && goal.phase"></span>
+            </div>
+          </div>
+
+
+          <!-- Targets ---------------------------------------------------------- -->
+          <div class="card">
+            <div class="readout-head">
+              <div>
+                <div class="card-label">Targets</div>
+                <div class="stat-hero" x-show="goal">
+                  <span x-text="goal && (goal.calorie_target || '—')"></span><small>kcal</small>
+                </div>
+                <div class="stat-sub" x-show="goal">
+                  <span x-text="goal && (goal.phase || 'no phase set')"></span>
+                  <span x-show="goal && goal.target_weight_lb">
+                    · target <span x-text="goal && goal.target_weight_lb"></span> lb
+                  </span>
+                </div>
+              </div>
+              <button class="btn" @click="editGoal()" x-text="goal ? 'Edit' : 'Set'"></button>
+            </div>
+
+            <div class="macros" x-show="goal && goal.protein_target_g">
+              <template x-for="m in [
+                { k: 'protein_target_g', n: 'Protein', c: 'var(--color-protein)' },
+                { k: 'carbs_target_g',   n: 'Carbs',   c: 'var(--color-carbs)' },
+                { k: 'fat_target_g',     n: 'Fat',     c: 'var(--color-fat)' }
+              ]" :key="m.k">
+                <div class="macro">
+                  <span class="dot" :style="`background: ${m.c}`"></span>
+                  <span class="macro-name" x-text="m.n"></span>
+                  <span class="macro-val" style="margin-left:auto"
+                        x-text="goal && ((goal[m.k] ?? '—') + ' g')"></span>
+                </div>
+              </template>
+            </div>
+
+            <p class="empty" style="padding:var(--space-3) 0" x-show="!goal">
+              No targets yet. Set them and the Today screen starts showing progress.
+            </p>
+          </div>
+
+          <!-- How the targets are going: complete days in the last two weeks. -->
+          <div class="card" x-show="goal">
+            <div class="section-row">
+              <span class="card-label">How you're doing</span>
+              <small x-text="goalAverages.sub"></small>
+            </div>
+            <div class="avg-tiles">
+              <template x-for="t in goalAverages.tiles" :key="t.key">
+                <div class="avg-tile">
+                  <small x-text="t.label"></small>
+                  <b :class="`is-${t.key}`" x-text="t.text"></b>
+                  <span class="avg-bar"><i :class="`is-${t.key}`" :style="`width: ${t.width}%`"></i></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- The training target the sets card measures against. -->
+          <div class="card" x-show="muscleSets.sessions" x-cloak>
+            <div class="card-label">Training</div>
+            <div class="stat-sub" style="font-size: var(--text-lg); color: var(--color-text); font-weight: 700"
+                 x-text="`${muscleSets.low}–${muscleSets.high} sets per muscle a week`"></div>
+            <div class="section-row">
+              <small>In range, last <span x-text="muscleSets.weeks"></span> weeks</small>
+              <b x-text="`${muscleInRange} of ${muscleSets.groups.length}`"></b>
+            </div>
+            <div class="chips" x-show="lowMuscles.length">
+              <template x-for="g in lowMuscles" :key="g.key">
+                <span class="chip is-low" x-text="`${g.label} ${g.sets}`"></span>
+              </template>
+            </div>
+          </div>
+
+
+        </div>
 
         <!-- Edit targets ----------------------------------------------------- -->
         <template x-if="editing">
@@ -3177,122 +3388,39 @@
           </div>
         </template>
 
-        <!-- Progress photos ---------------------------------------------------
-             Locked by default every time the page opens; the PIN is a privacy
-             curtain for whoever is holding the phone, not the security boundary
-             (that is RLS + the account login). -->
-        <div class="card">
-          <!-- The file inputs live OUTSIDE the lock-gated templates. Opening the
-               camera or the photo picker hides the page, and the relock used to
-               tear down the unlocked template — destroying the input while it
-               was waiting for the photo, so "Use photo" had no listener left to
-               deliver to. Out here they survive any relock. -->
-          <input id="pp-camera" type="file" accept="image/*" capture="environment"
-                 hidden @change="pickPhoto($event)">
-          <input id="pp-library" type="file" accept="image/*"
-                 hidden @change="pickPhoto($event)">
-          <!-- The conversation's library picker, out here for the same reason.
-               It is for photos already on the phone; new ones come from the
-               Camera button, the in-page camera, so they never reach the
-               gallery. (The phone's chooser may still list its own camera here;
-               a shot taken that way is the phone camera's, and may be kept.) -->
-          <input id="pm-photo" type="file" accept="image/*"
-                 hidden @change="pickChatPhoto($event)">
-
-          <div class="readout-head">
-            <div>
-              <div class="card-label">Progress photos</div>
-              <div class="stat-sub" x-show="!photosLocked"
-                   x-text="`${photos.length} photo${photos.length === 1 ? '' : 's'}`"></div>
-            </div>
-            <div class="photo-head-actions" x-show="!photosLocked">
-              <button class="btn" x-show="chatPartner" @click="openChat()"
-                      :aria-label="chatUnread ? `Messages, ${chatUnread} unread` : 'Messages'">
-                Messages<span class="chat-dot" x-show="chatUnread" aria-hidden="true"></span>
-              </button>
-              <button class="btn" @click="relockPhotos()">Lock</button>
+        <!-- Reorder or hide the Stats tabs. The same drag handle as the workout
+             cards; one tab always stays, or there would be nothing to swipe. -->
+        <template x-if="$store.ui.statsEditing">
+          <div class="sheet-backdrop" @click.self="$store.ui.statsEditing = false">
+            <div class="sheet" x-init="$swipe($el, () => { $store.ui.statsEditing = false })">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <h2>Edit tabs</h2>
+                <button class="btn btn-primary" @click="$store.ui.statsEditing = false">Done</button>
+              </div>
+              <p class="setting-meta">Drag to reorder. Switch one off to hide it.</p>
+              <div class="cardstack" x-ref="tabstack">
+                <template x-for="t in $store.ui.statsTabOrder" :key="t.key">
+                  <div class="setting tab-row" data-card :data-key="t.key" :class="t.hidden && 'is-off'">
+                    <span class="grip" aria-hidden="true"
+                          x-init="$dragCard($el,
+                                    () => [...$refs.tabstack.querySelectorAll('[data-card]')],
+                                    (to, key) => $store.ui.moveStatsTab(key, to))">⠿</span>
+                    <span class="setting-text">
+                      <b x-text="t.label"></b>
+                      <small x-text="t.sub"></small>
+                    </span>
+                    <input type="checkbox" role="switch" :checked="!t.hidden"
+                           :aria-label="`Show ${t.label}`"
+                           :disabled="!t.hidden && $store.ui.statsTabs.length === 1"
+                           @change="$store.ui.toggleStatsTab(t.key); $el.checked = !$store.ui.statsHidden.includes(t.key)">
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
+        </template>
 
-          <!-- Locked: the PIN pad and nothing else. No thumbnails, no counts.
-               Left-aligned like every other card — the centered column read as
-               a broken empty state, and .tap (a 40px circle for × buttons) once
-               wrapped the reset link onto four lines. -->
-          <template x-if="photosLocked">
-            <div class="photo-lock">
-              <p class="photo-lock-prompt">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/>
-                  <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>
-                </svg>
-                <span x-text="pinPrompt"></span>
-              </p>
-              <form class="pin-row" @submit.prevent="submitPin()">
-                <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
-                       x-model="pinEntry" placeholder="••••" autocomplete="off" aria-label="PIN">
-                <button class="btn btn-primary" type="submit" :disabled="pinEntry.length < 4"
-                        x-text="pinStage === 'enter' && myPinHash ? 'Unlock' : 'Next'"></button>
-              </form>
-              <p class="notice notice-error" x-show="pinError" x-text="pinError"></p>
-              <button class="photo-lock-reset" x-show="myPinHash && pinStage === 'enter'"
-                      @click="resetPin()">Forgot? Set a new PIN</button>
-            </div>
-          </template>
-
-          <template x-if="!photosLocked">
-            <div>
-              <!-- Whose photos, then which pose. Two people, two chips. -->
-              <div class="chips" style="margin-bottom:var(--space-2)">
-                <button class="chip" :class="ownerFilter === 'mine' && 'is-active'"
-                        @click="ownerFilter = 'mine'; compareSel = []">Mine</button>
-                <button class="chip" :class="ownerFilter === 'partner' && 'is-active'"
-                        @click="ownerFilter = 'partner'; compareSel = []"
-                        x-text="partnerName"></button>
-              </div>
-              <div class="chips">
-                <button class="chip" :class="poseFilter === 'all' && 'is-active'"
-                        @click="poseFilter = 'all'">All</button>
-                <template x-for="p in poses" :key="p">
-                  <button class="chip" :class="poseFilter === p && 'is-active'"
-                          @click="poseFilter = p" x-text="p"></button>
-                </template>
-                <button class="chip" :class="compareMode && 'is-active'"
-                        @click="compareMode = !compareMode; compareSel = []">Compare</button>
-              </div>
-
-              <p class="empty" x-show="compareMode && compareSel.length < 2"
-                 style="padding:var(--space-2) 0">
-                Pick two photos to compare.
-              </p>
-
-              <div class="photo-grid" x-show="photos.length">
-                <template x-for="p in photos" :key="p.id">
-                  <button class="photo-cell" :class="compareSel.includes(p.id) && 'is-selected'"
-                          @click="tapPhoto(p)">
-                    <img x-show="photoUrl(p)" :src="photoUrl(p) || null" alt="" loading="lazy">
-                    <span class="photo-cell-date" x-text="photoDate(p.taken_on)"></span>
-                    <span class="photo-cell-together" x-show="p.together">Together</span>
-                  </button>
-                </template>
-              </div>
-
-              <p class="empty" x-show="!photos.length" style="padding:var(--space-3) 0"
-                 x-text="ownerFilter === 'mine'
-                   ? 'No photos yet. Same spot, same light, same pose — future you will want the comparison to be fair.'
-                   : `No photos from ${partnerName} yet.`"></p>
-
-              <!-- Take photo opens the camera inside the app: one tap saves. The
-                   library still goes through the save sheet. @click arms
-                   pickerHeld so the hide the photo picker causes doesn't relock
-                   and destroy the flow. -->
-              <div class="photo-add-row" x-show="ownerFilter === 'mine'">
-                <button class="btn btn-primary" @click="openCamera()">Take photo</button>
-                <label class="btn" for="pp-library" @click="pickerHeld = true">From library</label>
-              </div>
-            </div>
-          </template>
-        </div>
 
         <!-- The camera ------------------------------------------------------------
              Together above the viewfinder, set before the shot. The shutter

@@ -1448,3 +1448,28 @@ export function finishNote(consistency, session = {}, { pick = null } = {}) {
 
   return { headline, note: choose(ENCOURAGEMENT) };
 }
+
+// ---- the Stats tabs ------------------------------------------------------------
+
+/** The tabs the Stats screen splits into, in their first order. */
+export const STATS_TABS = {
+  food:     { label: 'Food',     sub: 'Calories by day, days on target' },
+  body:     { label: 'Body',     sub: 'Weight against your goal, progress photos' },
+  training: { label: 'Training', sub: 'Streak, volume, sets, records, best lifts' },
+  goals:    { label: 'Goals',    sub: 'Weight goal, daily targets, sets per muscle' },
+};
+
+/**
+ * A saved tab arrangement, made safe to use: every tab exactly once in the
+ * order (unknown ones dropped, missing ones added at the end), and at least
+ * one tab left showing. Saved per phone, so it may come from an older version
+ * of the app that had different tabs.
+ */
+export function normaliseStatsTabs(saved) {
+  const known = Object.keys(STATS_TABS);
+  const order = [...new Set((saved?.order ?? []).filter((k) => known.includes(k)))];
+  for (const k of known) if (!order.includes(k)) order.push(k);
+  let hidden = [...new Set((saved?.hidden ?? []).filter((k) => known.includes(k)))];
+  if (hidden.length >= known.length) hidden = [];
+  return { order, hidden };
+}

@@ -2510,12 +2510,67 @@ i.is-fat_g { background: var(--color-fat); }
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px;
+  min-width: 0;
+  padding: 10px 8px;
   border-radius: 16px;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
 }
 .avg-tile small { font-size: var(--text-xs); color: var(--color-text-muted); }
-.avg-tile b { font-size: var(--text-xl); font-weight: 700; }
+.avg-tile b { font-size: var(--text-lg); font-weight: 700; white-space: nowrap; }
 .avg-bar { height: 4px; border-radius: var(--radius-pill); background: rgba(243, 246, 250, .08); overflow: hidden; }
 .avg-bar i { display: block; height: 100%; border-radius: var(--radius-pill); }
+
+/* ---- Stats: four tabs --------------------------------------------------------- */
+
+.stats-head { display: flex; flex-direction: column; gap: var(--space-3); flex: none; }
+.stats-title { font-size: var(--text-2xl); font-weight: 750; letter-spacing: -.02em; }
+.seg {
+  display: grid;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+.seg button {
+  border: 0;
+  border-radius: 11px;
+  padding: 8px 0;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.seg button.is-active { background: var(--color-primary); color: #fff; }
+.stats-panel { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* A long list folded to one line: the header stays on top, the toggle under it
+   says what is inside, and the rest only shows once it is open. */
+.card.fold { display: flex; flex-direction: column; }
+.card.fold > :nth-child(2) { order: -1; }
+.card.fold:not(.is-open) > :nth-child(n+3) { display: none; }
+.fold-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.fold-summary { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fold-chev { flex: none; transition: transform var(--transition-fast); }
+.card.fold.is-open .fold-chev { transform: rotate(180deg); }
+
+.chip.is-low { color: var(--color-carbs); background: rgba(245, 183, 0, .14); }
+
+.tab-row .grip { cursor: grab; color: var(--color-text-dim); font-size: 20px; padding: 0 var(--space-1); }
+.tab-row.is-off .setting-text { opacity: .55; }

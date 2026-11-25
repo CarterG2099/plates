@@ -192,6 +192,10 @@ button {
 /* Changing day redraws the card in place. */
 .readout.is-entering-forward { animation: swipe-in-forward 200ms ease-out; }
 .readout.is-entering-back    { animation: swipe-in-back    200ms ease-out; }
+.week-strip.is-entering-forward,
+.stats-panel.is-entering-forward { animation: swipe-in-forward 200ms ease-out; }
+.week-strip.is-entering-back,
+.stats-panel.is-entering-back    { animation: swipe-in-back    200ms ease-out; }
 
 /* Centred single-purpose screens: sign-in, access denied, loading. */
 .screen-centered {

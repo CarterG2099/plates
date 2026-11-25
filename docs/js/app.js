@@ -436,6 +436,21 @@ function writeReadyEstimate(entry) {
 
 const MEMBERSHIP_KEY = 'plates:membership';
 
+/** The Stats tabs' order and which are hidden: a per-phone preference. */
+const STATS_TABS_KEY = 'plates:stats-tabs';
+
+function loadStatsTabs() {
+  try {
+    return stats.normaliseStatsTabs(JSON.parse(localStorage.getItem(STATS_TABS_KEY) || 'null'));
+  } catch {
+    return stats.normaliseStatsTabs(null);
+  }
+}
+
+function saveStatsTabs(value) {
+  try { localStorage.setItem(STATS_TABS_KEY, JSON.stringify(value)); } catch { /* private mode: lasts the session */ }
+}
+
 const readMembership = () => {
   try { return JSON.parse(localStorage.getItem(MEMBERSHIP_KEY) || 'null'); }
   catch { return null; }
@@ -1000,6 +1015,61 @@ Alpine.store('ui', {
     }
   },
 
+  // ---- the Stats tabs ----------------------------------------------------------
+  //
+  // Here rather than on statsPage because the swipe handler moves between them
+  // and the Stats screen is x-if: it remounts, and the tab you were on should
+  // still be the one showing.
+
+  statsArrangement: loadStatsTabs(),
+  statsTab: null,
+  statsEditing: false,
+
+  get statsHidden() { return this.statsArrangement.hidden; },
+
+  /** Every tab in the saved order, with whether it is hidden — the Edit tabs list. */
+  get statsTabOrder() {
+    return this.statsArrangement.order.map((key) => ({
+      key, ...stats.STATS_TABS[key], hidden: this.statsArrangement.hidden.includes(key),
+    }));
+  },
+
+  /** The tabs that show, in order. */
+  get statsTabs() { return this.statsTabOrder.filter((t) => !t.hidden); },
+
+  /** The tab on screen: the chosen one while it is showing, else the first. */
+  get statsActive() {
+    const keys = this.statsTabs.map((t) => t.key);
+    return keys.includes(this.statsTab) ? this.statsTab : keys[0];
+  },
+
+  setStatsTab(key) { this.statsTab = key; },
+
+  /** One tab along; false at either end, so the swipe can fall through to the app's tabs. */
+  shiftStatsTab(step) {
+    const keys = this.statsTabs.map((t) => t.key);
+    const next = keys[keys.indexOf(this.statsActive) + step];
+    if (!next) return false;
+    this.statsTab = next;
+    return true;
+  },
+
+  moveStatsTab(key, to) {
+    const order = this.statsArrangement.order.filter((k) => k !== key);
+    order.splice(Math.max(0, Math.min(order.length, to)), 0, key);
+    this.statsArrangement = stats.normaliseStatsTabs({ ...this.statsArrangement, order });
+    saveStatsTabs(this.statsArrangement);
+  },
+
+  /** Hide or show a tab. The last one showing stays: a Stats screen with no tabs is empty. */
+  toggleStatsTab(key) {
+    const hidden = this.statsArrangement.hidden;
+    if (!hidden.includes(key) && this.statsTabs.length === 1) return;
+    const next = hidden.includes(key) ? hidden.filter((k) => k !== key) : [...hidden, key];
+    this.statsArrangement = stats.normaliseStatsTabs({ ...this.statsArrangement, hidden: next });
+    saveStatsTabs(this.statsArrangement);
+  },
+
   // ---- reminders -------------------------------------------------------------
   //
   // The list is this person's own; reminderDraft is the one open in the
@@ -1155,6 +1225,16 @@ const STATUS_TEXT = {
   future: 'Ahead',
 };
 
+/** The four average tiles (Today's week, Stats' goals) from food.completedAverages. */
+function averageTiles(avg) {
+  return [['calories', 'Calories'], ['protein_g', 'Protein'], ['carbs_g', 'Carbs'], ['fat_g', 'Fat']]
+    .map(([key, label]) => ({
+      key, label,
+      text: avg[key] === null ? '–' : `${avg[key]}%`,
+      width: Math.min(100, avg[key] ?? 0),
+    }));
+}
+
 Alpine.data('todayPage', () => ({
   get email() { return Alpine.store('auth').email; },
   get date() { return Alpine.store('ui').date; },
@@ -1301,13 +1381,7 @@ Alpine.data('todayPage', () => ({
     const sub = avg.count
       ? `average of ${stats.count(avg.count, 'complete day')}`
       : 'counts days once you mark them complete';
-    const tiles = [['calories', 'Calories'], ['protein_g', 'Protein'], ['carbs_g', 'Carbs'], ['fat_g', 'Fat']]
-      .map(([key, label]) => ({
-        key, label,
-        text: avg[key] === null ? '–' : `${avg[key]}%`,
-        width: Math.min(100, avg[key] ?? 0),
-      }));
-    return { title, sub, tiles, count: avg.count };
+    return { title, sub, tiles: averageTiles(avg), count: avg.count };
   },
 
   // ---- meds ------------------------------------------------------------------
@@ -4908,6 +4982,46 @@ Alpine.data('statsPage', () => ({
 
   get lifts() { return stats.topLifts(this.data.index); },
 
+  // ---- the folded lists on Training, and the Goals tab -----------------------
+  //
+  // Best lifts, the comparison and the records are long lists; folded, each is
+  // one line that says what is inside, and a tap opens the whole thing.
+
+  get liftsSummary() {
+    const top = this.lifts.slice(0, 3).map((l) => `${l.name.replace(/\s*\(.*\)$/, '')} ${l.best}`);
+    return top.length ? `${top.join(' · ')} lb` : '';
+  },
+
+  get compareSummary() {
+    const rated = this.standings.rows.filter((r) => r.rating);
+    return rated.length
+      ? rated.slice(0, 3).map((r) => `${r.label} ${r.rating.level}`).join(' · ')
+      : 'Where your lifts stand for your size';
+  },
+
+  get prsSummary() {
+    const latest = this.prs.events[0];
+    return latest ? `Latest: ${latest.name}` : '';
+  },
+
+  /** Groups under the weekly range, with their count to one decimal. */
+  get lowMuscles() {
+    return this.muscleSets.groups
+      .filter((g) => g.status === 'low')
+      .map((g) => ({ ...g, sets: Math.round(g.sets * 10) / 10 }));
+  },
+
+  /** Each target's average share over the complete days of the last two weeks. */
+  get goalAverages() {
+    const data = { log: this.data.log, goals: this.data.goals, marks: this.data.dayMarks };
+    const days = Array.from({ length: 14 }, (_, i) => food.dayAgainstGoal(data, this.email, food.addDays(new Date(), -i)));
+    const avg = food.completedAverages(days);
+    return {
+      tiles: averageTiles(avg),
+      sub: avg.count ? `average of ${stats.count(avg.count, 'complete day')}, last 14` : 'no complete days in the last 14',
+    };
+  },
+
   // ---- records and strength for your size -----------------------------------
 
   _prs: null,   // { version, value } — prTimeline walks every lift's history
@@ -5047,10 +5161,10 @@ Alpine.data('statsPage', () => ({
   get streak() { return stats.loggingStreak(this.days); },
 
   /**
-   * Bars in the carbs yellow, kept from the old chart: this card is about food,
-   * and the macro list already reads that hue as intake. A day over target is
-   * outlined rather than recoloured — the danger red is reserved for status, and
-   * "over" on a bulk is not an error.
+   * Bars in the calories green, the colour calories have everywhere since the
+   * 2026-11-24 redesign (the outer ring, the numbers, the tiles). A day over
+   * target is outlined rather than recoloured — the danger red is reserved for
+   * status, and "over" on a bulk is not an error.
    */
   get calorieBars() {
     const plot = this.caloriePlot;
@@ -5064,11 +5178,11 @@ Alpine.data('statsPage', () => ({
       const partial = this.days[bar.i]?.complete !== true;
       const opacity = partial ? 0.18 : lit ? 1 : 0.5;
       const stroke = bar.over
-        ? ' stroke="var(--color-carbs)" stroke-width="0.6" vector-effect="non-scaling-stroke"'
+        ? ' stroke="var(--color-success)" stroke-width="0.6" vector-effect="non-scaling-stroke"'
         : '';
       return `<rect x="${bar.x.toFixed(2)}" y="${bar.y.toFixed(2)}"`
         + ` width="${bar.w.toFixed(2)}" height="${bar.h.toFixed(2)}" rx="1"`
-        + ` fill="var(--color-carbs)" opacity="${opacity}"${stroke}/>`;
+        + ` fill="var(--color-success)" opacity="${opacity}"${stroke}/>`;
     }).join('');
   },
 
@@ -6157,8 +6271,10 @@ function swipeNav() {
     // be restarted by hand. Reading layout in between is what restarts it —
     // without that, a second swipe the same way re-adds a class that is already
     // there and nothing plays.
-    if (which === 'day') {
-      const el = document.querySelector('.card.readout');
+    if (which === 'day' || which === 'week' || which === 'stats') {
+      const el = which === 'stats'
+        ? document.querySelector(`.stats-panel[data-tab="${Alpine.store('ui').statsActive}"]`)
+        : document.querySelector(which === 'week' ? '.week-strip' : '.card.readout');
       if (!el) return;
       el.classList.remove('is-entering-forward', 'is-entering-back');
       void el.offsetWidth;
@@ -6186,12 +6302,15 @@ function swipeNav() {
     if (e.pointerType !== 'touch' || !e.isPrimary) return;
     if (!e.target?.closest || e.target.closest(CLAIMED)) return;
 
-    const card = Alpine.store('ui').view === 'today'
-      ? e.target.closest('.card.readout')
-      : null;
+    const view = Alpine.store('ui').view;
+    // On Today the day card moves a day and the strip a week; on Stats a panel
+    // moves between the Stats tabs. Anywhere else, the app's own tabs.
+    const card = view === 'today' ? e.target.closest('.card.readout') : null;
+    const strip = view === 'today' ? e.target.closest('.week-strip') : null;
+    const panel = view === 'stats' ? e.target.closest('.stats-panel') : null;
 
-    kind = card ? 'day' : 'tab';
-    subject = card ?? visiblePane();
+    kind = card ? 'day' : strip ? 'week' : panel ? 'stats' : 'tab';
+    subject = card ?? strip ?? panel ?? visiblePane();
     if (!subject) return;
 
     id = e.pointerId;
@@ -6234,7 +6353,7 @@ function swipeNav() {
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
     const el = subject;
-    const which = kind;
+    let which = kind;
     const far = sideways && Math.abs(dx) >= DISTANCE && Math.abs(dx) >= Math.abs(dy) * SLOPE;
     forget();
 
@@ -6245,12 +6364,18 @@ function swipeNav() {
 
     if (which === 'day') {
       ui.shiftDay(forward ? 1 : -1);
+    } else if (which === 'week') {
+      ui.shiftDay(forward ? 7 : -7);
+    } else if (which === 'stats' && ui.shiftStatsTab(forward ? 1 : -1)) {
+      // Moved within Stats; the panel that arrives animates in below.
     } else {
       // The ends are ends: a swipe past Stats or before Today springs back
-      // rather than wrapping round to the far side.
+      // rather than wrapping round to the far side. From the first Stats tab a
+      // swipe back carries on to Train, so it animates as a change of tab.
       const next = TABS[TABS.indexOf(ui.view) + (forward ? 1 : -1)];
       if (!next) { settle(el); return; }
       ui.go(next);
+      which = 'tab';
     }
 
     clear(el);
