@@ -137,6 +137,29 @@ test('countLoggedToday counts only that food, and nothing without an id', () => 
   assert.equal(food.countLoggedToday(log, ME, null, day), 0);
 });
 
+test('loggedAmountLabel adds up one food on a day, eaten and planned, in its own unit', () => {
+  const day = new Date('2026-08-12T12:00:00');
+  const at = (h) => new Date(`2026-08-12T${h}:00:00`).toISOString();
+  const entries = [
+    { id: '1', owner_email: ME, logged_at: at('08'), food_id: 'p', quantity: 1, unit: 'serving' },
+    { id: '2', owner_email: ME, logged_at: at('12'), food_id: 'p', quantity: 1.5, unit: 'serving' },
+    { id: '3', owner_email: ME, logged_at: at('18'), food_id: 'p', quantity: 1, unit: 'serving', is_planned: true },
+    { id: '4', owner_email: ME, logged_at: at('09'), food_id: 'p', quantity: 5, unit: 'serving', deleted_at: at('10') },
+    { id: '5', owner_email: OTHER, logged_at: at('09'), food_id: 'p', quantity: 9, unit: 'serving' },
+    { id: '6', owner_email: ME, logged_at: new Date('2026-08-11T12:00:00').toISOString(), food_id: 'p', quantity: 4, unit: 'serving' },
+    { id: '7', owner_email: ME, logged_at: at('08'), food_id: 'r', quantity: 150, unit: 'g' },
+    { id: '8', owner_email: ME, logged_at: at('13'), food_id: 'r', quantity: 150, unit: 'g' },
+    { id: '9', owner_email: ME, logged_at: at('08'), food_id: 'm', quantity: 1, unit: 'serving' },
+    { id: '10', owner_email: ME, logged_at: at('13'), food_id: 'm', quantity: 200, unit: 'g' },
+  ];
+  assert.equal(food.loggedAmountLabel(entries, ME, 'p', day), '3.5 servings', 'eaten and planned, not deleted, not hers, not yesterday');
+  assert.equal(food.loggedAmountLabel(entries, ME, 'r', day), '300g');
+  assert.equal(food.loggedAmountLabel(entries, ME, 'm', day), 'logged 2 times', 'servings and grams do not add');
+  assert.equal(food.loggedAmountLabel(entries.slice(8, 9), ME, 'm', day), '1 serving');
+  assert.equal(food.loggedAmountLabel(entries, ME, 'none', day), '');
+  assert.equal(food.loggedAmountLabel(entries, ME, null, day), '');
+});
+
 test('lastEntryForFood returns the most recent, not the first', () => {
   const day = new Date('2026-08-10T12:00:00');
   assert.equal(food.lastEntryForFood(log, ME, 'f1', day).id, 'c');

@@ -485,6 +485,21 @@ export function countLoggedToday(log, ownerEmail, foodId, date = new Date()) {
   return entriesForDay(log, ownerEmail, date).filter((e) => e.food_id === foodId).length;
 }
 
+/**
+ * How much of one food is already on a day, eaten or planned, as the row reads
+ * an amount: "2 servings", "300g". Entries in different units can't be added,
+ * so those say how many times it was logged instead. '' when there are none.
+ */
+export function loggedAmountLabel(log, ownerEmail, foodId, date = new Date()) {
+  if (!foodId) return '';
+  const entries = [...entriesForDay(log, ownerEmail, date), ...plannedForDay(log, ownerEmail, date)]
+    .filter((e) => e.food_id === foodId);
+  if (!entries.length) return '';
+  const unit = entries[0].unit;
+  if (entries.some((e) => e.unit !== unit)) return `logged ${entries.length === 1 ? 'once' : `${entries.length} times`}`;
+  return amountLabel(round(entries.reduce((n, e) => n + (Number(e.quantity) || 0), 0), 2), unit);
+}
+
 /** The most recent entry for a food today, so a mis-tap can be taken straight back. */
 export function lastEntryForFood(log, ownerEmail, foodId, date = new Date()) {
   if (!foodId) return null;

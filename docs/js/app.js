@@ -2231,6 +2231,15 @@ Alpine.data('logPage', () => ({
     return food.countLoggedToday(this.data.log, this.email, item.id, this.date);
   },
 
+  /** "2 servings today": what of this food the day already has, so a double tap shows here. */
+  loggedOnDay(item) {
+    const amount = food.loggedAmountLabel(this.data.log, this.email, item.id, this.date);
+    if (!amount) return '';
+    const label = food.dayLabel(this.date);
+    const when = ['Today', 'Yesterday', 'Tomorrow'].includes(label) ? label.toLowerCase() : `on ${label}`;
+    return `${amount} ${when}`;
+  },
+
   /**
    * Exact inverse of the + button: takes back the most recent log of this food.
    * A mis-tap should be fixable where it happened, not by navigating to Today

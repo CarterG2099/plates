@@ -188,6 +188,8 @@
   color: var(--color-text-muted);
 }
 
+.row-text small.row-logged { color: var(--color-primary); font-weight: 600; }
+
 .row-num {
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;

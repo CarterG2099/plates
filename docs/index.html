@@ -805,6 +805,7 @@
                     <span x-text="amountLabel(rowQuantity(item), item.serving_unit)"></span>
                     <span x-show="item.calories !== null"> · <span x-text="Math.round(rowKcal(item))"></span> kcal</span>
                   </small>
+                  <small class="row-logged" x-show="loggedOnDay(item)" x-text="loggedOnDay(item)"></small>
                 </button>
                 <!-- Only appears once there's something to take back. -->
                 <button class="tap" x-show="loggedToday(item)" @click="undoLast(item)"
