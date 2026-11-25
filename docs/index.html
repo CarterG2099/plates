@@ -3675,8 +3675,12 @@
 
                 <template x-if="chatCrypto === 'setup'">
                   <form class="chat-crypto-form" autocomplete="on" @submit.prevent="setUpChatCrypto()">
-                    <p><strong>Turn on end-to-end encryption.</strong> Your password manager will save a
-                       “Plates chat key”. On a new phone it fills it back in — nothing to remember.</p>
+                    <!-- The tap is not optional: Android password managers (Bitwarden)
+                         only offer to save a field that was focused, so a key never
+                         tapped is never saved (Carter's first setup, 2026-11-24). -->
+                    <p><strong>Turn on end-to-end encryption.</strong> First tap the key box below, so your
+                       password manager offers to save it as “Plates chat key”. On a new phone it fills it
+                       back in — nothing to remember.</p>
                     <input class="chat-box" name="username" autocomplete="username" value="Plates chat key" aria-label="Key name">
                     <input class="chat-box" name="password" type="password" autocomplete="new-password"
                            x-model="chatNewKey" aria-label="Chat key">

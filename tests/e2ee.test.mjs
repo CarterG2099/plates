@@ -340,3 +340,11 @@ test('the schema grants what sealed messages and the key tables need', async () 
   assert.match(block, /create policy chat_key_vault_read on plates\.chat_key_vault\s+for select using \(plates\.is_member\(\) and plates\.is_owner\(owner_email\)\);/,
     'a locked private key is readable by its owner alone');
 });
+
+test('setup tells you to tap the key box, since a password manager only saves a field you touched', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../docs/index.html', import.meta.url), 'utf8');
+  const setup = html.slice(html.indexOf(`<template x-if="chatCrypto === 'setup'">`), html.indexOf(`<template x-if="chatCrypto === 'saved-check'">`));
+  assert.match(setup, /First tap the key box below/);
+  assert.match(setup, /autocomplete="new-password"\s+x-model="chatNewKey"/);
+});
