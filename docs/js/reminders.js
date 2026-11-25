@@ -5,7 +5,9 @@
  *
  * Not local-first, for push.js's reason: a reminder the server cannot see is
  * one it cannot send. The notify-reminders function reads the same table every
- * minute. Nobody sees anyone else's: the policies allow only your own rows.
+ * minute. Reading follows the sharing grants, like food and weight: the two of
+ * you see each other's (meds included), so the list keeps to your own rows by
+ * owner, and the other person's are only shown when you switch to their day.
  *
  * One reminder can go off at several times, each on its own days. Each time is
  * its own row and the rows share a series_id: the sender needs no idea of a
@@ -23,7 +25,7 @@ export const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
 /** What a new food reminder stays quiet for, matching the function's default. */
 export const DEFAULT_QUIET_MIN = 60;
 
-const COLUMNS = 'id, kind, label, at_time, days, quiet_if_logged_min, enabled, persistent, series_id, sort_order';
+const COLUMNS = 'id, owner_email, kind, label, at_time, days, quiet_if_logged_min, enabled, persistent, series_id, sort_order';
 
 /** How often a reminder set to keep reminding comes back, matching the function. */
 export const PERSIST_EVERY_MIN = 15;
@@ -280,6 +282,12 @@ export async function load() {
     .is('deleted_at', null);
   if (error) throw error;
   return sorted(data ?? []);
+}
+
+/** One person's rows out of everything readable — the list must never mix two people's. */
+export function ownedBy(list, email) {
+  const who = String(email ?? '').toLowerCase();
+  return (list ?? []).filter((r) => String(r.owner_email ?? '').toLowerCase() === who);
 }
 
 /** What was sent today, and which meds are taken, by reminder id. */

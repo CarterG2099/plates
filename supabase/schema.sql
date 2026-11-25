@@ -1156,3 +1156,34 @@ end;
 $$;
 
 alter table plates.notification_prefs add column if not exists messages boolean not null default true;
+
+-- ---- each other's day (added 2026-11-24) --------------------------------------
+-- Carter and Aana see everything of each other's, meds included, so reminders
+-- and what was taken read through can_read() like food and weight already do.
+-- Writing stays the owner's alone: these are the read policies only. The test
+-- account has no share grants, so it still sees nobody's.
+drop policy if exists reminders_read on plates.reminders;
+create policy reminders_read on plates.reminders for select
+  using (plates.is_member() and plates.can_read(owner_email));
+drop policy if exists reminder_sends_read on plates.reminder_sends;
+create policy reminder_sends_read on plates.reminder_sends for select
+  using (plates.is_member() and plates.can_read(owner_email));
+
+-- Nudges and cheers between the two of you. Written only by the send-nudge
+-- function (service role), which checks the sender can see the recipient and
+-- spaces nudges an hour apart; each side reads the ones they sent or got.
+create table if not exists plates.nudges (
+  id          uuid primary key default gen_random_uuid(),
+  from_email  text not null,
+  to_email    text not null,
+  kind        text not null check (kind in ('nudge', 'cheer')),
+  body        text not null check (char_length(body) between 1 and 120),
+  created_at  timestamptz not null default now()
+);
+create index if not exists nudges_pair_time on plates.nudges (from_email, to_email, created_at desc);
+alter table plates.nudges enable row level security;
+drop policy if exists nudges_read on plates.nudges;
+create policy nudges_read on plates.nudges for select
+  using (plates.is_member() and (from_email = auth.email() or to_email = auth.email()));
+revoke all on plates.nudges from anon, authenticated;
+grant select on plates.nudges to authenticated;

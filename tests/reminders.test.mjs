@@ -401,3 +401,17 @@ test('the new module is precached', async () => {
   const sw = await readFile(fileURLToPath(new URL('../docs/sw.js', import.meta.url)), 'utf8');
   assert.match(sw, /'\/js\/reminders\.js',/);
 });
+
+test('the list is only ever your own, though the other person\'s are readable', withServer(async (server, ui) => {
+  Alpine.store('auth').session = { user: { email: 'me@example.com' } };
+  server.rows = [
+    { ...VITD, owner_email: 'me@example.com' },
+    { ...VITD, id: 'theirs', label: 'Birth Control', owner_email: 'them@example.com' },
+    { ...LUNCH, owner_email: 'ME@example.com' },
+  ];
+  await ui.loadReminders();
+  assert.deepEqual(ui.reminderList.map((x) => x.id), ['v', 'l'], 'case of the email does not matter');
+  assert.equal(ui.reminderAll.length, 3, 'the other person\'s are kept for their day');
+  assert.deepEqual(r.ownedBy(server.rows, 'them@example.com').map((x) => x.id), ['theirs']);
+  Alpine.store('auth').session = null;
+}));

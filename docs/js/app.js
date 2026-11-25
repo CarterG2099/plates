@@ -1075,7 +1075,8 @@ Alpine.store('ui', {
   // The list is this person's own; reminderDraft is the one open in the
   // reminder sheet, a copy, so Cancel leaves the list as it was.
 
-  reminderList: [],
+  reminderList: [],           // your own rows
+  reminderAll: [],            // every row you can read: yours and the other person's
   reminderToday: {},          // reminder id → today's send row (sends, taken_at)
   reminderDraft: null,
   reminderBusy: false,
@@ -1083,7 +1084,10 @@ Alpine.store('ui', {
 
   async loadReminders() {
     try {
-      this.reminderList = await reminders.load();
+      const all = await reminders.load();
+      const me = Alpine.store('auth').email;
+      this.reminderList = reminders.ownedBy(all, me);
+      this.reminderAll = all;
       this.reminderToday = await reminders.loadToday();
       this.reminderError = '';
     } catch (e) {
