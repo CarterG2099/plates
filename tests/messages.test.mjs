@@ -453,7 +453,9 @@ test('reactions are stored locally, synced, and in a new local database version'
 
 test('only the two people in a message see or add reactions to it, and only as themselves', async () => {
   const sql = await read('../supabase/schema.sql');
-  const block = sql.slice(sql.indexOf('-- ---- message reactions'));
+  const start = sql.indexOf('-- ---- message reactions');
+  const next = sql.indexOf('\n-- ---- ', start + 10);
+  const block = sql.slice(start, next > 0 ? next : undefined);
   assert.match(block, /create policy message_reactions_read on plates\.message_reactions\s+for select using \(\s*plates\.is_member\(\)\s+and exists \(select 1 from plates\.messages m where m\.id = message_id\)/,
     'the exists() runs under messages_read: sender or recipient only');
   assert.match(block, /for insert with check \(\s*plates\.is_member\(\) and plates\.is_owner\(owner_email\)/);
