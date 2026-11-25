@@ -994,6 +994,24 @@ Alpine.store('ui', {
     this.loadReminders();
   },
 
+  /**
+   * The version this phone is running: the service worker's cache, which is
+   * named for it, so a phone that hasn't picked up a fix can be told apart from
+   * one that has. Newest wins if an old cache is still being cleared away.
+   */
+  appVersion: '',
+  async loadVersion() {
+    try {
+      const numbers = (await globalThis.caches.keys())
+        .map((name) => /^plates-v(\d+)$/.exec(name)?.[1])
+        .filter(Boolean)
+        .map(Number);
+      this.appVersion = numbers.length ? String(Math.max(...numbers)) : '';
+    } catch {
+      this.appVersion = '';   // no cache to read (a private tab, or no service worker): say nothing
+    }
+  },
+
   /** #reminders, from a tapped reminder notification: the sheet with its Taken button. */
   openLink(hash) {
     if (hash !== '#reminders') return false;
@@ -1008,6 +1026,7 @@ Alpine.store('ui', {
   openProfile() {
     this.profileOpen = true;
     this.watchCode = null;
+    this.loadVersion();
   },
 
   async loadSettings() {

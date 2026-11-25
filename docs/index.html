@@ -4268,6 +4268,7 @@
                x-text="$store.ui.watchCodeText"></p>
 
             <button class="btn btn-block" style="margin-top: var(--space-4)" @click="$store.auth.signOut()">Sign out</button>
+            <p class="setting-meta app-version" x-show="$store.ui.appVersion" x-text="`Version ${$store.ui.appVersion}`"></p>
           </div>
         </div>
       </template>

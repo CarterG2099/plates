@@ -2700,6 +2700,8 @@ button.time-chip:disabled { cursor: inherit; }
 .nudge-presets .setting.is-picked { border-color: var(--color-primary); background: rgba(61, 111, 224, .1); }
 
 /* Meds on Today: one row of pills, not a card, so Last 7 days stays in view. */
+.app-version { text-align: center; font-variant-numeric: tabular-nums; }
+
 /* Full label on the left, the day's meds on the right, one row under the rings. */
 .readout-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .meds-strip { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin-left: auto; }

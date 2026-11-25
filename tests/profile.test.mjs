@@ -83,3 +83,37 @@ test('the initial is styled over .tap, which loads later in pages.css', async ()
     'a lone .avatar loses to .tap and the letter goes muted and oversized');
   assert.match(css, /\.app-bar:has\(> \.app-bar-actions\) \{\s*align-items: center;/);
 });
+
+// ---- the version ----------------------------------------------------------------
+
+test('the profile says which version this phone is running, from the service worker cache', async () => {
+  const ui = Alpine.store('ui');
+  const original = globalThis.caches;
+  try {
+    globalThis.caches = { keys: async () => ['plates-v236', 'plates-v237', 'plates-photos', 'other-v900'] };
+    await ui.loadVersion();
+    assert.equal(ui.appVersion, '237', 'the newest Plates cache, while an old one is being cleared');
+
+    globalThis.caches = { keys: async () => [] };
+    await ui.loadVersion();
+    assert.equal(ui.appVersion, '', 'no cache yet: nothing to say');
+
+    globalThis.caches = undefined;
+    await ui.loadVersion();
+    assert.equal(ui.appVersion, '', 'no cache storage at all');
+  } finally {
+    globalThis.caches = original;
+  }
+});
+
+test('the version line sits under Sign out, and opening the profile reads it', async () => {
+  const sw = await source('../docs/sw.js');
+  assert.match(sw, /const CACHE_VERSION = 'plates-v\d+';/, 'the cache name the line reads');
+  assert.match(html, /@click="\$store\.auth\.signOut\(\)">Sign out<\/button>\s*<p class="setting-meta app-version" x-show="\$store\.ui\.appVersion" x-text="`Version \$\{\$store\.ui\.appVersion\}`"><\/p>/);
+  const ui = Alpine.store('ui');
+  let read = false;
+  const real = ui.loadVersion;
+  ui.loadVersion = async () => { read = true; };
+  try { ui.openProfile(); } finally { ui.loadVersion = real; ui.profileOpen = false; }
+  assert.equal(read, true);
+});
