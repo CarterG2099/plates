@@ -2489,21 +2489,6 @@ i.is-fat_g { background: var(--color-fat); }
 .section-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
 .section-row small { font-size: var(--text-xs); color: var(--color-text-muted); }
 
-.meds { display: flex; flex-direction: column; gap: var(--space-3); }
-.med-row { display: flex; align-items: center; gap: var(--space-3); }
-.med-icon {
-  width: 36px;
-  height: 36px;
-  flex: none;
-  border-radius: 11px;
-  display: grid;
-  place-items: center;
-  color: var(--color-protein-text);
-  background: var(--color-primary-soft);
-}
-.med-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.med-text small { font-size: var(--text-xs); color: var(--color-text-muted); }
-.btn.btn-success { background: var(--color-success); color: var(--color-bg); }
 
 .week-avg { display: flex; flex-direction: column; gap: var(--space-2); flex: none; }
 .avg-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
@@ -2706,10 +2691,31 @@ button.time-chip:disabled { cursor: inherit; }
 .nudge-card > span { color: var(--color-text-muted); font-size: var(--text-sm); }
 .nudge-actions { display: flex; gap: var(--space-2); }
 .nudge-actions .btn { flex: 1; }
-.trained-card { display: flex; align-items: center; gap: var(--space-3); }
 
 .notify-row.is-current { background: rgba(61, 111, 224, .1); }
 .who-check { color: var(--color-success); display: grid; }
 .nudge-presets { display: flex; flex-direction: column; gap: var(--space-2); }
 .nudge-presets .setting { width: 100%; text-align: left; font: inherit; color: inherit; }
 .nudge-presets .setting.is-picked { border-color: var(--color-primary); background: rgba(61, 111, 224, .1); }
+
+/* Meds on Today: one row of pills, not a card, so Last 7 days stays in view. */
+.meds-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex: none; }
+.meds-label { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); margin-right: 2px; }
+.med-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.med-pill small { font-size: var(--text-xs); font-weight: 500; color: var(--color-text-muted); }
+.med-pill.is-taken { color: var(--color-success); background: var(--color-success-soft); border-color: transparent; }
+.med-pill:disabled { cursor: default; }
+.med-tick { width: 14px; height: 14px; }

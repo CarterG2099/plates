@@ -1488,9 +1488,18 @@ Alpine.data('todayPage', () => ({
     Alpine.store('ui').loadReminders();
   },
 
+  /**
+   * The past seven days, ending today — or ending on the day on screen, once
+   * that is further back than a week (or ahead, on a plan).
+   */
+  get stripEnd() {
+    return food.stripEnd(Alpine.store('ui').viewDate, food.toDateOnly(new Date()));
+  },
+
   get weekDays() {
     const data = { log: this.data.log, goals: this.data.goals, marks: this.data.dayMarks };
-    return food.weekOf(this.date).map((d) => food.dayAgainstGoal(data, this.email, d));
+    return food.sevenDaysTo(food.fromDateOnly(this.stripEnd))
+      .map((d) => food.dayAgainstGoal(data, this.email, d));
   },
 
   get week() {
@@ -1577,9 +1586,9 @@ Alpine.data('todayPage', () => ({
   },
 
   /**
-   * The average complete day of the week on screen, as a full label — what the
-   * Average day card showed before the tiles. Counted up to today, so a week
-   * still running is not divided by days that haven't happened.
+   * The average complete day of the seven on screen, as a full label — what
+   * the Average day card showed before the tiles. Counted up to today, so days
+   * that haven't happened yet are never part of it.
    */
   weekLabelOpen: false,
   get weekLabel() {
@@ -1596,9 +1605,8 @@ Alpine.data('todayPage', () => ({
   get weekAverages() {
     const avg = food.completedAverages(this.weekDays);
     const days = this.weekDays;
-    const thisWeek = days.some((d) => d.key === food.toDateOnly(new Date()));
-    const title = thisWeek ? 'This week'
-      : `Week of ${days[0].date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    const title = this.stripEnd === food.toDateOnly(new Date()) ? 'Last 7 days'
+      : `7 days to ${days.at(-1).date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
     const sub = avg.count
       ? `average of ${stats.count(avg.count, 'complete day')}`
       : 'counts days once you mark them complete';

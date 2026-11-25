@@ -322,33 +322,20 @@
           </div>
         </div>
 
-        <!-- The workout that day, if there was one: half of what the day was. -->
-        <div class="card trained-card" x-show="trained" x-cloak>
-          <span class="med-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6.5 8v8M17.5 8v8M3.5 10v4M20.5 10v4M6.5 12h11"/></svg></span>
-          <span class="med-text">
-            <small>Trained</small>
-            <b x-text="trained && trained.name"></b>
-            <small x-text="trained && trained.line"></small>
-          </span>
-        </div>
-
-        <!-- Today's doses, checked off here or from the notification's button. -->
-        <div class="card meds" x-show="meds.length" x-cloak>
-          <div class="section-row">
-            <span class="card-label">Meds</span>
-            <small x-text="medsSummary"></small>
-          </div>
+        <!-- Today's doses as one row of pills, small enough that the week's
+             numbers stay on screen. A tap checks one off (or undoes it), as the
+             notification's button does; on the other person's day they only show. -->
+        <div class="meds-strip" x-show="meds.length" x-cloak role="group" :aria-label="`Meds, ${medsSummary}`">
+          <span class="meds-label">Meds</span>
           <template x-for="m in meds" :key="m.id">
-            <div class="med-row">
-              <span class="med-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="9" width="17" height="6.5" rx="3.25" transform="rotate(-35 12 12)"/><path d="M9.5 8.2l4.9 7"/></svg></span>
-              <span class="med-text">
-                <b x-text="$store.ui.reminderTitle(m)"></b>
-                <small x-text="medLine(m)"></small>
-              </span>
-              <button class="mine-only btn" :class="!$store.ui.takenLabel(m) && 'btn-success'"
-                      @click="$store.ui.toggleTaken(m)"
-                      x-text="$store.ui.takenLabel(m) ? 'Undo' : 'Taken'"></button>
-            </div>
+            <button class="med-pill" :class="$store.ui.takenLabel(m) && 'is-taken'"
+                    :disabled="Boolean($store.ui.viewAs)"
+                    @click="$store.ui.toggleTaken(m)"
+                    :aria-label="`${$store.ui.reminderTitle(m)}, ${medLine(m)}${$store.ui.viewAs ? '' : ($store.ui.takenLabel(m) ? '. Undo' : '. Mark taken')}`">
+              <svg class="med-tick" x-show="$store.ui.takenLabel(m)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+              <span x-text="$store.ui.reminderTitle(m)"></span>
+              <small x-text="$store.ui.reminderTime(m)"></small>
+            </button>
           </template>
         </div>
 

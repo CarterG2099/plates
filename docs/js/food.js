@@ -221,11 +221,20 @@ export function isComplete(marks, ownerEmail, dayKey) {
 
 // ---- the week strip ------------------------------------------------------------
 
-/** The Monday-to-Sunday week holding `date`, as seven local-midnight dates. */
-export function weekOf(date) {
-  const start = dayBounds(date).start;
-  const monday = addDays(start, -((start.getDay() + 6) % 7));
-  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+/** Seven local-midnight dates ending on `end`: the strip on Today. */
+export function sevenDaysTo(end) {
+  const last = dayBounds(end).start;
+  return Array.from({ length: 7 }, (_, i) => addDays(last, i - 6));
+}
+
+/**
+ * The last day the strip shows, as a date key: today, while the day on screen
+ * is one of the past seven; otherwise the day on screen itself, so going back
+ * further (or ahead to a plan) moves the strip with you.
+ */
+export function stripEnd(viewKey, todayKey) {
+  const oldest = toDateOnly(addDays(fromDateOnly(todayKey), -6));
+  return viewKey > todayKey || viewKey < oldest ? viewKey : todayKey;
 }
 
 /**
