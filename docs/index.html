@@ -3560,7 +3560,9 @@
             </div>
             <div class="camera-foot">
               <span x-show="cameraSaving" x-text="`Saving ${cameraSaving}…`"></span>
-              <button class="btn" @click="closeCamera()">Done</button>
+              <!-- Not with a shot waiting: Retake and Use photo (or a pose) are the
+                   choices then, and Done only threw the shot away. -->
+              <button class="btn" x-show="!camera.shot" @click="closeCamera()">Done</button>
             </div>
           </div>
         </template>

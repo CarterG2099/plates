@@ -419,7 +419,8 @@ test('the camera screen: inline video, Together, shutter, flip, timer, Done', ()
   assert.match(cam, /@click="flipCamera\(\)"/);
   assert.match(cam, /@click="cycleTimer\(\)"/);
   assert.match(cam, /@click="usePhoneCamera\(\)"/);
-  assert.match(cam, /@click="closeCamera\(\)">Done<\/button>/);
+  assert.match(cam, /<button class="btn" x-show="!camera\.shot" @click="closeCamera\(\)">Done<\/button>/,
+    'Done only with the viewfinder up: with a shot waiting it would just throw it away');
 });
 
 // ---- the camera in Messages ------------------------------------------------------
