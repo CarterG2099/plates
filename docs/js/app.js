@@ -5001,6 +5001,8 @@ let cameraStream = null;
  * open silences the first, and the page was left showing the silenced one.
  */
 let cameraOpening = 0;
+// Watches the conversation's size; outside the component, as Alpine's proxy breaks a ResizeObserver's methods.
+let chatFollow = null;
 /** The clip being recorded in the chat camera, and the ticker for its clock. */
 let cameraRecorder = null;
 let cameraTicker = null;
@@ -6601,6 +6603,8 @@ Alpine.data('statsPage', () => ({
 
   closeChat() {
     this.chatReturnTo = null;
+    chatFollow?.disconnect();
+    chatFollow = null;
     this.stopChatListen?.();
     this.stopChatListen = null;
     this.chatTyping?.close();
@@ -6637,7 +6641,34 @@ Alpine.data('statsPage', () => ({
     this.chatReadAt = await messages.markRead(rows);
     Alpine.store('ui').messagesReadAt = this.chatReadAt;
     await this.$nextTick?.();
-    this.$refs?.chatEnd?.scrollIntoView?.({ block: 'end' });
+    this.chatToEnd();
+  },
+
+  /**
+   * The list scrolled to its very end, bottom padding included. scrollIntoView
+   * on a marker stopped short by that padding, and scrolled the page behind too.
+   */
+  chatToEnd() {
+    const list = this.$refs?.chatList;
+    if (list) list.scrollTop = list.scrollHeight;
+  },
+
+  /**
+   * Keeps the newest message in view while the list changes size under it:
+   * the keyboard coming up shrinks it, a photo loading makes it taller. Not
+   * once you have scrolled up to read.
+   */
+  followChatEnd(list) {
+    let pinned = true;
+    list.addEventListener('scroll', () => {
+      pinned = list.scrollHeight - list.scrollTop - list.clientHeight <= CHAT_END_SLACK;
+    }, { passive: true });
+    const follow = () => { if (pinned) list.scrollTop = list.scrollHeight; };
+    chatFollow?.disconnect();
+    chatFollow = new ResizeObserver(follow);
+    chatFollow.observe(list);
+    list.addEventListener('load', follow, true);             // img: load does not bubble, so capture
+    list.addEventListener('loadedmetadata', follow, true);   // video
   },
 
   chatMine(m) {
@@ -6771,6 +6802,8 @@ document.addEventListener('alpine:initialized', () => {
 // Browser chrome sliding in and out moves the visual viewport by a few dozen
 // pixels; a phone keyboard is several hundred.
 const KEYBOARD_MIN = 120;
+/** How near the end of the conversation still counts as at the end, px. */
+const CHAT_END_SLACK = 40;
 
 /** A field that brings up a keyboard has focus. */
 const typing = () =>

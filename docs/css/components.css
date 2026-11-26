@@ -922,16 +922,24 @@
   color: var(--chat-text);
   color-scheme: dark;
 }
+/* The part of the screen the keyboard leaves, from trackKeyboardInset(), not
+   100dvh: an iPhone keeps 100dvh full height under the keyboard, so the
+   composer went behind it, and a 100dvh read while the keyboard was going
+   away could stay short and leave a gap under the composer. */
 .chat {
   position: fixed;
-  inset: 0;
+  top: var(--viewport-top, 0px);
+  right: 0;
+  bottom: var(--keyboard-inset, 0px);
+  left: 0;
   z-index: 25;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
   padding: var(--inset-top) 0 var(--inset-bottom);
   background: var(--chat-ground);
 }
+/* The home bar is under the keyboard; its inset would only be a gap above it. */
+.keyboard-up .chat { padding-bottom: 0; }
 .chat-head {
   display: flex;
   align-items: center;

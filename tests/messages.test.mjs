@@ -926,3 +926,87 @@ test('the top bar has the icon for the two of you, and Stats answers it behind t
   assert.match(html, /<button class="chat-icon" @click="leaveChat\(\)" aria-label="Close">/);
   assert.match(html, /<button class="chat-icon" @click="lockFromChat\(\)" aria-label="Lock">/);
 });
+
+// ---- the end of the conversation stays in view ----------------------------------------
+
+/** A scrolling list with its sizes, events and a ResizeObserver the test can fire. */
+function fakeList({ scrollHeight = 2000, clientHeight = 600 } = {}) {
+  const listeners = {};
+  const list = {
+    scrollHeight, clientHeight, scrollTop: 0,
+    addEventListener(type, fn, options) { (listeners[type] ??= []).push({ fn, options }); },
+    fire(type) { for (const { fn } of listeners[type] ?? []) fn(); },
+    listeners,
+  };
+  return list;
+}
+
+function fakeResizeObserver(t) {
+  const observers = [];
+  const original = globalThis.ResizeObserver;
+  globalThis.ResizeObserver = class {
+    constructor(fn) { this.fn = fn; this.on = []; this.off = false; observers.push(this); }
+    observe(el) { this.on.push(el); }
+    disconnect() { this.off = true; }
+  };
+  t.after(() => { globalThis.ResizeObserver = original; });
+  return observers;
+}
+
+test('opening the conversation scrolls the list to its very end, padding and all', async () => {
+  const page = statsPage();
+  const list = fakeList();
+  page.$refs = { chatList: list };
+  page.chatOpen = true;
+  await page.chatSeen();
+  assert.equal(list.scrollTop, 2000, 'scrollHeight, not a marker short of the bottom padding');
+  page.closeChat();
+});
+
+test('the end stays in view as the keyboard shrinks the list or a photo grows it, until you scroll up', (t) => {
+  const observers = fakeResizeObserver(t);
+  const page = statsPage();
+  const list = fakeList();
+  page.followChatEnd(list);
+  const [observer] = observers;
+  assert.deepEqual(observer.on, [list]);
+
+  list.clientHeight = 300;                 // the keyboard comes up
+  observer.fn();
+  assert.equal(list.scrollTop, 2000);
+
+  list.scrollHeight = 2400;                // a photo loads
+  for (const { fn, options } of list.listeners.load) { assert.equal(options, true, 'load does not bubble'); fn(); }
+  assert.equal(list.scrollTop, 2400);
+  list.scrollHeight = 2600;
+  list.fire('loadedmetadata');             // a video
+  assert.equal(list.scrollTop, 2600);
+
+  list.scrollTop = 1000;                   // scrolled up to read
+  list.fire('scroll');
+  list.scrollHeight = 3000;
+  list.fire('load');
+  observer.fn();
+  assert.equal(list.scrollTop, 1000, 'left where you are');
+
+  list.scrollTop = 3000 - 300 - 30;        // back near the end
+  list.fire('scroll');
+  list.scrollHeight = 3200;
+  list.fire('load');
+  assert.equal(list.scrollTop, 3200, 'following again');
+
+  page.closeChat();
+  assert.equal(observer.off, true, 'closing stops watching');
+});
+
+test('the list follows its end, and the chat fills what the keyboard leaves, not 100dvh', async () => {
+  const html = await read('../docs/index.html');
+  const css = await read('../docs/css/components.css');
+  assert.match(html, /<div class="chat-list" x-ref="chatList" x-init="followChatEnd\(\$el\)">/);
+  assert.doesNotMatch(html, /x-ref="chatEnd"/);
+  const chat = css.match(/\n\.chat \{[^}]*\}/)[0];
+  assert.match(chat, /top: var\(--viewport-top, 0px\);/);
+  assert.match(chat, /bottom: var\(--keyboard-inset, 0px\);/);
+  assert.doesNotMatch(chat, /100dvh|inset: 0/);
+  assert.match(css, /\.keyboard-up \.chat \{ padding-bottom: 0; \}/);
+});

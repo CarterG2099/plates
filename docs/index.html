@@ -3619,7 +3619,7 @@
               </button>
             </div>
 
-            <div class="chat-list">
+            <div class="chat-list" x-ref="chatList" x-init="followChatEnd($el)">
               <p class="chat-empty" x-show="!chatThread.length">Nothing here yet. Only the two of you can see this.</p>
               <template x-for="item in chatItems" :key="item.key">
                 <div class="chat-item">
@@ -3668,7 +3668,6 @@
                   </template>
                 </div>
               </template>
-              <div x-ref="chatEnd"></div>
             </div>
 
             <div class="chat-dock">
