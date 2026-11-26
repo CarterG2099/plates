@@ -40,6 +40,28 @@ export function open(facing, options) {
 }
 
 /**
+ * The live <video> in a viewfinder's slot, made on the page the first time.
+ *
+ * Never one written in the markup: the cameras sit in x-if templates, and a
+ * <video> cloned out of a template plays, and the shutter can read its frames,
+ * but on iOS 27 it never draws: Aana's viewfinder stayed black while the same
+ * stream showed in a <video> made with createElement.
+ */
+export function liveVideo(slot) {
+  if (!slot) return null;
+  const made = slot.querySelector?.('video.live-video');
+  if (made) return made;
+  const video = document.createElement('video');
+  video.className = 'live-video';
+  video.muted = true;
+  video.playsInline = true;
+  video.autoplay = true;
+  video.setAttribute('playsinline', '');
+  slot.prepend(video);   // first, so the reticle and the frozen shot stay on top
+  return video;
+}
+
+/**
  * Put the stream in the viewfinder and start it. Muted and inline are set on
  * the element itself, as the scanner does: the attributes in the markup are
  * cloned in from a template, and Safari doesn't take a cloned muted attribute

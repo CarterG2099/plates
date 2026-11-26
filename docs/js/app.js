@@ -3024,12 +3024,15 @@ Alpine.data('logPage', () => ({
 
   get canScan() { return scanner.isSupported(); },
 
+  /** The scanner's live video, made on the page (see camera.liveVideo). */
+  scanVideo() { return camera.liveVideo(this.$refs.viewfinder); },
+
   async openScanner() {
     this.scan = { status: 'starting', message: '', decoder: '' };
 
     // The template renders on the next tick; the video element must exist first.
     await new Promise((r) => requestAnimationFrame(r));
-    const video = this.$refs.video;
+    const video = this.scanVideo();
 
     const result = await scanner.start(video);
     if (!result.ok) {
@@ -3083,7 +3086,7 @@ Alpine.data('logPage', () => ({
    * The lens that works is remembered, so it is a once-per-phone tap.
    */
   async switchScanCamera() {
-    const video = this.$refs.video;
+    const video = this.scanVideo();
     scanner.stopDecoding();
     this.scan = { ...this.scan, status: 'starting', message: '' };
 
@@ -3201,7 +3204,7 @@ Alpine.data('logPage', () => ({
     const top = ((event.clientY - box.top) / box.height) * 100;
     this.scan.focusAt = { left, top };
 
-    const video = this.$refs.video;
+    const video = this.scanVideo();
     const source = video.videoWidth / video.videoHeight;
     const shown = box.width / box.height;
 
@@ -3225,14 +3228,14 @@ Alpine.data('logPage', () => ({
   /** Put the live loop back after a photo attempt that didn't resolve. */
   resumeDecoding() {
     if (this.scan?.status !== 'ready') return;
-    scanner.startDecoding(this.$refs.video, {
+    scanner.startDecoding(this.scanVideo(), {
       onResult: (code) => this.acceptCode(code),
       onError: (error) => { this.scan = { status: 'error', message: error.message, decoder: '' }; },
     });
   },
 
   closeScanner() {
-    scanner.stop(this.$refs.video);
+    scanner.stop(this.scanVideo());
     this.scan = null;
   },
 
@@ -5910,11 +5913,11 @@ Alpine.data('statsPage', () => ({
     }
   },
 
-  /** The viewfinder on screen: the ref, unless that has fallen off the page. */
+  /** The live video in the frame on screen: the ref's, unless that frame has fallen off the page. */
   viewfinder() {
     const ref = this.$refs?.viewfinder;
-    if (ref && ref.isConnected !== false) return ref;
-    return document.querySelector?.('.camera-frame video[x-ref="viewfinder"]') ?? ref ?? null;
+    const slot = ref && ref.isConnected !== false ? ref : document.querySelector?.('.camera-frame') ?? ref;
+    return camera.liveVideo(slot);
   },
 
   /** A camera that is on but shows nothing says so, with the details to send. */
@@ -6016,7 +6019,7 @@ Alpine.data('statsPage', () => ({
   async snap() {
     let blob;
     try {
-      blob = await camera.still(cameraStream, this.$refs?.viewfinder);
+      blob = await camera.still(cameraStream, this.viewfinder());
     } catch (error) {
       this.cameraError = error.message ?? String(error);
       return;

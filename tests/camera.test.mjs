@@ -58,12 +58,17 @@ function liveVideo(extra = {}) {
   };
 }
 
+/** A viewfinder's frame that already holds its live video, as liveVideo() leaves it. */
+function frame(video, extra = {}) {
+  return { isConnected: true, querySelector: (sel) => (sel === 'video.live-video' ? video : null), prepend() {}, ...extra };
+}
+
 function statsPage() {
   Alpine.store('auth').session = { user: { email: ME } };
   Alpine.store('auth').members = [{ email: ME, sharing: true }, { email: AANA, sharing: true, display_name: 'Aana' }];
   const page = Alpine.reactive(components.statsPage());
   // The viewfinder: a video element the canvas fallback can read a frame from.
-  page.$refs = { viewfinder: liveVideo() };
+  page.$refs = { viewfinder: frame(liveVideo()) };
   page.$nextTick = async () => {};
   return page;
 }
@@ -408,8 +413,7 @@ test('with Together on, each pose under the shot says so', () => {
 
 test('the camera screen: inline video, Together, shutter, flip, timer, Done', () => {
   const cam = html.slice(html.indexOf('<template x-if="camera">'), html.indexOf('<!-- Save a progress photo'));
-  assert.match(cam, /<video x-ref="viewfinder" playsinline muted autoplay/);
-  assert.match(cam, /:class="camera\.facing === 'user' && 'is-mirrored'"/);
+  assert.match(cam, /<div class="camera-frame" x-ref="viewfinder" :class="camera\.facing === 'user' && 'is-mirrored'">/);
   assert.match(cam, /@click="camera\.together = !camera\.together">Together<\/button>/);
   assert.match(cam, /class="camera-shutter" @click="shutter\(\)"/);
   assert.match(cam, /@click="flipCamera\(\)"/);
@@ -884,7 +888,7 @@ test('the readout says what the viewfinder and the camera are doing', () => {
 test('a camera with no picture after three seconds says so, with the readout', async (t) => {
   fakeCamera();
   const page = statsPage();
-  page.$refs = { viewfinder: liveVideo({ requestVideoFrameCallback() {} }) };   // never a frame
+  page.$refs = { viewfinder: frame(liveVideo({ requestVideoFrameCallback() {} })) };   // never a frame
   t.mock.timers.enable({ apis: ['setTimeout'] });
   await page.openCamera('chat');
   assert.equal(page.cameraError, '', 'not before the wait is up');
@@ -905,7 +909,7 @@ test('a camera that shows a frame says nothing, and the progress one offers the 
   page.closeCamera();
 
   page = statsPage();
-  page.$refs = { viewfinder: liveVideo({ requestVideoFrameCallback() {} }) };
+  page.$refs = { viewfinder: frame(liveVideo({ requestVideoFrameCallback() {} })) };
   t.mock.timers.enable({ apis: ['setTimeout'] });
   await page.openCamera('progress');
   t.mock.timers.tick(camera.FRAME_WAIT_MS);
@@ -926,7 +930,7 @@ test('two opens at once: the one overtaken is shut, never put on the viewfinder'
   };
   const page = statsPage();
   const video = liveVideo();
-  page.$refs = { viewfinder: video };
+  page.$refs = { viewfinder: frame(video) };
   const first = page.openCamera();
   const second = page.flipCamera();     // a second open before the first has landed
   pending[1]();                         // the newer one lands first…
@@ -957,9 +961,9 @@ test('the stream goes on the viewfinder that is on the page, not one that fell o
   fakeCamera();
   const page = statsPage();
   const onPage = liveVideo();
-  page.$refs = { viewfinder: liveVideo({ isConnected: false }) };
+  page.$refs = { viewfinder: frame(liveVideo(), { isConnected: false }) };
   const original = document.querySelector;
-  document.querySelector = (sel) => (sel === '.camera-frame video[x-ref="viewfinder"]' ? onPage : null);
+  document.querySelector = (sel) => (sel === '.camera-frame' ? frame(onPage) : null);
   try {
     await page.openCamera('chat');
     assert.ok(onPage.srcObject, 'attached to the one on screen');
@@ -978,7 +982,7 @@ test('a camera only slow to start clears the message when its first frame comes'
   fakeCamera();
   const page = statsPage();
   const callbacks = [];
-  page.$refs = { viewfinder: liveVideo({ requestVideoFrameCallback(done) { callbacks.push(done); } }) };
+  page.$refs = { viewfinder: frame(liveVideo({ requestVideoFrameCallback(done) { callbacks.push(done); } })) };
   t.mock.timers.enable({ apis: ['setTimeout'] });
   await page.openCamera('chat');
   t.mock.timers.tick(camera.FRAME_WAIT_MS);
@@ -988,4 +992,92 @@ test('a camera only slow to start clears the message when its first frame comes'
   assert.equal(page.cameraError, '');
   assert.equal(page.cameraDetail, '');
   page.closeCamera();
+});
+
+// ---- the live video is made on the page (iOS 27 leaves a template's black) ----------
+
+/** document.createElement that hands back a bare element and remembers what was made. */
+function madeElements(t) {
+  const made = [];
+  const original = document.createElement;
+  document.createElement = (tag) => {
+    const el = { tag, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, play: async () => {}, videoWidth: 1080, videoHeight: 1920, requestVideoFrameCallback(done) { queueMicrotask(done); } };
+    made.push(el);
+    return el;
+  };
+  t.after(() => { document.createElement = original; });
+  return made;
+}
+
+/** A frame with nothing in it yet, as the markup leaves it, that keeps what is put in. */
+function emptyFrame() {
+  const kids = [];
+  return {
+    kids,
+    isConnected: true,
+    querySelector: (sel) => kids.find((k) => k.tag === 'video' && (sel === 'video' || (sel === 'video.live-video' && k.className === 'live-video'))) ?? null,
+    prepend(el) { kids.unshift(el); },
+  };
+}
+
+test('liveVideo makes the video with createElement, muted and inline, first in its frame, once', (t) => {
+  const made = madeElements(t);
+  assert.equal(camera.liveVideo(null), null);
+  const slot = emptyFrame();
+  const cloned = { tag: 'video', className: '' };   // one cloned out of a template: never to be used
+  slot.kids.push(cloned, { tag: 'div', className: 'reticle' });
+  const video = camera.liveVideo(slot);
+  assert.notEqual(video, cloned, 'a template\'s video is never the viewfinder');
+  assert.equal(made.length, 1);
+  assert.equal(video, made[0]);
+  assert.equal(video.tag, 'video');
+  assert.equal(video.className, 'live-video');
+  assert.equal(video.muted, true);
+  assert.equal(video.playsInline, true);
+  assert.equal(video.autoplay, true);
+  assert.equal(video.attrs.playsinline, '');
+  assert.equal(slot.kids[0], video, 'first, under the reticle and the frozen shot');
+  assert.equal(camera.liveVideo(slot), video, 'the same one again, not a second');
+  assert.equal(made.length, 1);
+});
+
+test('the chat camera puts the stream on a video it made, and the shutter reads that one', async (t) => {
+  const made = madeElements(t);
+  fakeCamera();
+  const page = statsPage();
+  const slot = emptyFrame();
+  page.$refs = { viewfinder: slot };
+  await page.openCamera('chat');
+  const video = made.find((el) => el.tag === 'video');
+  assert.ok(video, 'made with createElement');
+  assert.equal(slot.kids[0], video);
+  assert.ok(video.srcObject, 'the stream is on it');
+  assert.equal(page.viewfinder(), video);
+  page.closeCamera();
+});
+
+test('the scanner decodes from a video it made in its viewfinder', (t) => {
+  const made = madeElements(t);
+  const log = components.logPage();
+  const slot = emptyFrame();
+  log.$refs = { viewfinder: slot };
+  const video = log.scanVideo();
+  assert.equal(video, made[0]);
+  assert.equal(video.tag, 'video');
+  assert.equal(slot.kids[0], video);
+  assert.equal(log.scanVideo(), video);
+});
+
+test('no live <video> is written in the markup, where it would be cloned out of a template', () => {
+  const code = html.replace(/<!--[\s\S]*?-->/g, '');
+  const live = [...code.matchAll(/<video\b[^>]*>/g)].map((m) => m[0]).filter((tag) => !/\s:?src=/.test(tag));
+  assert.deepEqual(live, [], 'every <video> in the markup plays a file; a camera\'s is made by liveVideo()');
+  assert.match(code, /<div class="camera-frame" x-ref="viewfinder"/);
+  assert.match(code, /<div class="viewfinder" x-ref="viewfinder" @click="focusHere\(\$event\)">/);
+});
+
+test('the front camera mirrors the live video only, not the recorded clip', async () => {
+  const css = await readFile(fileURLToPath(new URL('../docs/css/components.css', import.meta.url)), 'utf8');
+  assert.match(css, /\.camera-frame\.is-mirrored \.live-video \{ transform: scaleX\(-1\); \}/);
+  assert.doesNotMatch(css, /\.camera-frame video\.is-mirrored/);
 });

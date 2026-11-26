@@ -762,7 +762,7 @@
   background: #111;
 }
 .camera-frame video { width: 100%; height: 100%; object-fit: cover; }
-.camera-frame video.is-mirrored { transform: scaleX(-1); }
+.camera-frame.is-mirrored .live-video { transform: scaleX(-1); }
 .camera-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .camera-countdown {
   position: absolute;

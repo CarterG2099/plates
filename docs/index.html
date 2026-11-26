@@ -1244,8 +1244,8 @@
               <div class="card-label">Scan a barcode</div>
 
               <!-- Tap anywhere to focus there, as in a camera app. -->
-              <div class="viewfinder" @click="focusHere($event)">
-                <video x-ref="video" playsinline muted autoplay></video>
+              <!-- The <video> is made by camera.liveVideo(), never written here. -->
+              <div class="viewfinder" x-ref="viewfinder" @click="focusHere($event)">
                 <div class="reticle" aria-hidden="true"></div>
                 <div class="focus-ping" x-show="scan.focusAt" x-cloak
                      :style="`left:${scan.focusAt?.left}%; top:${scan.focusAt?.top}%`"
@@ -3520,9 +3520,8 @@
                       @click="setCameraMode('video')">Video</button>
             </div>
 
-            <div class="camera-frame">
-              <video x-ref="viewfinder" playsinline muted autoplay
-                     :class="camera.facing === 'user' && 'is-mirrored'"></video>
+            <!-- The live <video> is made by camera.liveVideo(), never written here. -->
+            <div class="camera-frame" x-ref="viewfinder" :class="camera.facing === 'user' && 'is-mirrored'">
               <img class="camera-shot" x-show="camera.shot && camera.shot.kind !== 'video'" :src="camera.shot?.kind !== 'video' ? (camera.shot?.url || null) : null" alt="The photo just taken">
               <template x-if="camera.shot?.kind === 'video'">
                 <video class="camera-shot" :src="camera.shot.url" playsinline autoplay loop controls></video>
